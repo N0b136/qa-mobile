@@ -51,7 +51,7 @@ export default function QuestlineScreen() {
   return (
     <div className="screen">
       <div className="row" style={{ gap: 14, alignItems: 'flex-start' }}>
-        <Seal art={ORG_SEAL_ART[org.id]} size="md" assetBase="/" style={{ flexShrink: 0 }} />
+        <Seal art={ORG_SEAL_ART[org.id]} size="md" assetBase={import.meta.env.BASE_URL} style={{ flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1
             style={{

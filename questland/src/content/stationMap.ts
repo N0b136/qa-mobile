@@ -15,7 +15,7 @@ export interface MapLandmark {
 }
 
 export const MAP_META = {
-  src: '/assets/park-map.webp',
+  src: `${import.meta.env.BASE_URL}assets/park-map.webp`,
   width: 2752,
   height: 1536,
 }

@@ -72,8 +72,8 @@ export async function systemNotify(title: string, body: string): Promise<void> {
     if (reg) {
       await reg.showNotification(title, {
         body,
-        icon: '/icons/icon-192.png',
-        badge: '/icons/icon-192.png',
+        icon: `${import.meta.env.BASE_URL}icons/icon-192.png`,
+        badge: `${import.meta.env.BASE_URL}icons/icon-192.png`,
       })
       return
     }

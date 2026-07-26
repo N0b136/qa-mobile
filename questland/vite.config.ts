@@ -2,7 +2,17 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// vite loads this config in Node; declare `process` so tsc does not require
+// @types/node just for one env lookup.
+declare const process: { env: Record<string, string | undefined> }
+
+// Served from the domain root by default; a subpath deploy (e.g. GitHub Pages
+// project sites at /<repo>/) sets DEPLOY_BASE=/qa-mobile/. All runtime asset
+// paths read import.meta.env.BASE_URL, so they follow whatever is set here.
+const base = process.env.DEPLOY_BASE || '/'
+
 export default defineConfig({
+  base,
   plugins: [
     react(),
     VitePWA({
@@ -10,7 +20,7 @@ export default defineConfig({
       devOptions: { enabled: true },
       includeAssets: ['icons/*.png'],
       manifest: {
-        id: '/',
+        id: base,
         name: 'Questland Adventures',
         short_name: 'Questland',
         description:
@@ -19,18 +29,19 @@ export default defineConfig({
         background_color: '#121214',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
+        start_url: base,
+        scope: base,
         icons: [
-          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: `${base}icons/icon-192.png`, sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: `${base}icons/icon-512.png`, sizes: '512x512', type: 'image/png', purpose: 'any' },
           {
-            src: '/icons/icon-maskable-192.png',
+            src: `${base}icons/icon-maskable-192.png`,
             sizes: '192x192',
             type: 'image/png',
             purpose: 'maskable',
           },
           {
-            src: '/icons/icon-maskable-512.png',
+            src: `${base}icons/icon-maskable-512.png`,
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',

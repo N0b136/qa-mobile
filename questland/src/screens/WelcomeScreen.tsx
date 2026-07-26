@@ -20,7 +20,7 @@ export default function WelcomeScreen() {
     >
       {/* TODO: gate hero photo when img-gate-* assets land */}
       <img
-        src="/assets/logo-questland-primary.png"
+        src={`${import.meta.env.BASE_URL}assets/logo-questland-primary.png`}
         alt="Questland Adventures"
         style={{ width: '65%', maxWidth: 240, marginBottom: 'var(--space-xl)' }}
       />

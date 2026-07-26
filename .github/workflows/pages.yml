@@ -1,0 +1,54 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; newer pushes supersede in-progress ones.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: questland
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: questland/.nvmrc
+          cache: npm
+          cache-dependency-path: questland/package-lock.json
+      - run: npm ci
+      # Project Pages serve from /<repo>/, so build against that subpath.
+      - name: Build
+        run: npm run build
+        env:
+          DEPLOY_BASE: /qa-mobile/
+      # GitHub Pages has no SPA rewrite; a 404.html copy boots the router on
+      # a cold deep-link before the service worker is installed.
+      - name: SPA deep-link fallback
+        run: cp dist/index.html dist/404.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: questland/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
