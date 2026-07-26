@@ -315,6 +315,22 @@ export default function MapScreen() {
             </>
           }
         >
+          <img
+            src={`${import.meta.env.BASE_URL}assets/stations/${openStation.id}.webp`}
+            alt={openStation.name}
+            onError={(e) => {
+              ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+            }}
+            style={{
+              display: 'block',
+              width: '100%',
+              aspectRatio: '16 / 9',
+              objectFit: 'cover',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-hairline)',
+              marginBottom: 'var(--space-sm)',
+            }}
+          />
           <Tag icon={STATION_ICON[openStation.type] ?? 'map-pin'} style={{ marginBottom: 'var(--space-sm)' }}>
             {openStation.type}
           </Tag>
@@ -342,35 +358,11 @@ export default function MapScreen() {
   )
 }
 
-const PIN_SPEC: Record<PinVariant, { size: number; bg: string; border: string; iconColor: string; glow: string }> = {
-  neutral: {
-    size: 28,
-    bg: 'var(--surface-card)',
-    border: 'var(--border-hairline)',
-    iconColor: 'var(--text-muted)',
-    glow: 'var(--shadow-sm)',
-  },
-  visited: {
-    size: 28,
-    bg: 'var(--surface-card)',
-    border: 'var(--gold-700)',
-    iconColor: 'var(--gold-400)',
-    glow: 'var(--shadow-sm)',
-  },
-  home: {
-    size: 34,
-    bg: 'var(--surface-card-raised)',
-    border: 'var(--gold-500)',
-    iconColor: 'var(--gold-300)',
-    glow: 'var(--shadow-gold-glow)',
-  },
-  active: {
-    size: 38,
-    bg: 'var(--surface-card-raised)',
-    border: 'var(--gold-300)',
-    iconColor: 'var(--text-heading)',
-    glow: 'var(--shadow-lift)',
-  },
+const PIN_SPEC: Record<PinVariant, { size: number; color: string; opacity: number }> = {
+  neutral: { size: 16, color: 'var(--text-muted)', opacity: 0.6 },
+  visited: { size: 16, color: 'var(--gold-600)', opacity: 0.8 },
+  home: { size: 18, color: 'var(--gold-400)', opacity: 0.8 },
+  active: { size: 22, color: 'var(--gold-300)', opacity: 0.95 },
 }
 
 function StationPin({
@@ -389,7 +381,7 @@ function StationPin({
   onOpen: () => void
 }) {
   const spec = PIN_SPEC[variant]
-  const ringColor = variant === 'active' && trackColor ? trackColor : spec.border
+  const ringColor = variant === 'active' && trackColor ? trackColor : spec.color
   return (
     <button
       onClick={onOpen}
@@ -399,64 +391,34 @@ function StationPin({
         left: `${coord.x * 100}%`,
         top: `${coord.y * 100}%`,
         transform: 'translate(-50%, -100%)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
+        display: 'block',
+        padding: 6,
+        lineHeight: 0,
         background: 'none',
         border: 'none',
-        padding: 0,
         cursor: 'pointer',
+        color: ringColor,
+        opacity: spec.opacity,
+        filter: variant === 'active' ? 'drop-shadow(0 1px 2px rgba(0,0,0,.6))' : undefined,
       }}
     >
       <span style={{ position: 'relative', display: 'block' }}>
-        <span
-          style={{
-            display: 'grid',
-            placeItems: 'center',
-            width: spec.size,
-            height: spec.size * 1.12,
-            borderRadius: 'var(--radius-arch)',
-            background: spec.bg,
-            border: `1px solid ${ringColor}`,
-            boxShadow:
-              variant === 'active'
-                ? `var(--shadow-carve-in), 0 0 0 2px ${ringColor}, var(--shadow-lift)`
-                : `var(--shadow-carve-in), ${spec.glow}`,
-            color: spec.iconColor,
-          }}
-        >
-          <Icon name={STATION_ICON[station.type] ?? 'map-pin'} size={Math.round(spec.size * 0.5)} />
-        </span>
+        <Icon name="map-pin" size={spec.size} />
         {isHome ? (
           <span
             style={{
               position: 'absolute',
-              top: -4,
-              right: -4,
-              width: 14,
-              height: 14,
+              top: '18%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: 4,
+              height: 4,
               borderRadius: '50%',
-              background: 'var(--gold-600)',
-              border: '1px solid var(--gold-300)',
-              display: 'grid',
-              placeItems: 'center',
-              color: 'var(--brand-on-primary)',
+              background: 'currentColor',
             }}
-          >
-            <Icon name="home" size={8} />
-          </span>
+          />
         ) : null}
       </span>
-      <span
-        style={{
-          width: 0,
-          height: 0,
-          marginTop: -1,
-          borderLeft: '5px solid transparent',
-          borderRight: '5px solid transparent',
-          borderTop: `7px solid ${ringColor}`,
-        }}
-      />
     </button>
   )
 }
@@ -470,41 +432,18 @@ function AmenityPin({ landmark, onOpen }: { landmark: MapLandmark; onOpen: () =>
         position: 'absolute',
         left: `${landmark.x * 100}%`,
         top: `${landmark.y * 100}%`,
-        transform: 'translate(-50%, -100%)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
+        transform: 'translate(-50%, -50%)',
+        display: 'block',
+        padding: 6,
+        lineHeight: 0,
         background: 'none',
         border: 'none',
-        padding: 0,
         cursor: 'pointer',
+        color: 'var(--text-muted)',
+        opacity: 0.5,
       }}
     >
-      <span
-        style={{
-          display: 'grid',
-          placeItems: 'center',
-          width: 22,
-          height: 22,
-          borderRadius: '50%',
-          background: 'rgba(18,18,20,.78)',
-          border: '1px solid var(--border-hairline)',
-          boxShadow: 'var(--shadow-xs)',
-          color: 'var(--text-muted)',
-        }}
-      >
-        <Icon name={landmark.icon} size={12} />
-      </span>
-      <span
-        style={{
-          width: 0,
-          height: 0,
-          marginTop: -1,
-          borderLeft: '4px solid transparent',
-          borderRight: '4px solid transparent',
-          borderTop: '6px solid var(--border-hairline)',
-        }}
-      />
+      <Icon name={landmark.icon} size={13} />
     </button>
   )
 }
