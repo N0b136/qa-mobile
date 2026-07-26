@@ -10,6 +10,9 @@ import { createBooking } from './bookingService'
 import { ARRIVAL_SLOTS } from '../content/bookingTiers'
 import * as notificationService from './notificationService'
 import { createSos } from './sosService'
+import * as cloudSync from './cloudSync'
+import type { ScheduledSend } from './cloudSync'
+import { uid } from './ids'
 
 const USERS_KEY = 'ql:users'
 const PARTIES_KEY = 'ql:parties'
@@ -111,6 +114,30 @@ export function seedDemoWorld(currentUserId: string): void {
 
   // One open call for aid so the console has something to dispatch.
   createSos('demo-sable', 'emergency', { zoneId: 'st-06', message: 'Lost the trail past the old oak.' })
+
+  // Publish the cast to the console's guest roster. save(USERS_KEY, ...) never
+  // triggers a guest push, so without this the roster would never see them.
+  // Runs last so pushGuestProfile derives the right level (progress saved above)
+  // and party (party saved above). The `demo-` id prefix tags them demo:true.
+  for (const u of CAST_USERS) {
+    cloudSync.pushGuestProfile(u)
+  }
+
+  // A sample scheduled send so the console's queue demos live without setup.
+  const schedule: ScheduledSend = {
+    id: uid(),
+    type: 'event',
+    icon: 'sparkles',
+    title: 'Lantern Rite begins',
+    body: 'The first lanterns touch the water at Lake Lumen — gather now.',
+    audience: { kind: 'all' },
+    audienceLabel: 'All guests',
+    deliverAt: Date.now() + 2 * 60 * 1000,
+    createdAt: Date.now(),
+    createdBy: 'Warden Aldous',
+    status: 'scheduled',
+  }
+  cloudSync.pushSchedule(schedule)
 }
 
 export function resetDemoData(currentUserId: string): void {
@@ -133,4 +160,8 @@ export function resetDemoData(currentUserId: string): void {
   save(`ql:notifications:${currentUserId}`, [])
 
   save(SOS_KEY, [])
+
+  // Clear the cloud mirror: demo SOS/notification/guest docs + the host's own
+  // comm docs + the entire scheduled queue. Fire-and-forget; no-op offline.
+  void cloudSync.deleteDemoCommDocs(currentUserId)
 }
