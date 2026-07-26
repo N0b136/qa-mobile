@@ -1,0 +1,81 @@
+/* Desktop Back Office console. The guest app clamps #root to 480px (see
+   theme/global.css); the console escapes that clamp while it is mounted by
+   toggling body.console-mode. */
+
+body.console-mode #root {
+  max-width: none;
+}
+
+.console-root {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.console-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--border-hairline);
+  background: var(--surface-card);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.console-header__spacer {
+  flex: 1 1 auto;
+}
+
+.console-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* ── Working grid: Calls | Send Word | Guests(320) ──────────────────────── */
+.console-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) 320px;
+  gap: var(--space-lg);
+  align-items: start;
+  padding: var(--space-lg);
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+@media (max-width: 1100px) {
+  .console-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Persona gate (full-screen) ─────────────────────────────────────────── */
+.console-gate {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xl);
+  padding: var(--space-2xl) var(--space-lg);
+  text-align: center;
+}
+
+.console-gate__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-lg);
+  width: 100%;
+  max-width: 940px;
+}
+
+/* Rows that could overflow keep their own horizontal scroll — never the page. */
+.console-x-scroll {
+  overflow-x: auto;
+}

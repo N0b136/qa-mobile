@@ -1,6 +1,8 @@
 import type { AppNotification, NotificationType } from '../types'
 import { load, save } from './store'
 import { uid } from './ids'
+import { currentUser } from './authService'
+import * as cloudSync from './cloudSync'
 
 const CAP = 50
 
@@ -31,7 +33,10 @@ export function add(
   }
   const next = [notification, ...listFor(userId)].slice(0, CAP)
   save(key(userId), next)
-  void systemNotify(input.title, input.body)
+  cloudSync.pushNotification(userId, notification, userId.startsWith('demo-') || undefined)
+  // Only OS-banner for the signed-in user of THIS device — a desktop console
+  // authoring guest-addressed notifications must not banner them all.
+  if (userId === currentUser()?.id) void systemNotify(input.title, input.body)
   return notification
 }
 

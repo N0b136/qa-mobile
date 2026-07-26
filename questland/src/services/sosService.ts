@@ -1,7 +1,10 @@
 import type { SosKind, SosRequest, SosStatus } from '../types'
 import { load, save } from './store'
 import { uid } from './ids'
+import { getUser } from './authService'
+import { getZone } from '../content/zones'
 import * as notificationService from './notificationService'
+import * as cloudSync from './cloudSync'
 
 const SOS_KEY = 'ql:sos'
 
@@ -48,6 +51,12 @@ export function createSos(
   }
   setAll([request, ...getAll()])
 
+  cloudSync.pushSos(request, {
+    guestName: getUser(userId)?.name ?? 'A guest',
+    zoneName: opts?.zoneId ? getZone(opts.zoneId)?.name : undefined,
+    demo: userId.startsWith('demo-') || undefined,
+  })
+
   if (kind === 'emergency') {
     notificationService.add(userId, {
       type: 'sos',
@@ -77,6 +86,8 @@ export function acknowledgeSos(id: string, responder: string): SosRequest | null
   next[idx] = updated
   setAll(next)
 
+  cloudSync.pushSosPatch(id, { status: 'acknowledged', responder, updatedAt: updated.updatedAt })
+
   if (updated.kind === 'emergency') {
     notificationService.add(updated.userId, {
       type: 'sos',
@@ -97,7 +108,7 @@ export function acknowledgeSos(id: string, responder: string): SosRequest | null
 }
 
 export function resolveSos(id: string): void {
-  setAll(
-    getAll().map((r) => (r.id === id ? { ...r, status: 'resolved', updatedAt: Date.now() } : r))
-  )
+  const updatedAt = Date.now()
+  setAll(getAll().map((r) => (r.id === id ? { ...r, status: 'resolved', updatedAt } : r)))
+  cloudSync.pushSosPatch(id, { status: 'resolved', updatedAt })
 }
