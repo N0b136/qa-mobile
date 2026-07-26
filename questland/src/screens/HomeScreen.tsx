@@ -60,7 +60,7 @@ export default function HomeScreen() {
       <Card>
         <div className="row" style={{ gap: 14 }}>
           {chosenOrg && sealArt ? (
-            <Seal art={sealArt} size="sm" assetBase="/" style={{ flexShrink: 0 }} />
+            <Seal art={sealArt} size="sm" assetBase={import.meta.env.BASE_URL} style={{ flexShrink: 0 }} />
           ) : (
             <div
               style={{

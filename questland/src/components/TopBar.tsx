@@ -51,7 +51,7 @@ export default function TopBar() {
         }}
       >
         <img
-          src="/assets/logo-questland-primary.png"
+          src={`${import.meta.env.BASE_URL}assets/logo-questland-primary.png`}
           alt="Questland Adventures"
           style={{ height: 36, width: 'auto', objectFit: 'contain', display: 'block' }}
         />

@@ -104,7 +104,7 @@ function OrgOption({ org, selected, onSelect }: { org: Organization; selected: b
   return (
     <SelectCard selected={selected} accentColor={org.color} onPress={onSelect}>
       <div className="row" style={{ gap: 14, alignItems: 'flex-start' }}>
-        <Seal art={ORG_SEAL_ART[id]} size="sm" assetBase="/" />
+        <Seal art={ORG_SEAL_ART[id]} size="sm" assetBase={import.meta.env.BASE_URL} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ font: 'var(--title-card)', textTransform: 'uppercase', letterSpacing: 'var(--tracking-display-tight)', color: 'var(--text-heading)' }}>
             {org.name}
@@ -279,7 +279,7 @@ export default function OnboardingScreen() {
         <>
           <p style={{ ...stepIndicatorStyle, textAlign: 'center', marginBottom: 'var(--space-sm)' }}>Your path leads to</p>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--space-md)' }}>
-            <Seal art={ORG_SEAL_ART[winners[0]]} size="lg" assetBase="/" />
+            <Seal art={ORG_SEAL_ART[winners[0]]} size="lg" assetBase={import.meta.env.BASE_URL} />
           </div>
           <h1 style={{ ...capsHeadingStyle, textAlign: 'center' }}>{org.name}</h1>
           <div className="row" style={{ justifyContent: 'center', gap: 6, flexWrap: 'wrap', margin: 'var(--space-md) 0' }}>
