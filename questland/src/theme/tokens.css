@@ -80,5 +80,6 @@
   /* ---- app chrome dimensions -> DS's own named equivalents ---- */
   --nav-height: var(--tabbar-h);     /* 64px */
   --topbar-height: var(--header-h);  /* 72px */
+  --safe-top: env(safe-area-inset-top, 0px);       /* device concept, not a DS token */
   --safe-bottom: env(safe-area-inset-bottom, 0px); /* device concept, not a DS token */
 }
