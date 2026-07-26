@@ -20,6 +20,7 @@ import PartyScreen from './screens/PartyScreen'
 import LeaderboardScreen from './screens/LeaderboardScreen'
 import HelpScreen from './screens/HelpScreen'
 import DemoConsoleScreen from './screens/DemoConsoleScreen'
+import ConsoleScreen from './screens/console/ConsoleScreen'
 
 import { currentUser } from './services/authService'
 import { useAppTick } from './hooks/useAppTick'
@@ -70,6 +71,7 @@ export default function App() {
           <Route path="notifications" element={<NotificationsScreen />} />
           <Route path="more" element={<MoreScreen />} />
         </Route>
+        <Route path="/console" element={<ConsoleScreen />} />
         <Route path="*" element={<NotFoundRedirect />} />
       </Routes>
     </ToastProvider>
