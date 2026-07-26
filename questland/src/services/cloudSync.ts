@@ -473,7 +473,7 @@ export function pushGuestProfile(user: User): void {
     if (!fb) return
     try {
       const { doc, setDoc } = await import('firebase/firestore')
-      await setDoc(doc(fb.db, 'guests', user.id), buildGuestDoc(user), { merge: true })
+      await setDoc(doc(fb.db, 'guests', user.id), buildGuestDoc(user))
     } catch {
       // swallow
     }
