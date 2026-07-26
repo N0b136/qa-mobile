@@ -1,6 +1,7 @@
 import type { User } from '../types'
 import { load, save } from './store'
 import { uid } from './ids'
+import * as cloudSync from './cloudSync'
 
 const USERS_KEY = 'ql:users'
 const SESSION_KEY = 'ql:session'
@@ -53,6 +54,7 @@ export async function signUp(email: string, password: string, name: string, avat
   }
   setUsers([...users, user])
   save<string | null>(SESSION_KEY, user.id)
+  cloudSync.pushGuestProfile(user)
   return user
 }
 
@@ -64,6 +66,7 @@ export async function signIn(email: string, password: string): Promise<User> {
     throw new Error('No adventurer found with those credentials')
   }
   save<string | null>(SESSION_KEY, user.id)
+  cloudSync.pushGuestProfile(user)
   return user
 }
 
@@ -96,5 +99,6 @@ export function updateProfile(
   const next = [...users]
   next[idx] = updated
   setUsers(next)
+  cloudSync.pushGuestProfile(updated)
   return updated
 }

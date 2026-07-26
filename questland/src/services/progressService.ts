@@ -3,7 +3,9 @@ import { episodesFor, getEpisode } from '../content/quests'
 import { getOrg } from '../content/orgs'
 import type { ProgressMap } from '../types'
 import { load, save } from './store'
+import { getUser } from './authService'
 import * as notificationService from './notificationService'
+import * as cloudSync from './cloudSync'
 
 export const XP_PER_LEVEL = 100
 
@@ -109,6 +111,9 @@ export function completeEpisode(userId: string, episodeId: string): CompleteResu
       })
     }
   }
+
+  const fresh = getUser(userId)
+  if (fresh) cloudSync.pushGuestProfile(fresh)
 
   return { ok: true, episode, orgId, rankUp }
 }
