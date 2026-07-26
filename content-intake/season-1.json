@@ -1,0 +1,687 @@
+{
+  "source_file": "Season_1_Reordered_v2.xlsx",
+  "sheets": [
+    {
+      "name": "Season 1 Quest Lineup",
+      "purpose": "Main content: 10 episodes x 3 parallel organization storylines, plus a season finale raid event and a station-type reference legend."
+    },
+    {
+      "name": "Reorder Summary",
+      "purpose": "Audit trail documenting how episodes were renumbered from an original order to the v2 order, and a 'shared stations' metric per organization used to validate the reorder."
+    }
+  ],
+  "structure_note": "The 'Season 1 Quest Lineup' sheet does NOT separate questlines into distinct blocks/sheets. Instead, each of the 10 episode rows (rows 3-12, Episode 1-10) contains THREE parallel columns-sets, one per organization (Rangers of Questia, Hearers of the Alehiim, Order of the Elm), each with its own Title, 7 Stations (physical/thematic locations), and Notes/Story text. Row-1 org labels are merged across only part of each org's actual column range (visual-only merge; see merged_ranges), so column ownership was determined from the row-2 header labels instead.",
+  "organizations": [
+    {
+      "organization": "Rangers of Questia",
+      "questline_name": "Rangers of Questia",
+      "episode_count": 10,
+      "columns_present": [
+        "Episode (shared col A)",
+        "Title (col B)",
+        "Station 1 (col C)",
+        "Station 2 (col D)",
+        "Station 3 (col E)",
+        "Station 4 (col F)",
+        "Station 5 (col G)",
+        "Station 6 (col H)",
+        "Station 7 (col I)",
+        "Story Notes (col J)"
+      ],
+      "episodes": [
+        {
+          "episode": 1,
+          "title": "Aldric's Key",
+          "stations": [
+            "7. Abbey Hill Ruins",
+            "11. Hillward Outpost",
+            "14. Wonder's Hut",
+            "3. Songcircle",
+            "19. Ranger Camp",
+            "2. Maker's Tent",
+            "6. Brigand's Hideout"
+          ],
+          "story_notes": "Find Aldric's Key, be inducted into the Rangers of Questia"
+        },
+        {
+          "episode": 2,
+          "title": "Darish's Arrow",
+          "stations": [
+            "11. Hillward Outpost",
+            "13. Path's Cross",
+            "9. Story Willow",
+            "19. Ranger Camp",
+            "18. Etzhyii Village Ruins",
+            "4. Riddlebridge",
+            "17. Silverhoard Mine"
+          ],
+          "story_notes": "Learn the story of a famous ranger, and the message arrow he shot all the way to Queston to warn of the Brigand's approach."
+        },
+        {
+          "episode": 3,
+          "title": "Tune of the Woodlands",
+          "stations": [
+            "19. Ranger Camp",
+            "5. Coolcreek Stone",
+            "16. Story Oak",
+            "12. Shadetree Hollow",
+            "6. Brigand's Hideout",
+            "15. Maker's Cave",
+            "3. Songcircle"
+          ],
+          "story_notes": "The rangers have a special instrument they made to communicate, learn the tale, find the materials and craft it to be able to learn the tune of the woodlands."
+        },
+        {
+          "episode": 4,
+          "title": "Aldric's Message",
+          "stations": [
+            "19. Ranger Camp",
+            "4. Riddlebridge",
+            "2. Maker's Tent",
+            "3. Songcircle",
+            "1. Hidden in Plain Sight",
+            "10. Southfork",
+            "7. Abbey Hill Ruins"
+          ],
+          "story_notes": "After years with no word from the former Warden of Queston, a mysterious signal appeared on the bridge, which leads to finding a secret message written in Aldric's own hand."
+        },
+        {
+          "episode": 5,
+          "title": "Ranger's Mettle",
+          "stations": [
+            "11. Hillward Outpost",
+            "14. Wonder's Hut",
+            "18. Etzhyii Village Ruins",
+            "19. Ranger Camp",
+            "17. Silverhoard Mine",
+            "9. Story Willow",
+            "13. Path's Cross"
+          ],
+          "story_notes": "A test of the bravery of Rangers, to admit rangers to a higher rank of Scout"
+        },
+        {
+          "episode": 6,
+          "title": "Rumors of Trouble",
+          "stations": [
+            "7. Abbey Hill Ruins",
+            "3. Songcircle",
+            "1. Hidden in Plain Sight",
+            "12. Shadetree Hollow",
+            "6. Brigand's Hideout",
+            "2. Maker's Tent",
+            "19. Ranger Camp"
+          ],
+          "story_notes": "The village chief received reports of some strange markings that some rangers think could be Brigand scouting marks. The task is to go and investigate, and make a map of various Brigand signs to prepare for a possible return of the enemy."
+        },
+        {
+          "episode": 7,
+          "title": "Shamara's Oath",
+          "stations": [
+            "16. Story Oak",
+            "5. Coolcreek Stone",
+            "15. Maker's Cave",
+            "19. Ranger Camp",
+            "13. Path's Cross",
+            "12. Shadetree Hollow",
+            "8. Songhollow Cave"
+          ],
+          "story_notes": "Rangers are sent to learn the tale of the Ranger Hero Shamara, and how her sacrifice saved Queston from a Brigand surprise attack."
+        },
+        {
+          "episode": 8,
+          "title": "Amets' Blade",
+          "stations": [
+            "11. Hillward Outpost",
+            "14. Wonder's Hut",
+            "9. Story Willow",
+            "18. Etzhyii Village Ruins",
+            "10. Southfork",
+            "17. Silverhoard Mine",
+            "19. Ranger Camp"
+          ],
+          "story_notes": "Learn the tale of another Hero of the Rangers, and his sword, then gather the materials and craft your own ranger's blade."
+        },
+        {
+          "episode": 9,
+          "title": "The Watchers Riddle",
+          "stations": [
+            "1. Hidden in Plain Sight",
+            "19. Ranger Camp",
+            "2. Maker's Tent",
+            "3. Songcircle",
+            "4. Riddlebridge",
+            "13. Path's Cross",
+            "7. Abbey Hill Ruins"
+          ],
+          "story_notes": "A mystery Rangers must solve to be awarded the rank of Watcher."
+        },
+        {
+          "episode": 10,
+          "title": "The Return of Nordad",
+          "stations": [
+            "19. Ranger Camp",
+            "8. Songhollow Cave",
+            "9. Story Willow",
+            "6. Brigand's Hideout",
+            "17. Silverhoard Mine",
+            "14. Wonder's Hut",
+            "11. Hillward Outpost"
+          ],
+          "story_notes": "Rumors in town lead on a series of warnings that end at the outpost, where ranger signs call to look north, and spotting the banners and smoke of the fires of the Brigand warband."
+        }
+      ]
+    },
+    {
+      "organization": "Hearers of the Alehiim",
+      "questline_name": "Hearers of the Alehiim",
+      "episode_count": 10,
+      "columns_present": [
+        "Episode (shared col A)",
+        "Title (col K)",
+        "Station 1 (col L)",
+        "Station 2 (col M)",
+        "Station 3 (col N)",
+        "Station 4 (col O)",
+        "Station 5 (col P)",
+        "Station 6 (col Q)",
+        "Station 7 (col R)",
+        "Notes (col S)"
+      ],
+      "episodes": [
+        {
+          "episode": 1,
+          "title": "Hear Us (we hear)",
+          "stations": [
+            "9. Story Willow",
+            "5. Coolcreek Stone",
+            "12. Shadetree Hollow",
+            "15. Maker's Cave",
+            "10. Southfork",
+            "20. Hearer's Hollow",
+            "18. Etzhyii Village Ruins"
+          ],
+          "notes": "Be inducted into the Hearers and"
+        },
+        {
+          "episode": 2,
+          "title": "Wisdom Calls",
+          "stations": [
+            "20. Hearer's Hollow",
+            "14. Wonder's Hut",
+            "15. Maker's Cave",
+            "3. Songcircle",
+            "10. Southfork",
+            "16. Story Oak",
+            "5. Coolcreek Stone"
+          ],
+          "notes": "The Way of the Most High is like one who hunts pearl clams in the river. And one day he found a clam that he knew would have pearl of great value inside, but it was in another people's section of the river. That man sold all that he had to buy the section of river. Clam shell pearl craft, make a pearl of wisdom bracelet or neckless."
+        },
+        {
+          "episode": 3,
+          "title": "He Finds What is Lost",
+          "stations": [
+            "8. Songhollow Cave",
+            "2. Maker's Tent",
+            "4. Riddlebridge",
+            "9. Story Willow",
+            "20. Hearer's Hollow",
+            "13. Path's Cross",
+            "1. Hidden in Plain Sight"
+          ],
+          "notes": "A townsperson lost a coin, a sheperd lost a sheep, the son of the village chief was lost. But the Most High sees all, and brings back what was lost. Craft a small seude pouch to keep found things."
+        },
+        {
+          "episode": 4,
+          "title": "Working Trough",
+          "stations": [
+            "14. Wonder's Hut",
+            "9. Story Willow",
+            "18. Etzhyii Village Ruins",
+            "6. Brigand's Hideout",
+            "11. Hillward Outpost",
+            "20. Hearer's Hollow",
+            "17. Silverhoard Mine"
+          ],
+          "notes": "Not everything that happens to us is good. Clay pots break, Accidents happen, we make mistakes, evil touches our lives and the world around us, but the Most High is not worried by these things; He is the master weaver, working through all things to bring us to Himself. Weave a small something"
+        },
+        {
+          "episode": 5,
+          "title": "Tremblers",
+          "stations": [
+            "12. Shadetree Hollow",
+            "16. Story Oak",
+            "10. Southfork",
+            "8. Songhollow Cave",
+            "5. Coolcreek Stone",
+            "15. Maker's Cave",
+            "20. Hearer's Hollow"
+          ],
+          "notes": "Even within the small numbers of the hearers, there were those who seemed to hear differently than the others, these had such an awe, such a reverence for the words and the ways of the most high that they trembled at his word. walk the path of those who went before, hear their story, and reach a new rank among the Hearers, the Temblers.  Tinkly necklace/bracelet/anclet craft"
+        },
+        {
+          "episode": 6,
+          "title": "Planted by the Water",
+          "stations": [
+            "20. Hearer's Hollow",
+            "5. Coolcreek Stone",
+            "18. Etzhyii Village Ruins",
+            "4. Riddlebridge",
+            "17. Silverhoard Mine",
+            "13. Path's Cross",
+            "16. Story Oak"
+          ],
+          "notes": "In the oldest stories of the Alehiim tell, those who keep the words of the Most High are like a tree planted by the waters. Hear the story of the ranger who saved some of the Wisetree wood, and follow the ancient carvings that fortold where he would hide it."
+        },
+        {
+          "episode": 7,
+          "title": "Repaired not Discarded",
+          "stations": [
+            "3. Songcircle",
+            "14. Wonder's Hut",
+            "20. Hearer's Hollow",
+            "9. Story Willow",
+            "1. Hidden in Plain Sight",
+            "6. Brigand's Hideout",
+            "2. Maker's Tent"
+          ],
+          "notes": "The Alehiim we great conservationists; they were not a people of waste. Things that were broken were repaired. Follow the story of a little Alehiim girl who thought she was broken, and find out how the Host Hight made her whole. Broken clay repair craft."
+        },
+        {
+          "episode": 8,
+          "title": "Waiting (hope)",
+          "stations": [
+            "5. Coolcreek Stone",
+            "15. Maker's Cave",
+            "8. Songhollow Cave",
+            "12. Shadetree Hollow",
+            "13. Path's Cross",
+            "7. Abbey Hill Ruins",
+            "20. Hearer's Hollow"
+          ],
+          "notes": "The path of the Alehiim is not an easy one. Often they have had long seasons of waiting. But one thing the Alehiim have never lost- Hope. Seeds are a picture of hope. Every harvest gives fresh hope. Seed craft."
+        },
+        {
+          "episode": 9,
+          "title": "Secret Places",
+          "stations": [
+            "16. Story Oak",
+            "14. Wonder's Hut",
+            "18. Etzhyii Village Ruins",
+            "6. Brigand's Hideout",
+            "11. Hillward Outpost",
+            "20. Hearer's Hollow",
+            "17. Silverhoard Mine"
+          ],
+          "notes": "The Alehiim learned the secret places of Questia long ago, but only the very few take the secret places with them. Craft the leaf cloak of the Alehiim and rise to the rank of the Hidden."
+        },
+        {
+          "episode": 10,
+          "title": "Seed of the Wisetree",
+          "stations": [
+            "20. Hearer's Hollow",
+            "5. Coolcreek Stone",
+            "7. Abbey Hill Ruins",
+            "12. Shadetree Hollow",
+            "15. Maker's Cave",
+            "10. Southfork",
+            "18. Etzhyii Village Ruins"
+          ],
+          "notes": "replant the seed of the Wisetreem call the people home."
+        }
+      ]
+    },
+    {
+      "organization": "Order of the Elm",
+      "questline_name": "Order of the Elm",
+      "episode_count": 10,
+      "columns_present": [
+        "Episode (shared col A)",
+        "Title (col T)",
+        "Station 1 (col U)",
+        "Station 2 (col V)",
+        "Station 3 (col W)",
+        "Station 4 (col X)",
+        "Station 5 (col Y)",
+        "Station 6 (col Z)",
+        "Station 7 (col AA)",
+        "Notes (col AB)",
+        "Unlabeled duplicate-of-Title column (col AC)"
+      ],
+      "episodes": [
+        {
+          "episode": 1,
+          "title": "The Order Begins",
+          "stations": [
+            "4. Riddlebridge",
+            "8. Songhollow Cave",
+            "17. Silverhoard Mine",
+            "21. ElmRoot",
+            "16. Story Oak",
+            "13. Path's Cross",
+            "1. Hidden in Plain Sight"
+          ],
+          "notes": "The adventure that started it all. Princess Ellowyn and Able sneak out of the castle for a night of adventure in the wilds of Questia, founding the Order of the Elm along the way. Families retrace the pair's footsteps across Riddlebridge, Songhollow Cave, Silverhoard Mine, Story Oak, and Path's Cross, piecing together the riddle that leads them to the hiding spot of the princess's lost signet ring — only to discover that the ring was never lost at all. The royal messenger meets the party at the end and officially commissions them as the first members of the Order of the Elm.",
+          "unlabeled_column_AC_duplicate_of_title": "The Order Begins"
+        },
+        {
+          "episode": 2,
+          "title": "A Call to Order",
+          "stations": [
+            "21. ElmRoot",
+            "1. Hidden in Plain Sight",
+            "7. Abbey Hill Ruins",
+            "12. Shadetree Hollow",
+            "2. Maker's Tent",
+            "3. Songcircle",
+            "6. Brigand's Hideout"
+          ],
+          "notes": "Ellowyn has decided that the Order of the Elm needs an official ally within Questia's leadership, and sets her sights on the Captain of the Guard. She sends word through the Order that she intends to bring him in on the secret and ask him to give the Order its first real mission — something that will prove to him that the Order is a trustworthy and capable organization worth taking seriously. The Captain, amused but intrigued, agrees to give them a chance. The mission he assigns them will test their cleverness, their teamwork, and their discretion, and will establish the Order's first official relationship with the authority of Questia.",
+          "unlabeled_column_AC_duplicate_of_title": "A Call to Order"
+        },
+        {
+          "episode": 3,
+          "title": "THE TALES OF THE ORDER",
+          "stations": [
+            "7. Abbey Hill Ruins",
+            "11. Hillward Outpost",
+            "18. Etzhyii Village Ruins",
+            "17. Silverhoard Mine",
+            "14. Wonder's Hut",
+            "10. Southfork",
+            "21. ElmRoot"
+          ],
+          "notes": "Ellowyn has decided that a great order needs great tales of heroism. She has been keeping a record of the Order's noble deeds — saving a helpless creature in dire peril, rescuing a stranded merchant from certain disaster, and delivering a message of the utmost urgency across the whole of Questia. Families will act out each of these heroic missions in full, while Able's increasingly exasperated commentary makes painfully clear that the reality of each adventure was considerably more ordinary than the Potentate Prime's official account would suggest. A lighthearted, hilarious episode that celebrates the Order's growing spirit while poking gentle fun at Ellowyn's gift for dramatic embellishment.",
+          "unlabeled_column_AC_duplicate_of_title": "THE TALES OF THE ORDER"
+        },
+        {
+          "episode": 4,
+          "title": "VOICES IN THE FOREST",
+          "stations": [
+            "13. Path's Cross",
+            "12. Shadetree Hollow",
+            "8. Songhollow Cave",
+            "21. ElmRoot",
+            "15. Maker's Cave",
+            "5. Coolcreek Stone",
+            "16. Story Oak"
+          ],
+          "notes": "Strange sounds have been heard at night near the edge of the forest, and the settlement is uneasy. The Captain of the Guard suspects returning brigands and asks the Order to quietly investigate. What the families discover instead are the people of the leaves — a small, cautious group returning to their ancient homeland, not yet ready to be seen by the wider settlement. The Order must make their first real integrity choice: report what they found to the authorities as instructed, or protect the secret of the returning people and trust that the time for that introduction has not yet come. Devorah appears briefly at the edge of the trees, watching the party with quiet approval whatever they choose. The first seed of the king's interest in the people of the leaves' land is planted.",
+          "unlabeled_column_AC_duplicate_of_title": "VOICES IN THE FOREST"
+        },
+        {
+          "episode": 5,
+          "title": "THE KING'S EYES",
+          "stations": [
+            "7. Abbey Hill Ruins",
+            "1. Hidden in Plain Sight",
+            "3. Songcircle",
+            "4. Riddlebridge",
+            "2. Maker's Tent",
+            "6. Brigand's Hideout",
+            "21. ElmRoot"
+          ],
+          "notes": "A representative of the king arrives in Queston — officially to assess the progress of the settlement, but the Order notices almost immediately that his attention keeps drifting to the northern forest where the people of the leaves are quietly returning. Ellowyn recognizes him as one of her father's closest and most calculating advisors, and is deeply unsettled by his presence and his questions. The Order must gather information discreetly, navigate the politics of the settlement without revealing their hand, and Ellowyn must grapple for the first time with the deeply uncomfortable possibility that her father's ambitions may not align with the values of the Order she founded. Families who complete this episode earn the rank of Sworn of the Elm, recognizing that they have proven their oath means something when it is tested.",
+          "unlabeled_column_AC_duplicate_of_title": "THE KING'S EYES"
+        },
+        {
+          "episode": 6,
+          "title": "THE SONG OF THE STONES",
+          "stations": [
+            "21. ElmRoot",
+            "14. Wonder's Hut",
+            "11. Hillward Outpost",
+            "15. Maker's Cave",
+            "10. Southfork",
+            "9. Story Willow",
+            "8. Songhollow Cave"
+          ],
+          "notes": "A remarkable discovery near the hillward outpost sends the Order on an urgent mission — a new set of ancient carvings from the people of the leaves has been found hidden under a fallen elm tree. Able, growing steadily in his understanding of the people of the leaves' symbols, translates a portion of the carvings and discovers something that stops him cold — a reference to a great enemy, driven away once before, who swore on his defeat to return. The name carved into the ancient stone is Nordad. Neither Able nor Ellowyn fully understands the weight of what they have found. But the name is in their minds now, and it will not leave.",
+          "unlabeled_column_AC_duplicate_of_title": "THE SONG OF THE STONES"
+        },
+        {
+          "episode": 7,
+          "title": "ABLE'S TRIAL",
+          "stations": [
+            "7. Abbey Hill Ruins",
+            "4. Riddlebridge",
+            "11. Hillward Outpost",
+            "10. Southfork",
+            "17. Silverhoard Mine",
+            "18. Etzhyii Village Ruins",
+            "21. ElmRoot"
+          ],
+          "notes": "The king's counsel has been watching Able for some time, and they have seen enough. They approach him privately with an offer — elevation to minor nobility, a title, land, and a real future, all in exchange for one thing: loyalty to the crown and regular reports on the activities of the Order of the Elm. For the first time in his life Able is forced to reckon with what he has always pushed aside — that as a commoner, no matter how clever or capable or faithful, certain doors will always be closed to him. The offer opens those doors. And Able knows what walking through them might mean for his future. He confides in no one, wrestling alone with the weight of it, and in a quiet moment at the Story Oak speaks his struggle aloud to the empty clearing as though Devorah might hear. In the end Able refuses — but not before families walk through every agonizing step of his deliberation with him. He never tells Ellowyn what he was offered. But she notices that something has changed in him, and cannot figure out what.",
+          "unlabeled_column_AC_duplicate_of_title": "ABLE'S TRIAL"
+        },
+        {
+          "episode": 8,
+          "title": "NORDAD'S SHADOW",
+          "stations": [
+            "21. ElmRoot",
+            "4. Riddlebridge",
+            "16. Story Oak",
+            "3. Songcircle",
+            "6. Brigand's Hideout",
+            "2. Maker's Tent",
+            "1. Hidden in Plain Sight"
+          ],
+          "notes": "The first hard evidence arrives that the brigands are not merely scattered stragglers but a reorganizing force with deliberate intent. A ranger patrol has found the remains of a camp on the far edge of Questia — too disciplined, too purposeful to be accidental. The Captain of the Guard asks the Order to quietly investigate a secondary location without alarming the settlement. What the families find is more than a camp. It is a message, deliberately left for whoever might come looking — a crude carving of a broken elm tree. Nordad knows about the Order of the Elm. This is the episode where the stakes become undeniably real, and Ellowyn's response to fear reveals exactly who she is becoming. When some members of the Order begin to whisper about disbanding for safety, Ellowyn refuses — quietly, firmly, and without flinching.",
+          "unlabeled_column_AC_duplicate_of_title": "NORDAD'S SHADOW"
+        },
+        {
+          "episode": 9,
+          "title": "DEVORAH'S WARNING",
+          "stations": [
+            "5. Coolcreek Stone",
+            "12. Shadetree Hollow",
+            "8. Songhollow Cave",
+            "10. Southfork",
+            "15. Maker's Cave",
+            "21. ElmRoot",
+            "9. Story Willow"
+          ],
+          "notes": "Devorah sends word through the forest requesting a meeting with Ellowyn. Able insists on coming and Devorah allows it. In a long, quiet conversation under the Story Oak, Devorah tells them what she has known since the beginning — that Nordad's return was foreseen, that his claim on the silver of Questia is rooted in something old and false and dangerous, and that Ellowyn herself was seen in the ancient carvings of the people of the leaves, standing at the center of the conflict to come. She tells Ellowyn that when the moment arrives she will face a choice between being a princess and being the Potentate Prime, and that only she can decide which she is first. She also tells Able, looking at him with steady and unhurried eyes, that she knows what he was offered and what he chose, and that the Most High does not forget faithfulness. Able is shaken to his core. Families who complete this episode earn the rank of Guardian of the Elm, recognizing that they have been faithful through real darkness and are ready for what comes next.",
+          "unlabeled_column_AC_duplicate_of_title": "DEVORAH'S WARNING"
+        },
+        {
+          "episode": 10,
+          "title": "THE BREAKING POINT",
+          "stations": [
+            "1. Hidden in Plain Sight",
+            "4. Riddlebridge",
+            "3. Songcircle",
+            "13. Path's Cross",
+            "2. Maker's Tent",
+            "16. Story Oak",
+            "21. ElmRoot"
+          ],
+          "notes": "The brigand army is confirmed and Questia is preparing for what is coming. The Rangers are mobilizing. The Hearers of the Alehiim have sent word through the forest. And Ellowyn has made her decision — the Order of the Elm will play its part in the defense of Questia, and she will be standing right beside every member when they do. Able refuses. Not out of disloyalty, not out of cowardice, but out of a fierce and immovable protectiveness that has been the bedrock of everything he is. The confrontation between them is the most painful moment of the entire season — Ellowyn finally delivering the ultimatum that if the members of the Order are going into this, she will be beside them, and if Able will not go with her then he can leave the Order. The silence that follows is a gutpunch to both of them. And then, quietly, Able chooses her. He chooses the Order. He voices his fears one final time — that when this is over, when the king finds out what his daughter did and where she stood, there will be consequences none of them are ready for. Ellowyn hears him. Really hears him. And they walk forward anyway, together, into whatever is coming.",
+          "unlabeled_column_AC_duplicate_of_title": "THE BREAKING POINT"
+        }
+      ]
+    }
+  ],
+  "finale_event": {
+    "title": "RAID: Brigand's Return",
+    "merged_range_note": "B13:Z13 merged row containing only the finale title",
+    "event_context": "The massive one day event final climax of all three stories. Instead of individual groups, players will choose one of the three organizations, and all te members of the organization will act as one large grou that will go through different areas/stations to prepare for the coming battle. We will seek cosplay/actor/volunteer help acting as the brigand army of Nordad, as well as several key characters on the Questian side (Aldric, The Keeper, Devorah, Ellowyn, Able).",
+    "phases": [
+      {
+        "phase": 1,
+        "text": "PHASE 1:The event begins with each group starting at their base, the leader/hero of that group explains to that Nordad has returned, and that we all have a duty to defend Questia. The King's army is still deployed to the east, so tis time they will not be able to come as they did before. It is up to the Rangers/Order/Hearers to defend Questia. The Rangers are then sent through a series of battle preparation stations, as they will be the main fighting force: construct a defensive line/trench, Archery practice/Hitting \"Brigand scouts\" pop up targets, A sword figthting drill/rules overview for the coming battle. The Hearers prepare in a different way, They set up traps and obstacles to catch any would be brigand deserters and prevent the rangers from being surrounded, They learn the Battle Song of the Most High and are given horns to be able to blow the warning, and finally they gather \"healing leaves\" an ae taught how to act as combat medics for the big battle. The Order of the Elm first goes to sabbotage the siege tower Nordad's forces have constructed, Ellowyn then brings them back to Queston where she reveals that she bribed the castle armorer into sending an entire cartload of spears and pole arms to Queston; which she distributes to the Order of the Elm members and the captain of the guard teaches them how to use them, then finally the order moves to the Story Oak where they meet up with Devorah and a secret small army of the People of the Leaves, who have been training in exile to prepare for coming back."
+      },
+      {
+        "phase": 2,
+        "text": "PHASE 2: The battle, Nordad's army approaches the battle line. The rangers are in place, with the Hearers behind them, but the Order of the Elm is nowhere to be seen. Nordad steps forward to deliver his speach of fear. Aldric and the Keeper answer and give their own seaches to bolster the defenders. Secretly Ellowyn and Able get the Order in position for a flanking attack opposite from the Alehiim warriors. The bttle is joined, with the brigands charging the battle line, the rangers will fight back for several long minutes with the Hearers coming up to pull \"wounded\" fighters back and \"heal\" them so they can get back to the fight. Nordad and Alric have a rematch showdown, and just as it looks like Nordad is going to win, there is a loud shout and the Order of the Elm charges in from one side, with the Warriors of the Alehiim charging in from the ther side. The Brigands are all defeated to the last man, except for Nordad, who is surrounded by his bodyguards and they escape. Alric forstalls any pursuit."
+      },
+      {
+        "phase": 3,
+        "text": "PHASE 3: The victory is celebrated with a huge feast, special crafts, live music, and live action character sketches/skits. Ending with a big thank you to everyone, and a teaser for season 2."
+      }
+    ],
+    "station_type_legend": {
+      "description": "Rows 21-24 categorize all 21 stations by activity type. Header row = type name with code letter; 3 data rows list which stations fall under each type.",
+      "type_headers": [
+        "Puzzle [p]",
+        "Craft [c]",
+        "Song [s]",
+        "Riddle [r]",
+        "Obstacle [o]",
+        "Story [st]",
+        "Base [b]"
+      ],
+      "rows": [
+        [
+          "1. Hidden in Plain Sight",
+          "2. Maker's Tent",
+          "3. Songcircle",
+          "4. Riddlebridge",
+          "6. Brigand's Hideout",
+          "7. Abbey Hill Ruins",
+          "19. Ranger Camp"
+        ],
+        [
+          "5. Coolcreek Stone",
+          "15. Maker's Cave",
+          "8. Songhollow Cave",
+          "12. Shadetree Hollow",
+          "10. Southfork",
+          "16. Story Oak",
+          "20. Hearer's Hollow"
+        ],
+        [
+          "11. Hillward Outpost",
+          "17. Silverhoard Mine",
+          "18. Etzhyii Village Ruins",
+          "14. Wonder's Hut",
+          "13. Path's Cross",
+          "9. Story Willow",
+          "21. ElmRoot"
+        ]
+      ]
+    }
+  },
+  "reorder_summary": {
+    "sheet_title": "Season 1 — Episode Reorder Summary (v2: Ep 1 & Ep 10 fixed)",
+    "columns": [
+      "New Ep #",
+      "Original Ep #",
+      "Moved?",
+      "Transition",
+      "Rangers shared",
+      "Hearers shared",
+      "Order shared",
+      "Max shared"
+    ],
+    "rows": [
+      {
+        "new_ep": 1,
+        "original_ep": 1,
+        "moved": "FIXED",
+        "transition": "Ep 1 → Ep 2",
+        "rangers_shared": 2,
+        "hearers_shared": 1,
+        "order_shared": 0,
+        "max_shared": 2
+      },
+      {
+        "new_ep": 2,
+        "original_ep": 3,
+        "moved": "Yes",
+        "transition": "Ep 2 → Ep 3",
+        "rangers_shared": 0,
+        "hearers_shared": 0,
+        "order_shared": 0,
+        "max_shared": 0
+      },
+      {
+        "new_ep": 3,
+        "original_ep": 6,
+        "moved": "Yes",
+        "transition": "Ep 3 → Ep 4",
+        "rangers_shared": 0,
+        "hearers_shared": 0,
+        "order_shared": 0,
+        "max_shared": 0
+      },
+      {
+        "new_ep": 4,
+        "original_ep": 5,
+        "moved": "Yes",
+        "transition": "Ep 4 → Ep 5",
+        "rangers_shared": 0,
+        "hearers_shared": 0,
+        "order_shared": 0,
+        "max_shared": 0
+      },
+      {
+        "new_ep": 5,
+        "original_ep": 8,
+        "moved": "Yes",
+        "transition": "Ep 5 → Ep 6",
+        "rangers_shared": 0,
+        "hearers_shared": 0,
+        "order_shared": 0,
+        "max_shared": 0
+      },
+      {
+        "new_ep": 6,
+        "original_ep": 7,
+        "moved": "Yes",
+        "transition": "Ep 6 → Ep 7",
+        "rangers_shared": 0,
+        "hearers_shared": 0,
+        "order_shared": 0,
+        "max_shared": 0
+      },
+      {
+        "new_ep": 7,
+        "original_ep": 2,
+        "moved": "Yes",
+        "transition": "Ep 7 → Ep 8",
+        "rangers_shared": 0,
+        "hearers_shared": 0,
+        "order_shared": 0,
+        "max_shared": 0
+      },
+      {
+        "new_ep": 8,
+        "original_ep": 4,
+        "moved": "Yes",
+        "transition": "Ep 8 → Ep 9",
+        "rangers_shared": 0,
+        "hearers_shared": 0,
+        "order_shared": 0,
+        "max_shared": 0
+      },
+      {
+        "new_ep": 9,
+        "original_ep": 9,
+        "moved": "No",
+        "transition": "Ep 9 → Ep 10",
+        "rangers_shared": 0,
+        "hearers_shared": 0,
+        "order_shared": 0,
+        "max_shared": 0
+      },
+      {
+        "new_ep": 10,
+        "original_ep": 10,
+        "moved": "FIXED",
+        "transition": "—",
+        "rangers_shared": "—",
+        "hearers_shared": "—",
+        "order_shared": "—",
+        "max_shared": "—"
+      }
+    ],
+    "legend_note": "Green = ≤2 shared stations ✓  |  Yellow = episode was moved  |  Blue = fixed episodes (1 & 10)  |  All 9 transitions valid"
+  },
+  "data_i_could_not_confidently_place": [
+    "Column AC (Order of the Elm block) has no header in row 2 and simply duplicates the value of column T (Order episode Title) for every episode row. Preserved verbatim per-episode as 'unlabeled_column_AC_duplicate_of_title' but its intended purpose is unclear (possibly a leftover helper/lookup column).",
+    "No date, week-of-season, calendar/air-date, or park/venue-location column exists anywhere in this workbook. 'Station' names (e.g. '7. Abbey Hill Ruins') are in-universe location names used for the physical activity rotation, not real-world venue/park fields.",
+    "No explicit 'rank' or 'checkpoint' column exists. Rank-ups are mentioned only as prose fragments embedded inside the Notes/Story-Notes text for specific episodes (Episode 1 = induction into the org; Episode 5 = mid-tier rank named per org [Rangers: 'Scout', Hearers: 'Temblers', Order: 'Sworn of the Elm']; Episode 9 = higher rank named per org [Rangers: 'Watcher', Hearers: 'the Hidden', Order: 'Guardian of the Elm']). These were left inside the notes text verbatim rather than extracted into a separate structured field, since no dedicated column exists in the source.",
+    "The finale 'RAID: Brigand's Return' event and its Phase 1/2/3 descriptions, plus the station-type legend (rows 21-24), sit in the same sheet below the episode grid with substantial blank-row padding and merged cells; they are not part of the 3 organizations' 10-episode questlines and are reported separately under 'finale_event'.",
+    "Numeric Episode values in column A were stored as floats (e.g. 1.0) in the source; normalized here to integers."
+  ]
+}

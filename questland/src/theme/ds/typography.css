@@ -1,0 +1,33 @@
+:root{
+  /* Families */
+  --font-display:"Cinzel",Georgia,serif;              /* headings, wordmarks, signage */
+  --font-display-ornate:"Cinzel Decorative",Georgia,serif; /* rare: drop caps, chapter marks */
+  --font-body:"EB Garamond",Georgia,serif;            /* long-form story copy */
+  --font-ui:"Alegreya Sans","Helvetica Neue",sans-serif; /* labels, buttons, wayfinding, app UI */
+  --font-scribe:"IM Fell English",Georgia,serif;      /* italic scribe voice: quest notes, marginalia */
+  --font-scribe-caps:"IM Fell English SC",Georgia,serif; /* small-caps kickers on vellum */
+
+  /* Type scale — 1.25 major-third-ish, tuned to signage legibility */
+  --text-2xs:11px;--text-xs:12px;--text-sm:14px;--text-base:16px;--text-md:18px;
+  --text-lg:21px;--text-xl:26px;--text-2xl:32px;--text-3xl:40px;--text-4xl:52px;
+  --text-5xl:66px;--text-6xl:84px;--text-7xl:108px;
+
+  /* Line heights */
+  --leading-tight:1.05;--leading-snug:1.18;--leading-normal:1.45;--leading-relaxed:1.62;
+
+  /* Tracking — display caps always get positive tracking */
+  --tracking-display:.055em;--tracking-display-tight:.02em;
+  --tracking-label:.14em;--tracking-body:0;
+
+  /* Weights */
+  --weight-regular:400;--weight-medium:500;--weight-semibold:600;--weight-bold:700;--weight-black:900;
+
+  /* Composed roles */
+  --title-hero:var(--weight-bold) var(--text-6xl)/var(--leading-tight) var(--font-display);
+  --title-section:var(--weight-bold) var(--text-3xl)/var(--leading-snug) var(--font-display);
+  --title-card:var(--weight-semibold) var(--text-xl)/var(--leading-snug) var(--font-display);
+  --body-lg:var(--weight-regular) var(--text-md)/var(--leading-relaxed) var(--font-body);
+  --body-base:var(--weight-regular) var(--text-base)/var(--leading-normal) var(--font-body);
+  --label-ui:var(--weight-bold) var(--text-xs)/1.2 var(--font-ui);
+  --button-ui:var(--weight-bold) var(--text-sm)/1 var(--font-ui);
+}

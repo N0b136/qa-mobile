@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dev-dist/
+*.tsbuildinfo
+
+# Local Claude Code tooling (agents/skills/plans/settings)
+.claude/
+skills-lock.json
+
+# Superseded / scratch
+content-intake/park-map-sample.svg
+scratch/
+*.log
+
+# Business/financial — keep out of the repo
+content-intake/QA Revenue Model.docx
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

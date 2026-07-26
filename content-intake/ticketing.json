@@ -1,0 +1,199 @@
+{
+  "source_file": "QA Revenue Model.docx",
+  "structure_note": "The document is NOT a single flat list of ticket tiers. It contains four distinct ticketing categories: (1) Single-Day Admission - Individual, (2) Single-Day Admission - Group, (3) Citizen of Questia Membership (a recurring monthly subscription, not a day pass), and (4) Birthday Packages (flat-fee event bookings). A fifth section, 'Exclusive Member Events', lists non-priced perks attached to the Hero Membership tier rather than a ticket tier itself.",
+  "categories": [
+    {
+      "category": "Single-Day Admission - Individual",
+      "pricing_model": "flat price per pass (not age-differentiated adult/child; differentiated by number of Quest Experiences included)",
+      "tiers": [
+        {
+          "name": "Adventurer Pass",
+          "subtitle_as_written": "(Basic Access)",
+          "price": "$25",
+          "price_unit": "per person, single day",
+          "included": [
+            "Access to Questia Village",
+            "1 Quest Experience."
+          ]
+        },
+        {
+          "name": "Hero Pass",
+          "subtitle_as_written": "(All-Access)",
+          "price": "$35",
+          "price_unit": "per person, single day",
+          "included": [
+            "Full-day access to Questia Village",
+            "ALL THREE Quest Experiences"
+          ]
+        },
+        {
+          "name": "Ages 3 & Under",
+          "subtitle_as_written": null,
+          "price": "Free",
+          "price_unit": "per child, with paying adult",
+          "included": [
+            "Free admission with paying adult"
+          ]
+        }
+      ],
+      "notes": []
+    },
+    {
+      "category": "Single-Day Admission - Group",
+      "pricing_model": "flat price for a group of up to 6, plus per-additional-member add-on",
+      "tiers": [
+        {
+          "name": "Group / Adventurer Pass",
+          "subtitle_as_written": null,
+          "price": "$90",
+          "price_unit": "per group (up to 6 guests)",
+          "included": [
+            "Admission for up to 6 guests",
+            "Questia Village and 1 Quest Experience"
+          ]
+        },
+        {
+          "name": "Additional Pass",
+          "subtitle_as_written": null,
+          "price": "$5 ea",
+          "price_unit": "per additional group member (Adventurer tier)",
+          "included": [
+            "Each additional group member"
+          ]
+        },
+        {
+          "name": "Group Hero Pass",
+          "subtitle_as_written": null,
+          "price": "$125",
+          "price_unit": "per group (up to 6 guests)",
+          "included": [
+            "Admission for up to 6 guests",
+            "Full Day Access to Questia Village",
+            "ALL THREE Quest Experiences"
+          ]
+        },
+        {
+          "name": "Additional Pass",
+          "subtitle_as_written": null,
+          "price": "$5 ea",
+          "price_unit": "per additional group member (Hero tier)",
+          "included": [
+            "Each additional group member"
+          ]
+        }
+      ],
+      "notes": [
+        "*Large groups of 10+ are eligible for discounted day rate. Please call for more detail."
+      ]
+    },
+    {
+      "category": "Citizen of Questia Membership",
+      "pricing_model": "recurring monthly subscription ($/Month) — a fundamentally different revenue structure from the single-day passes",
+      "tiers": [
+        {
+          "name": "Adventurer Membership",
+          "subtitle_as_written": null,
+          "price": "$30",
+          "price_unit": "per month",
+          "included": [
+            "One visit per week",
+            "Questia Village access",
+            "1 Quest Experience per visit"
+          ]
+        },
+        {
+          "name": "Hero Membership",
+          "subtitle_as_written": null,
+          "price": "$35",
+          "price_unit": "per month",
+          "included": [
+            "Unlimited visits",
+            "Unlimited access to ALL 3 Quests"
+          ]
+        },
+        {
+          "name": "Family Hero Membership",
+          "subtitle_as_written": null,
+          "price": "$45",
+          "price_unit": "per month",
+          "included": [
+            "Unlimited visits for up to six family members",
+            "Unlimited access to ALL 3 Quests"
+          ]
+        },
+        {
+          "name": "Additional Family Member",
+          "subtitle_as_written": null,
+          "price": "+$5",
+          "price_unit": "per additional family member, per month (Family Hero tier add-on)",
+          "included": [
+            "Each additional family member"
+          ]
+        },
+        {
+          "name": "Guest Pass",
+          "subtitle_as_written": null,
+          "price": "FREE",
+          "price_unit": "included with membership",
+          "included": [
+            "Two guest passes per month to bring friends for Free!"
+          ]
+        }
+      ],
+      "notes": [
+        "*Large families of 10+ per household may be eligible for discounted membership rate. Please call for more detail."
+      ]
+    }
+  ],
+  "member_exclusive_perks": {
+    "section_title": "Exclusive Member Events",
+    "eligibility": "Hero Members receive exclusive pricing and early access to:",
+    "perks_verbatim": [
+      "Discounts on select experiences and merchandise",
+      "Night Quests",
+      "Holiday Adventures",
+      "The End-of-Year Raid",
+      "Early ticket access to special events"
+    ],
+    "note": "Source list items were prefixed with decorative emoji (money bag, crescent moon, holiday tree, crown, ticket) in the original document; emoji stripped here, text preserved verbatim. Not a priced tier — these are member benefits attached to the Hero Membership tier(s)."
+  },
+  "add_on_packages": [
+    {
+      "category": "Birthday Packages",
+      "pricing_model": "flat fee per event booking",
+      "tiers": [
+        {
+          "name": "Adventurer Birthday Package",
+          "price": "$350",
+          "price_unit": "per event",
+          "included": [
+            "Up to 15 children (+ adults)",
+            "Exclusive 1h Quest Lane Reservation",
+            "2h Village Party Room",
+            "1 Large Pizza and 2L Beverage per 5 Questers",
+            "Paper plates, cups, and napkins included"
+          ]
+        },
+        {
+          "name": "Hero Birthday Package",
+          "price": "$450",
+          "price_unit": "per event",
+          "included": [
+            "All options from the Adventurer package PLUS",
+            "Birthday child's choice of custom Blacksmith Sword or Hero Cape",
+            "Exclusive Questia Character Meet & Greet Experience",
+            "Guest Party Favors: Questia badge, 1-day return admission ticket"
+          ]
+        }
+      ],
+      "notes": []
+    }
+  ],
+  "revenue_assumptions_present_in_doc": [
+    "None stated explicitly (no attendance projections, conversion rates, or revenue totals appear in the document — it is a price/inclusion list only)."
+  ],
+  "transcription_notes": [
+    "'All options form the adventurer package PLUS' in the source table had a typo ('form' for 'from'); corrected to 'from' here for readability, flagged here for traceability.",
+    "Table cell text in the source occasionally had inconsistent line-break placement (e.g. price appearing on its own sub-line within a merged-looking cell); prices and inclusion lists were reconciled to the tier they visually belong to based on row position."
+  ]
+}

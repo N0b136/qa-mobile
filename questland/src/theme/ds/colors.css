@@ -1,0 +1,99 @@
+:root{
+  /* ---- Base palette: Guild Gold (from the logotype frame + ribbon) ---- */
+  --gold-100:#F6EBD4;--gold-200:#E9D3A4;--gold-300:#E3C88E;--gold-400:#D0AC6E;
+  --gold-500:#C09A5B;--gold-600:#A87848;--gold-700:#8C6534;--gold-800:#6B4A22;--gold-900:#4E3A1C;
+
+  /* ---- Ruby: the red half of the Q. The "Valor" questline colour ---- */
+  --ruby-200:#F0A9B6;--ruby-300:#E0466A;--ruby-500:#B01B34;--ruby-600:#8E1428;--ruby-800:#6B0F1F;--ruby-900:#420913;
+
+  /* ---- Sapphire: the blue half of the Q. The "Lore" questline colour ---- */
+  --sapphire-200:#A8C8F0;--sapphire-300:#4E8FE0;--sapphire-500:#1E4FA8;--sapphire-600:#173F8A;--sapphire-800:#102A5E;--sapphire-900:#0A1B3D;
+
+  /* ---- Stone: the castle wall the logo sits on. Primary dark neutral ---- */
+  --stone-950:#121214;--stone-900:#1A1A1C;--stone-800:#232426;--stone-700:#2E2F31;
+  --stone-600:#3A3B3E;--stone-500:#48494C;--stone-400:#5C5E62;--stone-300:#7A7C81;--stone-200:#9EA0A5;
+
+  /* ---- Parchment: maps, scrolls, signage. Primary light neutral ---- */
+  --parchment-50:#FBF6EC;--parchment-100:#F4E9D2;--parchment-200:#E6D5B2;
+  --parchment-300:#D6C098;--parchment-400:#C9B48C;--parchment-500:#A8916B;
+
+  /* ---- Vellum: the parchment-card hide. Per the parchment-card handoff spec. ---- */
+  --vellum-skin:#ece0c4;--vellum-mid:#dccba0;--vellum-tan:#b89b6a;
+  --vellum-scorch:#8a6d43;--vellum-ink:#3b2a16;--wax-seal:#7a2e22;--leather-deep:#241a12;
+
+  /* ---- Woodland: pine, moss and timber sampled from park photography ---- */
+  --forest-900:#28331F;--forest-700:#3C4A32;--forest-500:#4A5A45;--forest-300:#6E7F5E;--moss-400:#8C9A6B;
+  --timber-700:#5A4433;--timber-500:#7C6248;--timber-300:#A98D6C;
+
+  /* ---- Ember: firelight, torches, lanterns. Warm accent only ---- */
+  --ember-300:#F4B25C;--ember-500:#E07B2A;--ember-700:#B4551A;
+
+  /* ================= Semantic aliases ================= */
+  /* Surfaces */
+  --surface-page:var(--stone-900);
+  --surface-page-alt:var(--stone-800);
+  --surface-card:var(--stone-800);
+  --surface-card-raised:var(--stone-700);
+  --surface-parchment:var(--parchment-100);
+  --surface-vellum:var(--vellum-skin);
+  --text-on-vellum:var(--vellum-ink);
+  --text-on-vellum-muted:#6a4a24;
+  --surface-parchment-deep:var(--parchment-200);
+  --surface-inset:var(--stone-950);
+  --surface-overlay:rgba(18,18,20,.82);
+
+  /* Text */
+  --text-heading:var(--parchment-50);
+  --text-body:var(--parchment-200);
+  --text-muted:var(--stone-200);
+  --text-on-parchment:#2A2016;
+  --text-on-parchment-muted:#6B5B45;
+  --text-gold:var(--gold-400);
+  --text-link:var(--gold-300);
+  --text-link-hover:var(--gold-200);
+  --text-inverse:var(--stone-900);
+  /* Copy set directly over photography/scrims. Flips with the scrim, not the page. */
+  --text-on-media:var(--parchment-100);
+  --text-on-media-muted:var(--parchment-200);
+
+  /* Brand actions */
+  --brand-primary:var(--gold-600);
+  --brand-primary-hover:var(--gold-500);
+  --brand-primary-press:var(--gold-700);
+  --brand-on-primary:#2A2016;
+  --brand-secondary:var(--sapphire-500);
+  --brand-secondary-hover:var(--sapphire-300);
+  --brand-danger:var(--ruby-500);
+
+  /* Questline track colours */
+  --track-valor:var(--ruby-500);
+  --track-lore:var(--sapphire-500);
+  --track-wilds:var(--forest-500);
+  --track-forge:var(--ember-500);
+
+  /* Lines & edges */
+  --border-hairline:rgba(224,200,142,.18);
+  --border-strong:rgba(224,200,142,.38);
+  --border-gold:var(--gold-600);
+  --border-parchment:var(--parchment-400);
+  --divider:rgba(158,160,165,.22);
+
+  /* Status */
+  --status-success:#5E8C4A;
+  --status-warning:var(--ember-500);
+  --status-danger:var(--ruby-500);
+  --status-info:var(--sapphire-300);
+  --status-locked:var(--stone-400);
+
+  /* Focus */
+  --focus-ring:var(--gold-300);
+}
+
+/* Parchment scope: flip text/surface semantics inside light panels. */
+.qa-on-parchment{
+  --text-heading:#241B12;--text-body:#3A2E20;--text-muted:var(--text-on-parchment-muted);
+  --surface-card:var(--parchment-50);--surface-card-raised:#FFFCF4;
+  --border-hairline:rgba(107,74,34,.22);--border-strong:rgba(107,74,34,.42);
+  --divider:rgba(107,74,34,.18);
+  color:var(--text-body);
+}

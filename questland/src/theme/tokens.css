@@ -1,0 +1,84 @@
+/* ============================================================================
+   BRIDGE FILE — not a source of truth.
+   Keeps every OLD custom-property name that global.css / screens / components
+   already reference, repointed at the real Questland DS tokens defined in
+   ./ds/*.css (verbatim mirror of design-system/tokens/, itself mirrored from
+   the Claude Design project — see design-system/readme.md, the canon doc).
+
+   Load order (see src/main.tsx): ds/colors.css, ds/typography.css,
+   ds/spacing.css, ds/elevation.css, ds/motion.css, ds/base.css all load
+   BEFORE this file, so every var(--...) below resolves against real DS values.
+
+   The app is now DARK-FIRST (stone ground). Old "parchment" names were the
+   bright-theme page/card backgrounds; they now point at stone surfaces.
+   True parchment (--parchment-50..500 etc. in ds/colors.css) stays reserved
+   for literal in-fiction documents (tickets/maps/scrolls) via Card
+   tone="parchment" later — not aliased under these old names.
+
+   SKIPPED ON PURPOSE — do not add these here:
+   --font-display, --font-body, --radius-sm, --radius-md, --radius-lg
+   These old names are IDENTICAL to real DS token names already defined in
+   ds/typography.css and ds/spacing.css. Redeclaring them here on :root would
+   make each self-referential (var(--radius-md) inside the definition of
+   --radius-md on the same element = invalid at computed-value time per the
+   CSS custom-properties spec) and silently break. Because the names already
+   match, every existing var(--font-display) / var(--radius-md) / etc. call
+   site picks up the DS value automatically with no bridge needed:
+     --font-display -> Cinzel (was Baloo 2)
+     --font-body    -> EB Garamond (was Nunito)
+     --radius-sm    -> 4px  (DS: cards/buttons)  [was 9px, unused pre-DS]
+     --radius-md    -> 6px  (DS: modals/panels)  [was 14px; buttons/inputs/pills]
+     --radius-lg    -> 10px (DS: phone-app sheets only) [was 20px; .card]
+
+   USER-CONFIRMED 2026-07-25 — org track-colour mapping: Rangers of Questia
+   -> Valor (ruby), Hearers of the Alehiim -> Wilds (forest/green), Order of
+   the Elm -> Lore (sapphire). orgs.ts is the source of truth (track/color/
+   colorSoft fields); the legacy --ember/--forest/--arcane names below are
+   kept defined for safety but no longer represent org identity.
+   ============================================================================ */
+:root {
+  /* ---- surfaces: old "parchment" bg/card/deep now stone (dark-first) ---- */
+  --parchment: var(--surface-page);       /* stone-900, page ground */
+  --parchment-deep: var(--stone-700);     /* recessed fill / neutral edge (tab tracks, chip bg, borders) */
+  --parchment-card: var(--surface-card);  /* stone-800, elevated component bg (card/sheet/topbar/navbar) */
+
+  /* ---- text: was dark ink on light parchment, now light text on stone ---- */
+  --ink: var(--text-heading);       /* parchment-50, primary/active text */
+  --ink-soft: var(--text-muted);    /* stone-200, secondary/inactive text */
+  --ink-faint: var(--status-locked); /* stone-400, faintest tier */
+
+  /* ---- gold: metal, primary actions only (see Button reference) ---- */
+  --gold: var(--gold-600);         /* core */
+  --gold-deep: var(--gold-700);    /* press shade */
+  --gold-soft: rgba(224, 200, 142, 0.20); /* light gold wash fill, not a flat brand fill */
+
+  /* ---- org / questline track colours, user-confirmed (see header note) ----
+     orgs.ts consumes these three directly as color/colorSoft. */
+  --track-valor-soft: rgba(176, 27, 52, 0.20);  /* ruby-500 @ 20% — Rangers of Questia */
+  --track-lore-soft: rgba(30, 79, 168, 0.20);   /* sapphire-500 @ 20% — Order of the Elm */
+  --track-wilds-soft: rgba(74, 90, 69, 0.24);   /* forest-500 @ 24% — Hearers of the Alehiim */
+
+  /* ---- legacy names — kept defined for safety, no longer org identity ---- */
+  --ember: var(--track-forge);
+  --ember-soft: rgba(224, 123, 42, 0.20);
+  --forest: var(--track-wilds);
+  --forest-soft: rgba(74, 90, 69, 0.24);
+  --arcane: var(--track-lore);
+  --arcane-soft: rgba(30, 79, 168, 0.20);
+  --sky: var(--sapphire-300);            /* unused pre-DS; kept for parity */
+  --sky-soft: rgba(78, 143, 224, 0.20);
+
+  /* ---- status ---- */
+  --danger: var(--brand-danger);   /* ruby-500 */
+  --danger-soft: rgba(176, 27, 52, 0.20);
+  --success: var(--status-success);
+
+  /* ---- shadows (radius/font names intentionally skipped, see header) ---- */
+  --shadow-card: var(--shadow-sm);
+  --shadow-float: var(--shadow-md);
+
+  /* ---- app chrome dimensions -> DS's own named equivalents ---- */
+  --nav-height: var(--tabbar-h);     /* 64px */
+  --topbar-height: var(--header-h);  /* 72px */
+  --safe-bottom: env(safe-area-inset-bottom, 0px); /* device concept, not a DS token */
+}

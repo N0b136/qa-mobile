@@ -1,0 +1,31 @@
+:root{
+  /* Shadows read as carved depth on stone, never soft web-card blur. */
+  --shadow-carve-in:inset 0 1px 0 rgba(0,0,0,.55),inset 0 -1px 0 rgba(224,200,142,.10);
+  --shadow-xs:0 1px 2px rgba(0,0,0,.5);
+  --shadow-sm:0 2px 6px rgba(0,0,0,.45);
+  --shadow-md:0 6px 18px rgba(0,0,0,.5);
+  --shadow-lg:0 14px 40px rgba(0,0,0,.55);
+  --shadow-lift:0 10px 28px rgba(0,0,0,.5),0 0 0 1px rgba(224,200,142,.22);
+  --shadow-gold-glow:0 0 0 1px var(--gold-600),0 0 22px rgba(224,200,142,.28);
+  --shadow-gem-ruby:0 0 24px rgba(246,28,64,.45);
+  --shadow-gem-sapphire:0 0 24px rgba(8,92,246,.45);
+  --shadow-parchment:0 2px 0 rgba(107,74,34,.18),0 10px 24px rgba(0,0,0,.35);
+
+  /* Protection gradients: laid over photography so type stays legible. */
+  --scrim-bottom:linear-gradient(to top,rgba(18,18,20,.92) 0%,rgba(18,18,20,.72) 32%,rgba(18,18,20,0) 78%); /* @kind other */
+  --scrim-top:linear-gradient(to bottom,rgba(18,18,20,.78),rgba(18,18,20,0)); /* @kind other */
+  --scrim-full:linear-gradient(rgba(18,18,20,.62),rgba(18,18,20,.62)); /* @kind other */
+
+  /* Gold leaf edge used on frames, rules and the logo lockup */
+  --gradient-gold:linear-gradient(160deg,#F6EBD4 0%,#D0AC6E 22%,#8C6534 52%,#E3C88E 74%,#6B4A22 100%); /* @kind other */
+  --gradient-gem-q:linear-gradient(100deg,var(--ruby-500) 0%,var(--ruby-600) 46%,var(--sapphire-600) 54%,var(--sapphire-500) 100%); /* @kind other */
+  --texture-stone:radial-gradient(120% 90% at 20% 0%,rgba(158,160,165,.10),transparent 60%),linear-gradient(var(--stone-900),var(--stone-950)); /* @kind other */
+  /* Parchment: fibre grain + a faint blotch over the base wash. Procedural, no image. */
+  --texture-parchment:repeating-linear-gradient(102deg,rgba(107,74,34,.038) 0 2px,transparent 2px 6px),repeating-linear-gradient(7deg,rgba(107,74,34,.03) 0 3px,transparent 3px 8px),radial-gradient(55% 40% at 80% 18%,rgba(168,145,107,.20),transparent 62%),radial-gradient(45% 38% at 14% 88%,rgba(168,145,107,.16),transparent 66%),radial-gradient(140% 100% at 12% 8%,#FBF6EC,transparent 62%),linear-gradient(160deg,var(--parchment-100),var(--parchment-200)); /* @kind other */
+
+  /* Vellum: mottled animal-skin blotching over the parchment wash. */
+  --texture-vellum:radial-gradient(38% 30% at 22% 18%,rgba(150,113,62,.16),transparent 70%),radial-gradient(30% 26% at 76% 30%,rgba(120,88,48,.14),transparent 72%),radial-gradient(44% 34% at 58% 78%,rgba(160,126,76,.15),transparent 70%),radial-gradient(26% 22% at 12% 72%,rgba(120,88,48,.12),transparent 74%),radial-gradient(22% 18% at 90% 84%,rgba(150,113,62,.13),transparent 76%),repeating-linear-gradient(102deg,rgba(107,74,34,.05) 0 2px,transparent 2px 6px),repeating-linear-gradient(7deg,rgba(107,74,34,.04) 0 3px,transparent 3px 8px),radial-gradient(140% 100% at 12% 8%,#FBF6EC,transparent 62%),linear-gradient(160deg,var(--parchment-100),var(--parchment-300)); /* @kind other */
+  /* Ragged torn-paper silhouette. Pair with a drop-shadow filter, not box-shadow. */
+
+  --blur-veil:blur(14px); /* @kind other */
+}

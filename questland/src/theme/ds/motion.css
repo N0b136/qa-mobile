@@ -1,0 +1,12 @@
+:root{
+  /* Motion is deliberate and mechanical — doors, seals, lanterns. No bounce, no spring. */
+  --ease-standard:cubic-bezier(.4,0,.2,1); /* @kind other */
+  --ease-out-door:cubic-bezier(.16,.84,.28,1); /* @kind other */   /* heavy gate swinging open */
+  --ease-in-seal:cubic-bezier(.55,.06,.68,.19); /* @kind other */  /* something closing / locking */
+  --ease-lantern:cubic-bezier(.37,0,.63,1); /* @kind other */      /* slow ambient flicker loops */
+
+  --dur-instant:90ms; /* @kind other */--dur-fast:160ms; /* @kind other */--dur-base:240ms; /* @kind other */--dur-slow:420ms; /* @kind other */--dur-reveal:720ms; /* @kind other */--dur-ambient:4200ms; /* @kind other */
+
+  --transition-control:color var(--dur-fast) var(--ease-standard),background-color var(--dur-fast) var(--ease-standard),border-color var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard),transform var(--dur-instant) var(--ease-standard); /* @kind other */
+}
+@media (prefers-reduced-motion:reduce){:root{--dur-fast:1ms; /* @kind other */--dur-base:1ms; /* @kind other */--dur-slow:1ms; /* @kind other */--dur-reveal:1ms; /* @kind other */--dur-ambient:1ms; /* @kind other */}}

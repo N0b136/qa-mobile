@@ -1,0 +1,19 @@
+:root{
+  /* 4px base grid; 5px and 6px exist for hairline insets on ornamental frames */
+  --space-0:0;--space-px:1px;--space-2xs:4px;--space-xs:8px;--space-sm:12px;--space-md:16px;
+  --space-lg:24px;--space-xl:32px;--space-2xl:48px;--space-3xl:64px;--space-4xl:96px;--space-5xl:128px;
+
+  /* Radii — the brand is carved and forged, so corners stay tight. */
+  --radius-none:0;--radius-xs:2px;--radius-sm:4px;--radius-md:6px;--radius-lg:10px;
+  --radius-pill:999px;
+  /* Arch: the gate/window silhouette. Use as a top-only radius pair. */
+  --radius-arch:50% 50% 0 0/34% 34% 0 0; /* @kind radius */
+
+  /* Border widths */
+  --border-thin:1px;--border-base:2px;--border-thick:3px;--border-frame:6px;
+
+  /* Layout */
+  --container-max:1240px;--container-narrow:720px;--container-wide:1440px;
+  --gutter:24px;--gutter-lg:40px;
+  --header-h:72px;--tabbar-h:64px;
+}
