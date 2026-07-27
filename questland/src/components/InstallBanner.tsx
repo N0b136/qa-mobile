@@ -92,6 +92,17 @@ function InstallBannerBar({
         background: 'var(--gradient-gold)',
         borderBottom: '1px solid var(--gold-900)',
         boxShadow: 'var(--shadow-md)',
+        // This banner is mounted at the App root, outside GateIntro/Shell, so
+        // it can't read the intro's local `phase`. It shares the intro's own
+        // signal instead: GateIntro sets `--intro-ui-delay` on <html> to 0s
+        // immediately whenever there's no active playback (already seen /
+        // reduced motion / not the Home route) and only to a real ~4.55s
+        // while the gate is genuinely playing at a fresh Home load. Reusing
+        // that var (fallback 0s, so routes before Home/GateIntro ever mounts
+        // this session are unaffected) makes the banner fade in step with
+        // TopBar/BottomNav/Home instead of popping in solid over the video.
+        opacity: 0,
+        animation: 'qa-fade-in var(--dur-reveal) var(--ease-out-door) var(--intro-ui-delay, 0s) both',
       }}
     >
       <IconButton

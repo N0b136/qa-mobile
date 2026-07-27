@@ -37,7 +37,8 @@ export default function TopBar() {
         height: 'calc(var(--topbar-height) + var(--chrome-safe-top))',
         padding: '0 14px',
         paddingTop: 'var(--chrome-safe-top)',
-        background: 'var(--parchment-card)',
+        background: 'var(--surface-overlay)',
+        backdropFilter: 'var(--blur-veil)',
         borderBottom: '1px solid var(--border-hairline)',
         zIndex: 50,
       }}
