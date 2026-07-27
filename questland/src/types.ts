@@ -27,19 +27,45 @@ export type ProgressMap = Record<string, string[]>
 /** episodeId -> station ids checked in on that episode */
 export type StationMap = Record<string, string[]>
 
+/** Gate arrival (the village), the chief's house, or a station on the trail. */
+export type PresenceKind = 'village' | 'start' | 'station'
+
 /**
- * Where a guest last checked in. One record per guest — a check-in overwrites
- * the previous one, because a guest is only ever in one place. Freshness, not a
- * separate field, decides whether they read as AT the station or EN ROUTE:
- * inside `STATION_WINDOW_MS` of `at` they are at the station, after that they
- * are somewhere on the paths (we never track precise locations).
+ * Where a guest last checked in, and what walk they are on.
+ *
+ * One record per guest — a check-in overwrites the previous one, because a
+ * guest is only ever in one place. Freshness, not a separate field, decides
+ * whether they read as AT the place or EN ROUTE: inside the place's window they
+ * are there, after that they are somewhere on the paths (we never track precise
+ * locations). A village arrival has no window — they stay in Queston until they
+ * take a quest.
+ *
+ * The record also carries the walk itself — order, episode, stations sealed,
+ * and the station they are heading for — so the console and a guest's own party
+ * can read all of it from this one document, without reaching into anybody
+ * else's progress.
  */
 export interface Presence {
   userId: string
   guestName: string
+  kind: PresenceKind
+  /** Station id, the chief's house id, or 'village'. */
   stationId: string
+  /** Human name of that place, so a reader never needs the content tables. */
+  placeName?: string
   /** When the check-in happened, in ms. */
   at: number
+  /** The order whose questline this walk belongs to. */
+  orgName?: string
+  episodeId?: string
+  episodeNumber?: number
+  episodeTitle?: string
+  /** Stations of that episode sealed so far, and how many it takes. */
+  stationsDone?: number
+  stationsTotal?: number
+  /** Where they are headed next on the rotation. */
+  nextStationId?: string
+  nextStationName?: string
   partyId?: string
   partyName?: string
   /**

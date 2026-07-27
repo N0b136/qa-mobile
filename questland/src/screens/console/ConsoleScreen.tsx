@@ -14,7 +14,7 @@ import ConsoleHeader from './ConsoleHeader'
 import StaffGate from './StaffGate'
 import CallsBoard from './CallsBoard'
 import SendWord from './SendWord'
-import GuestRoster from './GuestRoster'
+import GuestsAfield from './GuestsAfield'
 import StationsBoard from './StationsBoard'
 import './console.css'
 
@@ -70,7 +70,7 @@ export default function ConsoleScreen() {
         <StationsBoard />
         <CallsBoard persona={persona} />
         <SendWord persona={persona} prefillAudience={prefillAudience} />
-        <GuestRoster onSend={setPrefillAudience} />
+        <GuestsAfield onSend={setPrefillAudience} />
       </div>
     </div>
   )

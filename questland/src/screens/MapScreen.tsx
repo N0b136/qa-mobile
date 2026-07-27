@@ -8,8 +8,8 @@ import { STATIONS, stationsFor } from '../content/stations'
 import type { Station } from '../content/types'
 import type { Presence } from '../types'
 import { completedCount, creditOrgFor, currentEpisode, stationsDone } from '../services/progressService'
-import { checkIn, presenceFor, statusOf, windowLeft } from '../services/presenceService'
-import { DEFAULT_POSITION, MAP_LANDMARKS, STATION_COORDS } from '../content/stationMap'
+import { checkIn, checkInAtGate, hasArrived, presenceFor, statusOf, windowLeft } from '../services/presenceService'
+import { DEFAULT_POSITION, MAP_LANDMARKS, QUEST_START, STATION_COORDS } from '../content/stationMap'
 import type { MapLandmark } from '../content/stationMap'
 import { useAppTick } from '../hooks/useAppTick'
 import { useToast } from '../components/Toast'
@@ -58,28 +58,37 @@ export default function MapScreen() {
 
   // ---- where you are ----
   //
-  // A check-in holds you at a station for fifteen minutes; after that you read
-  // as en route and the marker falls back to the demo position.
+  // A check-in holds you in place — fifteen minutes at a station, five at the
+  // chief's house — and after that you read as en route. The village holds you
+  // until you take a quest.
   const here = user ? presenceFor(user.id) : null
-  const atStation = here && statusOf(here) === 'at-station' ? here : null
-  const hereCoord = atStation ? STATION_COORDS[atStation.stationId] : undefined
+  const arrived = user ? hasArrived(user.id) : false
+  const standing = here && statusOf(here) !== 'en-route' ? here : null
+  const hereCoord = standing
+    ? standing.kind === 'village'
+      ? DEFAULT_POSITION
+      : standing.stationId === QUEST_START.id
+        ? QUEST_START
+        : STATION_COORDS[standing.stationId]
+    : undefined
   const herePos = hereCoord ?? load('ql:demo:position', DEFAULT_POSITION)
 
   // ---- dialogs ----
   const [openStation, setOpenStation] = useState<Station | null>(null)
   const [openLandmark, setOpenLandmark] = useState<MapLandmark | null>(null)
+  const [startOpen, setStartOpen] = useState(false)
 
-  function handleCheckIn() {
-    if (!openStation || !user) return
-    const outcome = checkIn(user.id, openStation.id)
-    setOpenStation(null)
+  function announce(outcome: ReturnType<typeof checkIn>) {
     if (!outcome) return
-
     show({
-      title: `Checked in — ${outcome.station.name}`,
+      title: `Checked in — ${outcome.placeName}`,
       body: outcome.carried.length
         ? `${outcome.partyName} checked in with you.`
-        : 'Fifteen minutes at this station.',
+        : outcome.kind === 'start'
+          ? 'Five minutes at the chief’s house, then the trail.'
+          : outcome.kind === 'village'
+            ? 'Welcome to the Village of Queston.'
+            : 'Fifteen minutes at this station.',
       icon: 'stamp',
     })
 
@@ -95,7 +104,30 @@ export default function MapScreen() {
         body: credit.episode.title,
         icon: 'map-pin',
       })
+    } else if (outcome.walk.nextStationName) {
+      show({ title: `Next — ${outcome.walk.nextStationName}`, icon: 'footprints' })
     }
+  }
+
+  function handleCheckIn() {
+    if (!openStation || !user) return
+    const outcome = checkIn(user.id, openStation.id)
+    setOpenStation(null)
+    announce(outcome)
+  }
+
+  function handleQuestStart() {
+    if (!user) return
+    const outcome = checkIn(user.id, QUEST_START.id)
+    setStartOpen(false)
+    announce(outcome)
+  }
+
+  function handleGateCheckIn() {
+    if (!user) return
+    const outcome = checkInAtGate(user.id)
+    setOpenLandmark(null)
+    announce(outcome)
   }
 
   return (
@@ -116,6 +148,8 @@ export default function MapScreen() {
         {MAP_LANDMARKS.map((lm) => (
           <AmenityPin key={lm.id} landmark={lm} onOpen={() => setOpenLandmark(lm)} />
         ))}
+
+        <QuestStartPin onOpen={() => setStartOpen(true)} />
 
         {STATIONS.map((st) => {
           const coord = STATION_COORDS[st.id]
@@ -151,7 +185,7 @@ export default function MapScreen() {
           station={openStation}
           onClose={() => setOpenStation(null)}
           onCheckIn={handleCheckIn}
-          here={atStation?.stationId === openStation.id ? atStation : null}
+          here={standing?.stationId === openStation.id ? standing : null}
           sealed={sealedIds.has(openStation.id)}
           episodeTitle={creditEpisodeFor(openStation)?.title}
           progress={progressLine(openStation)}
@@ -164,15 +198,81 @@ export default function MapScreen() {
           title={openLandmark.label}
           onClose={() => setOpenLandmark(null)}
           footer={
-            <Button variant="ghost" onClick={() => setOpenLandmark(null)}>
-              Close
-            </Button>
+            <div style={{ display: 'flex', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>
+              <Button variant="ghost" onClick={() => setOpenLandmark(null)}>
+                Close
+              </Button>
+              {openLandmark.id === 'gate' ? (
+                <Button icon="door-open" onClick={handleGateCheckIn}>
+                  {arrived ? 'Check in again' : 'We have arrived'}
+                </Button>
+              ) : null}
+            </div>
           }
         >
           <p style={{ font: 'var(--body-base)', color: 'var(--text-muted)' }}>{openLandmark.blurb}</p>
+          {openLandmark.id === 'gate' ? (
+            <p style={{ marginTop: 8, font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
+              {arrived
+                ? 'You are on the roll for today. The Wardens can see your party in the park.'
+                : 'Check in as you pass the gate — a Guide will walk you through it. Your whole party is checked in with you.'}
+            </p>
+          ) : null}
+        </Dialog>
+      ) : null}
+
+      {startOpen ? (
+        <Dialog
+          eyebrow="Village of Queston"
+          title={QUEST_START.name}
+          onClose={() => setStartOpen(false)}
+          footer={
+            <div style={{ display: 'flex', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>
+              <Button variant="ghost" onClick={() => setStartOpen(false)}>
+                Close
+              </Button>
+              <Button icon="scroll-text" onClick={handleQuestStart}>
+                Take the quest
+              </Button>
+            </div>
+          }
+        >
+          <p style={{ font: 'var(--body-base)', color: 'var(--text-muted)' }}>{QUEST_START.blurb}</p>
+          {ep ? (
+            <p style={{ marginTop: 8, font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
+              {org?.name} — Episode {ep.number}, {ep.title}. First station:{' '}
+              {stationsFor(ep.id).find((s) => !sealedIds.has(s.id))?.name ?? '—'}.
+            </p>
+          ) : null}
         </Dialog>
       ) : null}
     </div>
+  )
+}
+
+/** The chief's house — every quest starts here, so it gets its own mark. */
+function QuestStartPin({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button
+      onClick={onOpen}
+      aria-label={`${QUEST_START.name} — take the quest`}
+      style={{
+        position: 'absolute',
+        left: `${QUEST_START.x * 100}%`,
+        top: `${QUEST_START.y * 100}%`,
+        transform: 'translate(-50%, -100%)',
+        display: 'block',
+        padding: 4,
+        lineHeight: 0,
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        color: 'var(--gold-300)',
+        filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.75))',
+      }}
+    >
+      <Icon name="house" size={22} />
+    </button>
   )
 }
 

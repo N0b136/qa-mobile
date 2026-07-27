@@ -1,4 +1,4 @@
-// The stations board: the same park chart the guests carry, with parties on it.
+// The park board: the same chart the guests carry, with parties on it.
 //
 // A pin shows how many parties are standing at that station right now; tapping
 // one names them. Fifteen minutes after a check-in a party stops being at the
@@ -7,21 +7,19 @@
 
 import { useEffect, useState } from 'react'
 import MapCanvas from '../../components/MapCanvas'
-import { MAP_LANDMARKS, STATION_COORDS } from '../../content/stationMap'
+import { DEFAULT_POSITION, MAP_LANDMARKS, QUEST_START, STATION_COORDS, VILLAGE_PLACE } from '../../content/stationMap'
 import { STATIONS } from '../../content/stations'
 import type { Station } from '../../content/types'
 import { getOrg } from '../../content/orgs'
-import {
-  STATION_WINDOW_MS,
-  enRoute,
-  occupantsByStation,
-} from '../../services/presenceService'
+import { START_WINDOW_MS, STATION_WINDOW_MS, enRoute, occupantsByPlace } from '../../services/presenceService'
 import type { Occupant } from '../../services/presenceService'
 import { Badge, Button, Card, Dialog, Icon } from '../../ui'
 import { STATION_ICON } from '../questIcons'
+import { questLine } from './GuestsAfield'
 
 function minutesLeft(o: Occupant, now: number): number {
-  return Math.max(0, Math.ceil((o.since + STATION_WINDOW_MS - now) / 60000))
+  const window = o.placeKind === 'start' ? START_WINDOW_MS : STATION_WINDOW_MS
+  return Math.max(0, Math.ceil((o.since + window - now) / 60000))
 }
 
 function elapsed(o: Occupant, now: number): string {
@@ -41,24 +39,25 @@ export default function StationsBoard() {
     return () => window.clearInterval(t)
   }, [])
 
-  const [openStation, setOpenStation] = useState<Station | null>(null)
+  // A place is a station, the chief's house, or the village itself.
+  const [openPlace, setOpenPlace] = useState<{ id: string; name: string } | null>(null)
 
-  const byStation = occupantsByStation(now)
+  const byPlace = occupantsByPlace(now)
   const roaming = enRoute(now)
-  const atStations = Object.values(byStation).reduce((n, list) => n + list.length, 0)
+  const atStations = Object.values(byPlace).reduce((n, list) => n + list.length, 0)
 
-  const openOccupants = openStation ? (byStation[openStation.id] ?? []) : []
+  const openOccupants = openPlace ? (byPlace[openPlace.id] ?? []) : []
 
   return (
     <Card
       eyebrow="Live"
-      title="Stations"
+      title="The Park"
       style={{ gridColumn: '1 / -1' }}
     >
       <div className="row" style={{ gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
         <span className="row muted" style={{ gap: 6, fontSize: 13 }}>
           <Icon name="map-pin" size={14} />
-          {atStations} at stations
+          {atStations} checked in
         </span>
         <span className="row muted" style={{ gap: 6, fontSize: 13 }}>
           <Icon name="footprints" size={14} />
@@ -96,16 +95,35 @@ export default function StationsBoard() {
             </span>
           ))}
 
+          {/* The village and the chief's house are places a party can be
+              standing too — the gate check-in lands in one, every quest starts
+              in the other. */}
+          <PlacePin
+            label={VILLAGE_PLACE.name}
+            glyph="castle"
+            coord={DEFAULT_POSITION}
+            occupants={byPlace[VILLAGE_PLACE.id] ?? []}
+            onOpen={() => setOpenPlace({ id: VILLAGE_PLACE.id, name: VILLAGE_PLACE.name })}
+          />
+          <PlacePin
+            label={QUEST_START.name}
+            glyph="house"
+            coord={QUEST_START}
+            occupants={byPlace[QUEST_START.id] ?? []}
+            onOpen={() => setOpenPlace({ id: QUEST_START.id, name: QUEST_START.name })}
+          />
+
           {STATIONS.map((st) => {
             const coord = STATION_COORDS[st.id]
             if (!coord) return null
             return (
-              <StationPin
+              <PlacePin
                 key={st.id}
-                station={st}
+                label={st.name}
+                glyph={STATION_ICON[st.type] ?? 'map-pin'}
                 coord={coord}
-                occupants={byStation[st.id] ?? []}
-                onOpen={() => setOpenStation(st)}
+                occupants={byPlace[st.id] ?? []}
+                onOpen={() => setOpenPlace({ id: st.id, name: st.name })}
               />
             )
           })}
@@ -124,7 +142,7 @@ export default function StationsBoard() {
         On the paths
       </h3>
       {roaming.length === 0 ? (
-        <p className="muted">Nobody is between stations.</p>
+        <p className="muted">Nobody is between places.</p>
       ) : (
         <div className="stack" style={{ gap: 0 }}>
           {roaming.map((o, i) => (
@@ -139,20 +157,20 @@ export default function StationsBoard() {
                 <OrgBadge orgId={o.orgId} />
               </span>
               <span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                left {o.station?.name ?? 'a station'} · {elapsed(o, now)}
+                left {o.placeName} · {elapsed(o, now)}
               </span>
             </div>
           ))}
         </div>
       )}
 
-      {openStation ? (
+      {openPlace ? (
         <Dialog
-          eyebrow="Station"
-          title={openStation.name}
-          onClose={() => setOpenStation(null)}
+          eyebrow="Who is here"
+          title={openPlace.name}
+          onClose={() => setOpenPlace(null)}
           footer={
-            <Button variant="ghost" onClick={() => setOpenStation(null)}>
+            <Button variant="ghost" onClick={() => setOpenPlace(null)}>
               Close
             </Button>
           }
@@ -172,11 +190,32 @@ export default function StationsBoard() {
                       <strong style={{ color: 'var(--text-heading)' }}>{o.name}</strong>
                       <OrgBadge orgId={o.orgId} />
                     </span>
-                    <span className="muted row" style={{ gap: 5, fontSize: 12, whiteSpace: 'nowrap' }}>
-                      <Icon name="timer" size={13} />
-                      {minutesLeft(o, now)} min left
-                    </span>
+                    {o.status === 'village' ? (
+                      <span className="muted row" style={{ gap: 5, fontSize: 12, whiteSpace: 'nowrap' }}>
+                        <Icon name="castle" size={13} />
+                        In the village
+                      </span>
+                    ) : (
+                      <span className="muted row" style={{ gap: 5, fontSize: 12, whiteSpace: 'nowrap' }}>
+                        <Icon name="timer" size={13} />
+                        {minutesLeft(o, now)} min left
+                      </span>
+                    )}
                   </div>
+
+                  {questLine(o) ? (
+                    <p style={{ marginTop: 6, fontSize: 13, color: 'var(--text-body)' }}>
+                      {questLine(o)}
+                      {o.episodeTitle ? ` — ${o.episodeTitle}` : ''}
+                    </p>
+                  ) : null}
+                  {o.nextStationName ? (
+                    <p className="muted row" style={{ gap: 6, marginTop: 3, fontSize: 12 }}>
+                      <Icon name="arrow-right" size={12} />
+                      Next: {o.nextStationName}
+                    </p>
+                  ) : null}
+
                   {o.kind === 'party' ? (
                     <p className="muted" style={{ marginTop: 6, fontSize: 13 }}>
                       {o.memberNames.join(', ')}
@@ -203,16 +242,19 @@ function OrgBadge({ orgId }: { orgId?: string }) {
 }
 
 /**
- * An occupied station wears a filled gold marker with a head count; an empty one
- * stays a hairline pin, so a glance at the chart reads as "where everyone is".
+ * An occupied place wears a filled gold marker with a head count; an empty one
+ * stays a hairline glyph, so a glance at the chart reads as "where everyone is".
+ * Places are the 21 stations plus the village and the chief's house.
  */
-function StationPin({
-  station,
+function PlacePin({
+  label,
+  glyph,
   coord,
   occupants,
   onOpen,
 }: {
-  station: Station
+  label: string
+  glyph: string
   coord: { x: number; y: number }
   occupants: Occupant[]
   onOpen: () => void
@@ -223,8 +265,8 @@ function StationPin({
   return (
     <button
       onClick={onOpen}
-      title={`${station.name} — ${busy ? `${occupants.length} here` : 'empty'}`}
-      aria-label={`${station.name}, ${busy ? `${occupants.length} checked in` : 'nobody checked in'}`}
+      title={`${label} — ${busy ? `${occupants.length} here` : 'empty'}`}
+      aria-label={`${label}, ${busy ? `${occupants.length} checked in` : 'nobody checked in'}`}
       style={{
         position: 'absolute',
         left: `${coord.x * 100}%`,
@@ -242,7 +284,7 @@ function StationPin({
       }}
     >
       <span style={{ position: 'relative', display: 'block' }}>
-        <Icon name={busy ? 'map-pinned' : (STATION_ICON[station.type] ?? 'map-pin')} size={busy ? 24 : 15} />
+        <Icon name={busy ? 'map-pinned' : glyph} size={busy ? 24 : 15} />
         {busy ? (
           <span
             style={{
