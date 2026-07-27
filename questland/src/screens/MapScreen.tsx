@@ -300,44 +300,7 @@ export default function MapScreen() {
       {org ? <MapLegend trackColor={org.color} /> : null}
 
       {openStation ? (
-        <Dialog
-          eyebrow="Station"
-          title={openStation.name}
-          onClose={() => setOpenStation(null)}
-          footer={
-            <>
-              <Button variant="ghost" onClick={() => setOpenStation(null)}>
-                Close
-              </Button>
-              <Button icon="stamp" onClick={handleCheckIn}>
-                Check in here
-              </Button>
-            </>
-          }
-        >
-          <img
-            src={`${import.meta.env.BASE_URL}assets/stations/${openStation.id}.webp`}
-            alt={openStation.name}
-            onError={(e) => {
-              ;(e.currentTarget as HTMLImageElement).style.display = 'none'
-            }}
-            style={{
-              display: 'block',
-              width: '100%',
-              aspectRatio: '16 / 9',
-              objectFit: 'cover',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border-hairline)',
-              marginBottom: 'var(--space-sm)',
-            }}
-          />
-          <Tag icon={STATION_ICON[openStation.type] ?? 'map-pin'} style={{ marginBottom: 'var(--space-sm)' }}>
-            {openStation.type}
-          </Tag>
-          <p style={{ font: 'var(--body-base)', color: 'var(--text-muted)' }}>
-            {STATION_NOTE[openStation.type] ?? 'A station on the trail.'}
-          </p>
-        </Dialog>
+        <StationCard station={openStation} onClose={() => setOpenStation(null)} onCheckIn={handleCheckIn} />
       ) : null}
 
       {openLandmark ? (
@@ -354,6 +317,115 @@ export default function MapScreen() {
           <p style={{ font: 'var(--body-base)', color: 'var(--text-muted)' }}>{openLandmark.blurb}</p>
         </Dialog>
       ) : null}
+    </div>
+  )
+}
+
+/**
+ * Photographic station popup: the station image is the full-bleed card
+ * background, a `--scrim-bottom` protection scrim rides over it, and the text
+ * sits bottom-left in on-media colours. Missing images leave the stone base.
+ */
+function StationCard({
+  station,
+  onClose,
+  onCheckIn,
+}: {
+  station: Station
+  onClose: () => void
+  onCheckIn: () => void
+}) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 60,
+        display: 'grid',
+        placeItems: 'center',
+        padding: 'var(--space-lg)',
+        background: 'var(--surface-overlay)',
+        backdropFilter: 'var(--blur-veil)',
+        WebkitBackdropFilter: 'var(--blur-veil)',
+        animation: 'qa-fade var(--dur-base) var(--ease-standard)',
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={station.name}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: 'relative',
+          width: '100%',
+          maxWidth: 420,
+          minHeight: 320,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'flex-end',
+          borderRadius: 'var(--radius-md)',
+          overflow: 'hidden',
+          border: '1px solid var(--border-strong)',
+          background: 'var(--surface-card)',
+          boxShadow: 'var(--shadow-lg)',
+          animation: 'qa-rise var(--dur-slow) var(--ease-out-door)',
+        }}
+      >
+        <img
+          src={`${import.meta.env.BASE_URL}assets/stations/${station.id}.webp`}
+          alt={station.name}
+          onError={(e) => {
+            ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+          }}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+        <div style={{ position: 'absolute', inset: 0, background: 'var(--scrim-bottom)', pointerEvents: 'none' }} />
+
+        <div style={{ position: 'absolute', top: 'var(--space-sm)', right: 'var(--space-sm)', zIndex: 1 }}>
+          <IconButton icon="x" label="Close" size="sm" onClick={onClose} />
+        </div>
+
+        <div
+          style={{
+            position: 'relative',
+            padding: 'var(--space-lg)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--space-xs)',
+          }}
+        >
+          <div className="qa-label" style={{ color: 'var(--text-on-media-muted)' }}>
+            Station
+          </div>
+          <h2
+            style={{
+              margin: 0,
+              font: '700 var(--text-2xl)/var(--leading-snug) var(--font-display)',
+              letterSpacing: 'var(--tracking-display-tight)',
+              textTransform: 'uppercase',
+              color: 'var(--text-on-media)',
+            }}
+          >
+            {station.name}
+          </h2>
+          <div>
+            <Tag icon={STATION_ICON[station.type] ?? 'map-pin'}>{station.type}</Tag>
+          </div>
+          <p style={{ margin: 0, font: 'var(--body-base)', color: 'var(--text-on-media-muted)' }}>
+            {STATION_NOTE[station.type] ?? 'A station on the trail.'}
+          </p>
+          <div style={{ marginTop: 'var(--space-md)', display: 'flex', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>
+            <Button variant="ghost" onClick={onClose}>
+              Close
+            </Button>
+            <Button icon="stamp" onClick={onCheckIn}>
+              Check in here
+            </Button>
+          </div>
+        </div>
+      </div>
+      <style>{'@keyframes qa-fade{from{opacity:0}to{opacity:1}}@keyframes qa-rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}'}</style>
     </div>
   )
 }
