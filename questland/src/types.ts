@@ -49,6 +49,13 @@ export interface Presence {
    */
   partyMemberNames?: string[]
   orgId?: string
+  /**
+   * True when this check-in was the last station of the episode. Once its
+   * fifteen minutes are up the guest leaves the board entirely rather than
+   * reading as en route — they finished the questline, they are not walking
+   * between stations.
+   */
+  final?: boolean
   /** The party member who actually tapped in — the rest are carried along. */
   byUserId?: string
   byName?: string

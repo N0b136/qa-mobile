@@ -85,6 +85,21 @@ export function windowLeft(p: Presence, now: number = Date.now()): number {
   return Math.max(0, p.at + STATION_WINDOW_MS - now)
 }
 
+/**
+ * Whether a guest is still on the map at all.
+ *
+ * A check-in that sealed the episode is the end of the walk, so once its
+ * fifteen minutes are up that guest is checked out — no en-route tail. Everyone
+ * else stays on the paths until they have been silent long enough to have gone
+ * home.
+ */
+export function isTracked(p: Presence, now: number = Date.now()): boolean {
+  const age = now - p.at
+  if (age > PRESENCE_MAX_MS) return false
+  if (p.final && age >= STATION_WINDOW_MS) return false
+  return true
+}
+
 // ── Checking in ───────────────────────────────────────────────────────────────
 
 export interface CheckInOutcome {
@@ -101,7 +116,8 @@ function buildRecord(
   stationId: string,
   at: number,
   by: { id: string; name: string },
-  party?: { id: string; name: string; memberNames: string[] }
+  party?: { id: string; name: string; memberNames: string[] },
+  final?: boolean
 ): Presence | null {
   const user = getUser(userId)
   if (!user) return null
@@ -110,6 +126,7 @@ function buildRecord(
     guestName: user.name,
     stationId,
     at,
+    final,
     partyId: party?.id,
     partyName: party?.name,
     partyMemberNames: party?.memberNames,
@@ -155,21 +172,11 @@ export function checkIn(
   const by = { id: user.id, name: user.name }
   const memberIds = party ? party.memberIds : [user.id]
 
-  const partyRef = party
-    ? { id: party.id, name: party.name, memberNames: rosterOf(party.memberIds) }
-    : undefined
-  const records = memberIds
-    .map((id) => buildRecord(id, stationId, at, by, partyRef))
-    .filter((r): r is Presence => r !== null)
-  upsert(records)
-
-  // Only ever our own doc: the rules let a guest write their own presence and
-  // nobody else's, and every other member's phone writes its own off the
-  // snapshot. On a single device the local records above already read right.
-  const own = records.find((r) => r.userId === user.id)
-  if (own) cloudSync.pushPresence(own)
-
+  // Credit first: whether this station sealed a member's episode is what marks
+  // their row final, and a final row leaves the board when its window runs out
+  // instead of lingering as en route.
   let credit: StationCredit | null = null
+  const sealed = new Set<string>()
   for (const id of memberIds) {
     const member = getUser(id)
     if (!member) continue
@@ -179,8 +186,23 @@ export function checkIn(
     const orgId = creditOrgFor(stationId, self ? (opts.orgId ?? member.orgId) : member.orgId)
     if (!orgId) continue
     const earned = creditStation(id, stationId, orgId, { notify: self })
+    if (earned?.completion) sealed.add(id)
     if (self) credit = earned
   }
+
+  const partyRef = party
+    ? { id: party.id, name: party.name, memberNames: rosterOf(party.memberIds) }
+    : undefined
+  const records = memberIds
+    .map((id) => buildRecord(id, stationId, at, by, partyRef, sealed.has(id)))
+    .filter((r): r is Presence => r !== null)
+  upsert(records)
+
+  // Only ever our own doc: the rules let a guest write their own presence and
+  // nobody else's, and every other member's phone writes its own off the
+  // snapshot. On a single device the local records above already read right.
+  const own = records.find((r) => r.userId === user.id)
+  if (own) cloudSync.pushPresence(own)
 
   return {
     station,
@@ -216,19 +238,20 @@ export function syncParty(selfId: string): void {
   if (now - latest.at > STATION_WINDOW_MS) return
   if (mine && mine.at >= latest.at) return
 
+  const orgId = creditOrgFor(latest.stationId, self.orgId)
+  const earned = orgId ? creditStation(selfId, latest.stationId, orgId) : null
+
   const record = buildRecord(
     selfId,
     latest.stationId,
     latest.at,
     { id: latest.byUserId ?? latest.userId, name: latest.byName ?? latest.guestName },
-    { id: party.id, name: party.name, memberNames: rosterOf(party.memberIds) }
+    { id: party.id, name: party.name, memberNames: rosterOf(party.memberIds) },
+    !!earned?.completion
   )
   if (!record) return
   upsert([record])
   cloudSync.pushPresence(record)
-
-  const orgId = creditOrgFor(latest.stationId, self.orgId)
-  if (orgId) creditStation(selfId, latest.stationId, orgId)
 }
 
 // ── Reading the board ─────────────────────────────────────────────────────────
@@ -241,7 +264,7 @@ export function occupants(now: number = Date.now()): Occupant[] {
   const groups = new Map<string, Presence[]>()
 
   listPresence()
-    .filter((p) => now - p.at <= PRESENCE_MAX_MS)
+    .filter((p) => isTracked(p, now))
     .forEach((p) => {
       const key = p.partyId ? `party:${p.partyId}` : `solo:${p.userId}`
       const bucket = groups.get(key)
