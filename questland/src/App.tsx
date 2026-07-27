@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 
 import { ToastProvider } from './components/Toast'
 import Shell from './components/Shell'
+import InstallBanner from './components/InstallBanner'
 
 import WelcomeScreen from './screens/WelcomeScreen'
 import AuthScreen from './screens/AuthScreen'
@@ -39,6 +40,7 @@ function NotFoundRedirect(): ReactElement {
 export default function App() {
   return (
     <ToastProvider>
+      <InstallBanner />
       <Routes>
         <Route path="/welcome" element={<WelcomeScreen />} />
         <Route path="/auth" element={<AuthScreen />} />

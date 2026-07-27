@@ -82,4 +82,9 @@
   --topbar-height: var(--header-h);  /* 72px */
   --safe-top: env(safe-area-inset-top, 0px);       /* device concept, not a DS token */
   --safe-bottom: env(safe-area-inset-bottom, 0px); /* device concept, not a DS token */
+  /* Install banner (browser build only) — InstallBanner sets these on <html>
+     while it is up: it carries the notch inset, so the chrome below it drops
+     --chrome-safe-top to 0 and shifts down by --install-banner-height. */
+  --install-banner-height: 0px;
+  --chrome-safe-top: var(--safe-top);
 }
