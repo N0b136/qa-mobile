@@ -52,6 +52,14 @@ export default function Shell() {
           zIndex: 10,
           opacity: 0,
           // Fallback 4.55s = INTRO_SECONDS(5) - 0.45, matching the README offset.
+          // qa-ui-rise animates `top` (not `transform`) for exactly the reason
+          // in the note above the header/nav wrappers, generalized: some
+          // screens (e.g. MapScreen) root themselves with `position: fixed`,
+          // and ANY transformed ancestor — even only transiently, mid-
+          // animation, `fill: both` or not — becomes their containing block
+          // and collapses them against this wrapper's near-zero intrinsic
+          // height instead of the viewport. `top` never does that, so it's
+          // safe for the Outlet wrapper at every point in the animation.
           animation: 'qa-ui-rise var(--dur-reveal) var(--ease-out-door) var(--intro-ui-delay, 4.55s) both',
         }}
       >
