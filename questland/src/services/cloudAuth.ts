@@ -92,14 +92,13 @@ export async function cloudSignIn(email: string, password: string): Promise<Clou
   }
 }
 
-/** Drops the guest session, then retakes an anonymous one so reads keep working. */
+/** Drops the Firebase session. Signed out means signed out — nothing replaces it. */
 export async function cloudSignOut(): Promise<void> {
   const fb = await ensureFirebaseWithin(AUTH_TIMEOUT_MS)
   if (!fb) return
   try {
-    const { signOut, signInAnonymously } = await import('firebase/auth')
+    const { signOut } = await import('firebase/auth')
     await signOut(fb.auth)
-    await signInAnonymously(fb.auth)
   } catch {
     // best effort — the local session is already cleared either way
   }
