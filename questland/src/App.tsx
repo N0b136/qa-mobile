@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { ReactElement } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
@@ -23,7 +24,7 @@ import HelpScreen from './screens/HelpScreen'
 import DemoConsoleScreen from './screens/DemoConsoleScreen'
 import ConsoleScreen from './screens/console/ConsoleScreen'
 
-import { currentUser } from './services/authService'
+import { currentUser, reconcileSession } from './services/authService'
 import { useAppTick } from './hooks/useAppTick'
 
 function RequireAuth({ children }: { children: ReactElement }): ReactElement {
@@ -38,6 +39,12 @@ function NotFoundRedirect(): ReactElement {
 }
 
 export default function App() {
+  // A cloud account only stays signed in while Firebase agrees. Local-only
+  // accounts and an unreachable cloud are both left alone.
+  useEffect(() => {
+    void reconcileSession()
+  }, [])
+
   return (
     <ToastProvider>
       <InstallBanner />

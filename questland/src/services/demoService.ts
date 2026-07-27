@@ -11,8 +11,6 @@ import { ARRIVAL_SLOTS } from '../content/bookingTiers'
 import * as notificationService from './notificationService'
 import { createSos } from './sosService'
 import * as cloudSync from './cloudSync'
-import type { ScheduledSend } from './cloudSync'
-import { uid } from './ids'
 
 const USERS_KEY = 'ql:users'
 const PARTIES_KEY = 'ql:parties'
@@ -51,7 +49,7 @@ const CAST_PROGRESS: Record<string, ProgressMap> = {
   'demo-thorn': { rangers: episodeIds('rg', 3) },
 }
 
-export function seedDemoWorld(currentUserId: string): void {
+export async function seedDemoWorld(currentUserId: string): Promise<void> {
   // Cast — merge into ql:users, replacing any prior demo record, keeping real users.
   const castIds = new Set(CAST_USERS.map((u) => u.id))
   save(USERS_KEY, [...listUsers().filter((u) => !castIds.has(u.id)), ...CAST_USERS])
@@ -74,9 +72,11 @@ export function seedDemoWorld(currentUserId: string): void {
   // The host must end up in exactly one party. If they're already in a real
   // party (not the demo Vanguard from a prior seed), leave it first so we
   // don't corrupt /party and leaderboard state by belonging to two at once.
+  // Awaited: leaveParty now settles a cloud write before touching the local
+  // mirror, and its local write would otherwise land after the seed below.
   const existingParty = getUserParty(currentUserId)
   if (existingParty && existingParty.id !== VANGUARD_PARTY_ID) {
-    leaveParty(currentUserId)
+    await leaveParty(currentUserId)
   }
 
   // Parties — merge, replacing the demo parties by id, keeping real ones.
@@ -123,21 +123,9 @@ export function seedDemoWorld(currentUserId: string): void {
     cloudSync.pushGuestProfile(u)
   }
 
-  // A sample scheduled send so the console's queue demos live without setup.
-  const schedule: ScheduledSend = {
-    id: uid(),
-    type: 'event',
-    icon: 'sparkles',
-    title: 'Lantern Rite begins',
-    body: 'The first lanterns touch the water at Lake Lumen — gather now.',
-    audience: { kind: 'all' },
-    audienceLabel: 'All guests',
-    deliverAt: Date.now() + 2 * 60 * 1000,
-    createdAt: Date.now(),
-    createdBy: 'Warden Aldous',
-    status: 'scheduled',
-  }
-  cloudSync.pushSchedule(schedule)
+  // NOTE: this used to seed a sample scheduled send. Scheduling is a staff
+  // power now and /demo runs as the presenting GUEST, so the write would be
+  // refused. Queue one from the console's Compose > Later tab instead.
 }
 
 export function resetDemoData(currentUserId: string): void {

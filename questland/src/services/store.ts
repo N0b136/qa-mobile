@@ -33,6 +33,15 @@ export function save<T>(key: string, value: T): void {
   notify()
 }
 
+export function remove(key: string): void {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // nothing to remove — still notify so readers re-derive
+  }
+  notify()
+}
+
 export function subscribe(fn: Listener): () => void {
   listeners.add(fn)
   return () => {

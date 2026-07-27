@@ -1,0 +1,159 @@
+rules_version = '2';
+
+// Questland Firestore rules.
+//
+// Deploy from the Firebase console (Firestore > Rules > paste > Publish) for the
+// qa-mobile-36a9c project. Nothing here is bundled into the app — the web config
+// in src/services/firebaseConfig.ts is public by design and these rules are the
+// only thing standing between it and the data.
+//
+// Three tiers of caller reach this database:
+//   • a REAL guest — signed in with email/password, request.auth.uid IS their
+//     User.id. Everything owner-scoped below keys off that equality.
+//   • STAFF — a guest-shaped account that also has a staff/{uid} doc. Only
+//     staff can see the whole calls board, send word to other people, or
+//     schedule anything. That doc is the entire authorisation model.
+//   • an ANONYMOUS session — a phone that fell back to a local-only account.
+//     It can reach nothing that belongs to anybody. This is intentional.
+//
+// Consequence worth knowing: a local-only fallback account (created while the
+// Email/Password provider was off, or while offline) has no validated identity,
+// so its bookings and progress simply do not sync. That is the intended
+// outcome, not a bug — unvalidated accounts stay on their device.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    // Staff are an allowlist, not a claim the client can assert. exists() is a
+    // server-side lookup, so it is not subject to the read rule below.
+    function isStaff() {
+      return signedIn() && exists(/databases/$(database)/documents/staff/$(request.auth.uid));
+    }
+
+    function ownsExisting() {
+      return signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    function ownsIncoming() {
+      return signedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // The seeded demo cast. `demo-` ids cannot collide with a Firebase uid, so
+    // these two grant nothing over a real guest's data — they exist only so the
+    // presenter's /demo remote can stage a world. Drop them for production.
+    function demoIncoming() {
+      return signedIn() && request.resource.data.userId.matches('demo-.*');
+    }
+
+    function demoExisting() {
+      return signedIn() && resource.data.userId.matches('demo-.*');
+    }
+
+    // The staff roster. Provisioned BY HAND from the Firebase console — no
+    // client may write here, so nobody can promote themselves.
+    match /staff/{uid} {
+      allow read: if isSelf(uid);
+      allow write: if false;
+    }
+
+    // ── Guest-owned data ────────────────────────────────────────────────────
+
+    // Private profile — the only place an email is stored. Never readable by
+    // anyone else, including the console.
+    match /accounts/{uid} {
+      allow read, write: if isSelf(uid);
+    }
+
+    // Public directory: name, avatar, order, party, level. Deliberately carries
+    // no email, because every signed-in client reads it to render rosters,
+    // the leaderboard and the console's guest list.
+    //
+    // The `demo-` exception is what lets the presenter's /demo console seed its
+    // cast into the console roster. It is scoped to ids that cannot collide with
+    // a Firebase uid, so it grants nothing over a real guest's row.
+    match /guests/{uid} {
+      allow read: if signedIn();
+      allow write: if isSelf(uid) || (signedIn() && uid.matches('demo-.*'));
+    }
+
+    // Read-for-all so party rosters and the leaderboard can rank other guests;
+    // only you can advance your own questlines.
+    match /progress/{uid} {
+      allow read: if signedIn();
+      allow write: if isSelf(uid);
+    }
+
+    // Passages are nobody else's business.
+    match /bookings/{bookingId} {
+      allow read, update, delete: if ownsExisting();
+      allow create: if ownsIncoming();
+    }
+
+    // ── Parties ─────────────────────────────────────────────────────────────
+
+    // The code doc is the join lookup, so any signed-in guest may read it. It is
+    // claimed on create and released when the last member leaves.
+    match /partyCodes/{code} {
+      allow read, create, delete: if signedIn();
+    }
+
+    match /parties/{partyId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.auth.uid in request.resource.data.memberIds;
+
+      // A guest may add or remove ONLY themselves. Renaming is open to members
+      // and must leave the roster untouched. Nobody can conscript or evict
+      // anyone else.
+      allow update: if signedIn() && (
+        request.resource.data.memberIds.toSet().difference(resource.data.memberIds.toSet())
+          == [request.auth.uid].toSet()
+        || resource.data.memberIds.toSet().difference(request.resource.data.memberIds.toSet())
+          == [request.auth.uid].toSet()
+        || (request.auth.uid in resource.data.memberIds
+          && request.resource.data.memberIds.toSet() == resource.data.memberIds.toSet())
+      );
+
+      // Only the last member out can strike the party.
+      allow delete: if signedIn() && resource.data.memberIds.toSet() == [request.auth.uid].toSet();
+    }
+
+    // ── Comm lanes (guest phone <-> Back Office console) ────────────────────
+    //
+    // A guest reaches only their own calls and their own inbox. Seeing every
+    // call, writing into somebody else's inbox, and scheduling are all staff
+    // powers, gated on the staff/{uid} allowlist above.
+
+    // A guest raises and stands down their own calls; staff see the whole
+    // board and dispatch against it.
+    match /sos/{id} {
+      allow create: if ownsIncoming() || demoIncoming();
+      allow read, update, delete: if isStaff() || ownsExisting() || demoExisting();
+    }
+
+    // A guest's own device writes its own notifications (bookings, lore,
+    // rank-ups, reminders). Only staff may address anybody else.
+    match /notifications/{id} {
+      allow read: if ownsExisting();
+      allow create: if isStaff() || ownsIncoming();
+      allow update, delete: if isStaff() || ownsExisting();
+    }
+
+    // Scheduled sends are authored and fired by the console alone.
+    match /scheduled/{id} {
+      allow read, write: if isStaff();
+    }
+
+    // Anything not named above is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

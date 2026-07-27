@@ -4,6 +4,7 @@ import type { Booking } from '../types'
 import { load, save } from './store'
 import { uid, shortCode } from './ids'
 import * as notificationService from './notificationService'
+import * as cloudSync from './cloudSync'
 
 function key(userId: string): string {
   return `ql:bookings:${userId}`
@@ -81,9 +82,11 @@ export function createBooking(userId: string, input: CreateBookingInput): Bookin
     status: 'confirmed',
     code: generateCode(),
     createdAt: Date.now(),
+    updatedAt: Date.now(),
   }
 
   save(key(userId), [...listBookings(userId), booking])
+  cloudSync.pushBooking(booking)
 
   notificationService.add(userId, {
     type: 'booking',
@@ -100,10 +103,12 @@ export function listBookings(userId: string): Booking[] {
 }
 
 export function cancelBooking(userId: string, bookingId: string): void {
-  save(
-    key(userId),
-    listBookings(userId).map((b) => (b.id === bookingId ? { ...b, status: 'cancelled' as const } : b))
+  const next = listBookings(userId).map((b) =>
+    b.id === bookingId ? { ...b, status: 'cancelled' as const, updatedAt: Date.now() } : b
   )
+  save(key(userId), next)
+  const cancelled = next.find((b) => b.id === bookingId)
+  if (cancelled) cloudSync.pushBooking(cancelled)
 }
 
 export function getTier(tierId: string): BookingTier | undefined {

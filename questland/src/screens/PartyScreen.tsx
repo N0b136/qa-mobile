@@ -31,30 +31,42 @@ export default function PartyScreen() {
   const [joinCode, setJoinCode] = useState('')
   const [joinError, setJoinError] = useState('')
   const [confirmingLeave, setConfirmingLeave] = useState(false)
+  const [busy, setBusy] = useState<'create' | 'join' | 'leave' | null>(null)
 
   if (!user) return null
 
   const party = getUserParty(user.id)
 
-  function handleCreate() {
-    if (!user) return
-    createParty(user.id, partyName)
-    setPartyName('')
+  // Create/join/leave are validated against the cloud, so each is a round trip.
+  async function handleCreate() {
+    if (!user || busy) return
+    setBusy('create')
+    try {
+      await createParty(user.id, partyName)
+      setPartyName('')
+    } finally {
+      setBusy(null)
+    }
   }
 
-  function handleJoin() {
-    if (!user) return
+  async function handleJoin() {
+    if (!user || busy) return
     if (!joinCode.trim()) {
       setJoinError('Enter an invite code first.')
       return
     }
-    const result = joinParty(user.id, joinCode)
-    if (!result.ok) {
-      setJoinError(result.error)
-      return
+    setBusy('join')
+    try {
+      const result = await joinParty(user.id, joinCode)
+      if (!result.ok) {
+        setJoinError(result.error)
+        return
+      }
+      setJoinError('')
+      setJoinCode('')
+    } finally {
+      setBusy(null)
     }
-    setJoinError('')
-    setJoinCode('')
   }
 
   async function handleCopyCode() {
@@ -69,10 +81,15 @@ export default function PartyScreen() {
     toast.show({ title: 'Code copied', icon: 'copy' })
   }
 
-  function handleLeave() {
-    if (!user) return
-    leaveParty(user.id)
-    setConfirmingLeave(false)
+  async function handleLeave() {
+    if (!user || busy) return
+    setBusy('leave')
+    try {
+      await leaveParty(user.id)
+      setConfirmingLeave(false)
+    } finally {
+      setBusy(null)
+    }
   }
 
   return (
@@ -106,8 +123,8 @@ export default function PartyScreen() {
                   value={partyName}
                   onChange={(e) => setPartyName(e.target.value)}
                 />
-                <Button icon="users-round" onClick={handleCreate}>
-                  Create a Party
+                <Button icon="users-round" disabled={busy !== null} onClick={handleCreate}>
+                  {busy === 'create' ? 'Raising the banner…' : 'Create a Party'}
                 </Button>
               </div>
             </Card>
@@ -126,8 +143,8 @@ export default function PartyScreen() {
                   }}
                   style={{ textTransform: 'uppercase' }}
                 />
-                <Button variant="secondary" icon="user-plus" onClick={handleJoin}>
-                  Join a Party
+                <Button variant="secondary" icon="user-plus" disabled={busy !== null} onClick={handleJoin}>
+                  {busy === 'join' ? 'Answering the code…' : 'Join a Party'}
                 </Button>
               </div>
             </Card>
@@ -225,8 +242,8 @@ export default function PartyScreen() {
               <Button variant="ghost" onClick={() => setConfirmingLeave(false)}>
                 Stay
               </Button>
-              <Button variant="danger" onClick={handleLeave}>
-                Leave party
+              <Button variant="danger" disabled={busy !== null} onClick={handleLeave}>
+                {busy === 'leave' ? 'Parting ways…' : 'Leave party'}
               </Button>
             </>
           }

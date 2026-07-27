@@ -65,8 +65,8 @@ export default function DemoConsoleScreen() {
 
   const calls = listSos().filter((s) => s.status !== 'resolved')
 
-  function handleSeed() {
-    seedDemoWorld(user!.id)
+  async function handleSeed() {
+    await seedDemoWorld(user!.id)
     refresh()
     toast.show({ title: 'Demo world seeded', icon: 'wand-sparkles' })
   }

@@ -43,3 +43,24 @@ export const STAFF_PERSONAS: StaffPersona[] = [
 export function getPersona(id: string): StaffPersona | undefined {
   return STAFF_PERSONAS.find((p) => p.id === id)
 }
+
+/**
+ * Presents a real staff account as a persona so the console panels keep taking
+ * one shape. A staff doc may name a persona above purely to borrow its glyph
+ * and blurb; identity itself always comes from the account.
+ */
+export function personaFromStaff(staff: {
+  uid: string
+  name: string
+  role: 'warden' | 'guide'
+  personaId?: string
+}): StaffPersona {
+  const linked = staff.personaId ? getPersona(staff.personaId) : undefined
+  return {
+    id: staff.uid,
+    name: staff.name,
+    role: staff.role,
+    icon: linked?.icon ?? (staff.role === 'warden' ? 'shield' : 'life-buoy'),
+    blurb: linked?.blurb ?? '',
+  }
+}

@@ -13,7 +13,7 @@ const capsHeadingStyle: CSSProperties = {
 
 interface Props {
   persona: StaffPersona
-  onSwitch: () => void
+  onSignOut: () => void
 }
 
 function cloudBadge(state: CloudState): { tone: NonNullable<BadgeProps['tone']>; label: string } {
@@ -22,7 +22,7 @@ function cloudBadge(state: CloudState): { tone: NonNullable<BadgeProps['tone']>;
   return { tone: 'neutral', label: 'Offline' }
 }
 
-export default function ConsoleHeader({ persona, onSwitch }: Props) {
+export default function ConsoleHeader({ persona, onSignOut }: Props) {
   const [state, setState] = useState<CloudState>(() => cloudState())
   useEffect(() => onCloudState(setState), [])
 
@@ -51,8 +51,8 @@ export default function ConsoleHeader({ persona, onSwitch }: Props) {
         <Badge tone={persona.role === 'warden' ? 'valor' : 'wilds'} icon={persona.icon}>
           {persona.name}
         </Badge>
-        <Button variant="ghost" size="sm" icon="repeat" onClick={onSwitch}>
-          Switch
+        <Button variant="ghost" size="sm" icon="log-out" onClick={onSignOut}>
+          Sign out
         </Button>
       </div>
     </header>

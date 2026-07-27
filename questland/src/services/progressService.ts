@@ -85,6 +85,7 @@ export function completeEpisode(userId: string, episodeId: string): CompleteResu
   const beforeCount = done.length
   const nextDone = [...done, episodeId]
   setProgress(userId, { ...progress, [orgId]: nextDone })
+  cloudSync.pushProgress(userId)
   const afterCount = nextDone.length
 
   const org = getOrg(orgId)
