@@ -3,6 +3,7 @@ import { useAppTick } from '../hooks/useAppTick'
 import { currentUser } from '../services/authService'
 import { completedCount, currentEpisode, rankFor } from '../services/progressService'
 import { ORGS } from '../content/orgs'
+import { activeQuest } from '../services/presenceService'
 import ProgressBar from '../components/ProgressBar'
 import { Badge, Card, Icon, Tag } from '../ui'
 import { ORG_ICON } from './questIcons'
@@ -11,6 +12,9 @@ export default function QuestsScreen() {
   useAppTick()
   const user = currentUser()
   if (!user) return null
+
+  // The questline they are out walking right now, if any.
+  const active = activeQuest(user.id)
 
   // User's chosen order first (if set) — the other two questlines stay open below it.
   const orgs = user.orgId
@@ -54,9 +58,16 @@ export default function QuestsScreen() {
                 </div>
                 <div style={{ marginTop: 10 }}>
                   <ProgressBar value={count} max={10} color={org.color} />
-                  <p className="muted" style={{ marginTop: 4, fontSize: 12 }}>
-                    {count} / 10 episodes
-                  </p>
+                  <div className="row row--between" style={{ marginTop: 4 }}>
+                    <p className="muted" style={{ fontSize: 12 }}>
+                      {count} / 10 episodes
+                    </p>
+                    {active?.orgId === org.id ? (
+                      <Badge tone="gold" icon="footprints">
+                        Active
+                      </Badge>
+                    ) : null}
+                  </div>
                   <p style={{ marginTop: 6, fontSize: 13 }}>{current ? current.title : 'Questline complete'}</p>
                 </div>
               </Card>

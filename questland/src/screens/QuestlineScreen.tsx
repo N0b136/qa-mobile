@@ -7,6 +7,7 @@ import { getOrg } from '../content/orgs'
 import { episodesFor } from '../content/quests'
 import { stationsFor } from '../content/stations'
 import type { Episode } from '../content/types'
+import { activeQuest } from '../services/presenceService'
 import { ArchCard, Badge, Button, Dialog, Ornament, ProgressTrail, Seal } from '../ui'
 import type { TrailStep } from '../ui'
 import { METHOD_LABEL, ORG_SEAL_ART, romanNumeral } from './questIcons'
@@ -27,6 +28,8 @@ export default function QuestlineScreen() {
   const current = currentEpisode(user.id, org.id)
   const count = doneIds.size
   const rank = rankFor(org.id, count)
+  // "Continue" rather than "Begin" once they are actually out on this questline.
+  const walking = activeQuest(user.id)?.orgId === org.id
 
   const steps: TrailStep[] = episodes.map((ep) => {
     const state: TrailStep['state'] = doneIds.has(ep.id) ? 'complete' : current?.id === ep.id ? 'current' : 'locked'
@@ -89,11 +92,11 @@ export default function QuestlineScreen() {
           <Button
             fullWidth
             size="lg"
-            icon="door-open"
+            icon={walking ? 'footprints' : 'door-open'}
             style={{ marginTop: 12 }}
             onClick={() => navigate(`/quests/${org!.id}/check-in`)}
           >
-            Begin check-in
+            {walking ? 'Continue quest' : 'Begin check-in'}
           </Button>
         </div>
       ) : (

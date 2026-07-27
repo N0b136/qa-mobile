@@ -8,7 +8,15 @@ import { STATIONS, stationsFor } from '../content/stations'
 import type { Station } from '../content/types'
 import type { Presence } from '../types'
 import { completedCount, creditOrgFor, currentEpisode, stationsDone } from '../services/progressService'
-import { checkIn, checkInAtGate, hasArrived, presenceFor, statusOf, windowLeft } from '../services/presenceService'
+import {
+  activeQuest,
+  checkIn,
+  checkInAtGate,
+  hasArrived,
+  presenceFor,
+  statusOf,
+  windowLeft,
+} from '../services/presenceService'
 import { DEFAULT_POSITION, MAP_LANDMARKS, QUEST_START, STATION_COORDS } from '../content/stationMap'
 import type { MapLandmark } from '../content/stationMap'
 import { useAppTick } from '../hooks/useAppTick'
@@ -54,6 +62,19 @@ export default function MapScreen() {
     const rotation = stationsFor(episode.id).map((s) => s.id)
     if (!rotation.includes(st.id)) return null
     return { done: stationsDone(user.id, episode.id).length, total: rotation.length }
+  }
+
+  // ---- the live pair ----
+  //
+  // While a quest is under way the chart lights exactly two stations: gold for
+  // where the party is standing, white for where they are walking to.
+  const quest = user ? activeQuest(user.id) : null
+
+  function liveMarkerFor(stationId: string): 'here' | 'next' | null {
+    if (!quest) return null
+    if (quest.atStationId === stationId) return 'here'
+    if (quest.nextStationId === stationId) return 'next'
+    return null
   }
 
   // ---- where you are ----
@@ -144,7 +165,10 @@ export default function MapScreen() {
         background: 'var(--surface-page)',
       }}
     >
-      <MapCanvas>
+      {/* contain, not cover: the chart is far wider than a phone column, so
+          fitting it whole and centring it beats pinning a band to the top with
+          dead space underneath. Pinch to zoom into a station from there. */}
+      <MapCanvas fit="contain">
         {MAP_LANDMARKS.map((lm) => (
           <AmenityPin key={lm.id} landmark={lm} onOpen={() => setOpenLandmark(lm)} />
         ))}
@@ -169,6 +193,7 @@ export default function MapScreen() {
               variant={variant}
               isHome={st.id === homeId}
               sealed={sealedIds.has(st.id)}
+              live={liveMarkerFor(st.id)}
               trackColor={org?.color}
               onOpen={() => setOpenStation(st)}
             />
@@ -178,7 +203,7 @@ export default function MapScreen() {
         <HereMarker x={herePos.x} y={herePos.y} />
       </MapCanvas>
 
-      {org ? <MapLegend trackColor={org.color} /> : null}
+      {org ? <MapLegend trackColor={org.color} walking={!!quest} /> : null}
 
       {openStation ? (
         <StationCard
@@ -431,6 +456,7 @@ function StationPin({
   variant,
   isHome,
   sealed,
+  live,
   trackColor,
   onOpen,
 }: {
@@ -440,15 +466,20 @@ function StationPin({
   isHome: boolean
   /** Already checked in on the current episode. */
   sealed: boolean
+  /** Gold for where the party stands, white for where it is headed. */
+  live: 'here' | 'next' | null
   trackColor?: string
   onOpen: () => void
 }) {
   const spec = PIN_SPEC[variant]
   const ringColor = variant === 'active' && trackColor ? trackColor : spec.color
+  const liveColor = live === 'here' ? 'var(--gold-300)' : '#fff'
+  const liveLabel = live === 'here' ? ', you are here' : live === 'next' ? ', next station' : ''
   return (
     <button
       onClick={onOpen}
-      aria-label={`${station.name} — ${station.type} station${sealed ? ', sealed' : ''}`}
+      aria-label={`${station.name} — ${station.type} station${sealed ? ', sealed' : ''}${liveLabel}`}
+      className={live ? (live === 'here' ? 'qa-pin-here' : 'qa-pin-next') : undefined}
       style={{
         position: 'absolute',
         left: `${coord.x * 100}%`,
@@ -460,13 +491,14 @@ function StationPin({
         background: 'none',
         border: 'none',
         cursor: 'pointer',
-        color: ringColor,
-        opacity: spec.opacity,
-        filter: variant === 'active' ? 'drop-shadow(0 1px 2px rgba(0,0,0,.6))' : undefined,
+        color: live ? liveColor : ringColor,
+        opacity: live ? 1 : spec.opacity,
+        filter: live || variant !== 'active' ? undefined : 'drop-shadow(0 1px 2px rgba(0,0,0,.6))',
+        zIndex: live ? 2 : undefined,
       }}
     >
       <span style={{ position: 'relative', display: 'block' }}>
-        <Icon name={sealed ? 'map-pin-check' : 'map-pin'} size={spec.size} />
+        <Icon name={sealed && !live ? 'map-pin-check' : 'map-pin'} size={live ? spec.size + 8 : spec.size} />
         {isHome ? (
           <span
             style={{
@@ -555,7 +587,7 @@ function HereMarker({ x, y }: { x: number; y: number }) {
   )
 }
 
-function MapLegend({ trackColor }: { trackColor: string }) {
+function MapLegend({ trackColor, walking }: { trackColor: string; walking: boolean }) {
   return (
     <div
       style={{
@@ -575,7 +607,13 @@ function MapLegend({ trackColor }: { trackColor: string }) {
         color: 'var(--text-muted)',
       }}
     >
-      <LegendDot color={trackColor} label="Active" />
+      {walking ? (
+        <>
+          <LegendDot color="var(--gold-300)" label="You are here" />
+          <LegendDot color="#fff" label="Next" />
+        </>
+      ) : null}
+      <LegendDot color={trackColor} label="Episode" />
       <LegendDot color="var(--gold-500)" label="Home" />
       <LegendDot color="var(--gold-700)" label="Visited" />
     </div>

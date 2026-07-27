@@ -24,7 +24,7 @@ import { load, save } from './store'
 import { getUser } from './authService'
 import { getUserParty } from './partyService'
 import { getStation } from '../content/stations'
-import { getOrg } from '../content/orgs'
+import { ORGS, getOrg } from '../content/orgs'
 import { QUEST_START, VILLAGE_PLACE } from '../content/stationMap'
 import type { Station } from '../content/types'
 import { creditOrgFor, creditStation, currentEpisode, stationsDone } from './progressService'
@@ -169,6 +169,45 @@ export function walkFor(userId: string, orgId?: string): Walk {
     nextStationId: next?.id,
     nextStationName: next?.name,
   }
+}
+
+export interface ActiveQuest extends Walk {
+  /** The station the guest is standing at right now, if any. */
+  atStationId?: string
+}
+
+/**
+ * The quest a guest is actually walking, or null if they are not on one.
+ *
+ * A quest becomes active when they take it at the chief's house or check in at
+ * a station — arriving at the gate is not enough, since standing in the village
+ * is not yet walking anything. It stays active while any station of the episode
+ * is sealed, so leaving the board (or an expired window) does not abandon a walk
+ * that is genuinely half done.
+ *
+ * The numbers are recomputed rather than read off the record, so they are right
+ * even if progress moved by some other path.
+ */
+export function activeQuest(userId: string, now: number = Date.now()): ActiveQuest | null {
+  const user = getUser(userId)
+  if (!user) return null
+
+  const p = presenceFor(userId)
+  if (p && isTracked(p, now) && p.kind !== 'village' && p.orgId) {
+    return {
+      ...walkFor(userId, p.orgId),
+      atStationId:
+        p.kind === 'station' && statusOf(p, now) === 'at-station' ? p.stationId : undefined,
+    }
+  }
+
+  // Off the board, but part-way through an episode: still their active quest.
+  const orgIds = [user.orgId, ...ORGS.map((o) => o.id)].filter((id): id is string => !!id)
+  for (const orgId of orgIds) {
+    const episode = currentEpisode(userId, orgId)
+    if (episode && stationsDone(userId, episode.id).length > 0) return walkFor(userId, orgId)
+  }
+  return null
 }
 
 // ── Checking in ───────────────────────────────────────────────────────────────
