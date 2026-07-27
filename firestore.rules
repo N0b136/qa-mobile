@@ -7,12 +7,14 @@ rules_version = '2';
 // in src/services/firebaseConfig.ts is public by design and these rules are the
 // only thing standing between it and the data.
 //
-// Two tiers of caller reach this database:
+// Three tiers of caller reach this database:
 //   • a REAL guest — signed in with email/password, request.auth.uid IS their
 //     User.id. Everything owner-scoped below keys off that equality.
-//   • an ANONYMOUS session — the Back Office console at /console, and any phone
-//     that fell back to a local-only account. It gets the comm lanes and nothing
-//     that belongs to a specific guest.
+//   • STAFF — a guest-shaped account that also has a staff/{uid} doc. Only
+//     staff can see the whole calls board, send word to other people, or
+//     schedule anything. That doc is the entire authorisation model.
+//   • an ANONYMOUS session — a phone that fell back to a local-only account.
+//     It can reach nothing that belongs to anybody. This is intentional.
 //
 // Consequence worth knowing: a local-only fallback account (created while the
 // Email/Password provider was off, or while offline) has no validated identity,
@@ -28,6 +30,38 @@ service cloud.firestore {
 
     function isSelf(uid) {
       return signedIn() && request.auth.uid == uid;
+    }
+
+    // Staff are an allowlist, not a claim the client can assert. exists() is a
+    // server-side lookup, so it is not subject to the read rule below.
+    function isStaff() {
+      return signedIn() && exists(/databases/$(database)/documents/staff/$(request.auth.uid));
+    }
+
+    function ownsExisting() {
+      return signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    function ownsIncoming() {
+      return signedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // The seeded demo cast. `demo-` ids cannot collide with a Firebase uid, so
+    // these two grant nothing over a real guest's data — they exist only so the
+    // presenter's /demo remote can stage a world. Drop them for production.
+    function demoIncoming() {
+      return signedIn() && request.resource.data.userId.matches('demo-.*');
+    }
+
+    function demoExisting() {
+      return signedIn() && resource.data.userId.matches('demo-.*');
+    }
+
+    // The staff roster. Provisioned BY HAND from the Firebase console — no
+    // client may write here, so nobody can promote themselves.
+    match /staff/{uid} {
+      allow read: if isSelf(uid);
+      allow write: if false;
     }
 
     // ── Guest-owned data ────────────────────────────────────────────────────
@@ -59,8 +93,8 @@ service cloud.firestore {
 
     // Passages are nobody else's business.
     match /bookings/{bookingId} {
-      allow read, update, delete: if signedIn() && resource.data.userId == request.auth.uid;
-      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, update, delete: if ownsExisting();
+      allow create: if ownsIncoming();
     }
 
     // ── Parties ─────────────────────────────────────────────────────────────
@@ -93,21 +127,28 @@ service cloud.firestore {
 
     // ── Comm lanes (guest phone <-> Back Office console) ────────────────────
     //
-    // These stay open to any authenticated client because the console signs in
-    // anonymously and must dispatch Wardens to, and send word about, guests it
-    // is not. Locking them down needs the console to hold a real staff account
-    // — see the deferred work in CLAUDE.md.
+    // A guest reaches only their own calls and their own inbox. Seeing every
+    // call, writing into somebody else's inbox, and scheduling are all staff
+    // powers, gated on the staff/{uid} allowlist above.
 
+    // A guest raises and stands down their own calls; staff see the whole
+    // board and dispatch against it.
     match /sos/{id} {
-      allow read, write: if signedIn();
+      allow create: if ownsIncoming() || demoIncoming();
+      allow read, update, delete: if isStaff() || ownsExisting() || demoExisting();
     }
 
+    // A guest's own device writes its own notifications (bookings, lore,
+    // rank-ups, reminders). Only staff may address anybody else.
     match /notifications/{id} {
-      allow read, write: if signedIn();
+      allow read: if ownsExisting();
+      allow create: if isStaff() || ownsIncoming();
+      allow update, delete: if isStaff() || ownsExisting();
     }
 
+    // Scheduled sends are authored and fired by the console alone.
     match /scheduled/{id} {
-      allow read, write: if signedIn();
+      allow read, write: if isStaff();
     }
 
     // Anything not named above is closed.

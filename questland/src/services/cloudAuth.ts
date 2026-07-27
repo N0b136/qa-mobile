@@ -118,6 +118,51 @@ export async function fetchAccount(uid: string): Promise<AccountDoc | null> {
   }
 }
 
+// ── Staff ─────────────────────────────────────────────────────────────────────
+//
+// Staff are a Firestore allowlist, never a client-side claim: a staff/{uid} doc
+// created BY HAND in the Firebase console is the whole authorisation model, and
+// the rules refuse writes to that collection from any client. Signing in as
+// staff is an ordinary email/password sign-in that happens to have such a doc.
+
+export interface StaffDoc {
+  uid: string
+  name: string
+  role: 'warden' | 'guide'
+  /** Optional link to a STAFF_PERSONAS entry, purely for its icon and blurb. */
+  personaId?: string
+}
+
+export type StaffLookup =
+  | { ok: true; staff: StaffDoc }
+  | { ok: false; kind: 'not-staff' }
+  | { ok: false; kind: 'unavailable' }
+
+/**
+ * Reads staff/{uid}. Missing doc means "signed in, but not on the roster" —
+ * distinct from a read we could not perform at all, which must not be reported
+ * to someone as being off the roster.
+ */
+export async function fetchStaff(uid: string): Promise<StaffLookup> {
+  const fb = await ensureFirebaseWithin(AUTH_TIMEOUT_MS)
+  if (!fb) return { ok: false, kind: 'unavailable' }
+  try {
+    const { doc, getDoc } = await import('firebase/firestore')
+    const snap = await getDoc(doc(fb.db, 'staff', uid))
+    if (!snap.exists()) return { ok: false, kind: 'not-staff' }
+    const data = snap.data() as Partial<StaffDoc>
+    const staff: StaffDoc = {
+      uid,
+      name: data.name?.trim() || 'Guild staff',
+      role: data.role === 'guide' ? 'guide' : 'warden',
+    }
+    if (data.personaId) staff.personaId = data.personaId
+    return { ok: true, staff }
+  } catch {
+    return { ok: false, kind: 'unavailable' }
+  }
+}
+
 export function pushAccount(user: User): void {
   if (!user.cloud) return
   void ensureFirebaseWithin(AUTH_TIMEOUT_MS).then(async (fb) => {

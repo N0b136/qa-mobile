@@ -353,7 +353,49 @@ function mergeGuestShadows(dir: GuestDoc[]): void {
   if (changed) save(USERS_KEY, Array.from(byId.values()))
 }
 
-function mergePartiesSnapshot(snap: QuerySnapshot<DocumentData>): void {
+/**
+ * Announces companions who have joined a party you are already in.
+ *
+ * This runs on the RECIPIENT's device, off the roster change itself, because
+ * the joiner is not allowed to write into anybody else's inbox — the rules see
+ * to that, and it was never really theirs to write.
+ */
+function announceNewMembers(selfId: string, before: Party[], after: Party[]): void {
+  const beforeById = new Map(before.map((p) => [p.id, p] as const))
+  const arrivals: Array<{ memberId: string; party: Party }> = []
+
+  for (const party of after) {
+    if (!party.memberIds.includes(selfId)) continue
+    const prior = beforeById.get(party.id)
+    // No prior copy means this is the party YOU just joined — not an arrival.
+    if (!prior || !prior.memberIds.includes(selfId)) continue
+    const known = new Set(prior.memberIds)
+    for (const memberId of party.memberIds) {
+      if (memberId !== selfId && !known.has(memberId)) arrivals.push({ memberId, party })
+    }
+  }
+  if (arrivals.length === 0) return
+
+  const users = load<User[]>(USERS_KEY, [])
+  void (async () => {
+    try {
+      const { add } = await import('./notificationService')
+      for (const { memberId, party } of arrivals) {
+        const name = users.find((u) => u.id === memberId)?.name ?? 'An adventurer'
+        add(selfId, {
+          type: 'system',
+          title: `${name} joined your party`,
+          body: `${name} answered your invite code and is now travelling with ${party.name}.`,
+          icon: 'users',
+        })
+      }
+    } catch {
+      // best-effort — the roster itself is already correct on screen
+    }
+  })()
+}
+
+function mergePartiesSnapshot(snap: QuerySnapshot<DocumentData>, selfId: string, primed: boolean): void {
   const local = load<Party[]>(PARTIES_KEY, [])
   const byId = new Map(local.map((p) => [p.id, p] as const))
 
@@ -376,7 +418,10 @@ function mergePartiesSnapshot(snap: QuerySnapshot<DocumentData>): void {
   })
 
   const merged = Array.from(byId.values())
-  if (!deepEqual(merged, local)) save(PARTIES_KEY, merged)
+  if (deepEqual(merged, local)) return
+  save(PARTIES_KEY, merged)
+  // The first snapshot is just the mirror catching up — everyone would look new.
+  if (primed) announceNewMembers(selfId, local, merged)
 }
 
 /**
@@ -492,10 +537,14 @@ export function startGuestSync(userId: string): () => void {
       )
 
       // Any party you belong to — the roster is authoritative in Firestore.
+      let partiesPrimed = false
       unsubs.push(
         onSnapshot(
           query(collection(fb.db, 'parties'), where('memberIds', 'array-contains', userId)),
-          (snap) => mergePartiesSnapshot(snap),
+          (snap) => {
+            mergePartiesSnapshot(snap, userId, partiesPrimed)
+            partiesPrimed = true
+          },
           () => setCloudState('offline')
         )
       )
@@ -749,15 +798,8 @@ export async function createPartyDoc(party: Party): Promise<PartyResult<Party>> 
   }
 }
 
-/**
- * Validates an invite code against Firestore and adds the guest to that party.
- * Returns the party plus the roster as it stood BEFORE the join, so the caller
- * can notify exactly the people who were already travelling together.
- */
-export async function joinPartyDoc(
-  code: string,
-  userId: string
-): Promise<PartyResult<{ party: Party; previousMemberIds: string[] }>> {
+/** Validates an invite code against Firestore and adds the guest to that party. */
+export async function joinPartyDoc(code: string, userId: string): Promise<PartyResult<Party>> {
   const fb = await ensureFirebaseWithin(PARTY_TIMEOUT_MS)
   if (!fb) return { ok: false, reason: 'unavailable' }
   try {
@@ -775,13 +817,10 @@ export async function joinPartyDoc(
       if (!partySnap.exists()) return null
 
       const data = partyFromDoc(partySnap.data() as Party)
-      const previousMemberIds = data.memberIds
-      const memberIds = previousMemberIds.includes(userId)
-        ? previousMemberIds
-        : [...previousMemberIds, userId]
+      const memberIds = data.memberIds.includes(userId) ? data.memberIds : [...data.memberIds, userId]
       const updatedAt = Date.now()
       tx.update(partyRef, { memberIds, updatedAt })
-      return { party: { ...data, memberIds, updatedAt }, previousMemberIds }
+      return { ...data, memberIds, updatedAt }
     })
 
     return result ? { ok: true, value: result } : { ok: false, reason: 'not-found' }
@@ -938,33 +977,52 @@ export async function fireDueSchedules(): Promise<void> {
   }
 }
 
+/**
+ * Clears the demo world's cloud docs. Every query here is one the presenter's
+ * own (guest) account is allowed to run: their own calls and inbox, plus the
+ * demo- guest shells. Scheduled sends belong to staff and are left alone — the
+ * console clears its own.
+ *
+ * Each collection is isolated so a denial on one cannot abandon the rest.
+ */
 export async function deleteDemoCommDocs(currentUserId: string): Promise<void> {
   const fb = await ensureFirebase()
   if (!fb) return
-  try {
-    const { collection, query, where, getDocs, writeBatch } = await import('firebase/firestore')
-    const refs: DocumentReference[] = []
+  const { collection, query, where, getDocs, writeBatch } = await import('firebase/firestore')
+  const refs: DocumentReference[] = []
 
-    for (const col of ['sos', 'notifications']) {
-      const demoSnap = await getDocs(query(collection(fb.db, col), where('demo', '==', true)))
-      demoSnap.forEach((d) => refs.push(d.ref))
-      const userSnap = await getDocs(query(collection(fb.db, col), where('userId', '==', currentUserId)))
-      userSnap.forEach((d) => refs.push(d.ref))
+  const gather = async (run: () => Promise<void>) => {
+    try {
+      await run()
+    } catch {
+      // one collection being out of reach must not strand the others
     }
-    const guestSnap = await getDocs(query(collection(fb.db, 'guests'), where('demo', '==', true)))
-    guestSnap.forEach((d) => refs.push(d.ref))
-    const schedSnap = await getDocs(collection(fb.db, 'scheduled'))
-    schedSnap.forEach((d) => refs.push(d.ref))
+  }
 
-    const seen = new Set<string>()
-    const unique = refs.filter((r) => (seen.has(r.path) ? false : (seen.add(r.path), true)))
+  for (const col of ['sos', 'notifications']) {
+    await gather(async () => {
+      const own = await getDocs(query(collection(fb.db, col), where('userId', '==', currentUserId)))
+      own.forEach((d) => refs.push(d.ref))
+    })
+  }
+  // The staged cast's calls for aid — reachable under the demo- exception.
+  await gather(async () => {
+    const demoSos = await getDocs(query(collection(fb.db, 'sos'), where('demo', '==', true)))
+    demoSos.forEach((d) => refs.push(d.ref))
+  })
+  await gather(async () => {
+    const guests = await getDocs(query(collection(fb.db, 'guests'), where('demo', '==', true)))
+    guests.forEach((d) => refs.push(d.ref))
+  })
 
-    for (let i = 0; i < unique.length; i += 450) {
+  const seen = new Set<string>()
+  const unique = refs.filter((r) => (seen.has(r.path) ? false : (seen.add(r.path), true)))
+
+  for (let i = 0; i < unique.length; i += 450) {
+    await gather(async () => {
       const batch = writeBatch(fb.db)
       for (const r of unique.slice(i, i + 450)) batch.delete(r)
       await batch.commit()
-    }
-  } catch {
-    // swallow
+    })
   }
 }

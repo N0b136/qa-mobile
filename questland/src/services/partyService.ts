@@ -10,7 +10,6 @@ import type { Party } from '../types'
 import { load, save } from './store'
 import { uid, shortCode } from './ids'
 import { getUser, updateProfile } from './authService'
-import * as notificationService from './notificationService'
 import * as cloudSync from './cloudSync'
 import { isConfigured } from './firebase'
 
@@ -134,19 +133,9 @@ export async function createParty(userId: string, name: string): Promise<PartyOu
   return { ok: true, party }
 }
 
-function announceJoin(userId: string, party: Party, previousMemberIds: string[]): void {
-  const joiner = getUser(userId)
-  const joinerName = joiner?.name ?? 'An adventurer'
-  for (const memberId of previousMemberIds) {
-    if (memberId === userId) continue
-    notificationService.add(memberId, {
-      type: 'system',
-      title: `${joinerName} joined your party`,
-      body: `${joinerName} answered your invite code and is now travelling with ${party.name}.`,
-      icon: 'users',
-    })
-  }
-}
+// NOTE: joining no longer notifies the other members from here. Writing into
+// someone else's inbox is a staff power now, so each member's own device raises
+// the announcement when it sees the roster change (cloudSync.announceNewMembers).
 
 export async function joinParty(userId: string, code: string): Promise<PartyOutcome> {
   const previous = getUserParty(userId)
@@ -154,11 +143,10 @@ export async function joinParty(userId: string, code: string): Promise<PartyOutc
   if (isConfigured()) {
     const result = await cloudSync.joinPartyDoc(code, userId)
     if (result.ok) {
-      const { party, previousMemberIds } = result.value
+      const party = result.value
       if (previous && previous.id !== party.id) await detachFrom(previous, userId)
       upsertParty(party)
       updateProfile(userId, { partyId: party.id })
-      announceJoin(userId, party, previousMemberIds)
       return { ok: true, party }
     }
     if (result.reason === 'not-found') {
@@ -172,13 +160,11 @@ export async function joinParty(userId: string, code: string): Promise<PartyOutc
     return { ok: false, error: 'No party answers to that code.' }
   }
 
-  const previousMemberIds = party.memberIds
-  const memberIds = previousMemberIds.includes(userId) ? previousMemberIds : [...previousMemberIds, userId]
+  const memberIds = party.memberIds.includes(userId) ? party.memberIds : [...party.memberIds, userId]
   const updated: Party = { ...party, memberIds }
   if (previous && previous.id !== party.id) await detachFrom(previous, userId)
   upsertParty(updated)
   updateProfile(userId, { partyId: party.id })
-  announceJoin(userId, updated, previousMemberIds)
   return { ok: true, party: updated }
 }
 

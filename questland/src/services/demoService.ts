@@ -11,8 +11,6 @@ import { ARRIVAL_SLOTS } from '../content/bookingTiers'
 import * as notificationService from './notificationService'
 import { createSos } from './sosService'
 import * as cloudSync from './cloudSync'
-import type { ScheduledSend } from './cloudSync'
-import { uid } from './ids'
 
 const USERS_KEY = 'ql:users'
 const PARTIES_KEY = 'ql:parties'
@@ -125,21 +123,9 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
     cloudSync.pushGuestProfile(u)
   }
 
-  // A sample scheduled send so the console's queue demos live without setup.
-  const schedule: ScheduledSend = {
-    id: uid(),
-    type: 'event',
-    icon: 'sparkles',
-    title: 'Lantern Rite begins',
-    body: 'The first lanterns touch the water at Lake Lumen — gather now.',
-    audience: { kind: 'all' },
-    audienceLabel: 'All guests',
-    deliverAt: Date.now() + 2 * 60 * 1000,
-    createdAt: Date.now(),
-    createdBy: 'Warden Aldous',
-    status: 'scheduled',
-  }
-  cloudSync.pushSchedule(schedule)
+  // NOTE: this used to seed a sample scheduled send. Scheduling is a staff
+  // power now and /demo runs as the presenting GUEST, so the write would be
+  // refused. Queue one from the console's Compose > Later tab instead.
 }
 
 export function resetDemoData(currentUserId: string): void {
