@@ -420,3 +420,42 @@ a.card:hover,
 .pop-bounce {
   animation: pop-bounce var(--dur-fast) var(--ease-standard);
 }
+
+/* ── Map: the two live markers ──────────────────────────────────────────────
+   While a quest is under way the chart carries exactly two lit pins — gold for
+   the station the party is standing at, white for the one they are walking to.
+   The glow breathes rather than blinks: a slow alternate on the drop-shadow
+   only, so nothing moves and nothing else on the chart shifts. */
+@keyframes qa-pin-glow-gold {
+  from {
+    filter: drop-shadow(0 0 2px var(--gold-500)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+  }
+  to {
+    filter: drop-shadow(0 0 11px var(--gold-300)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+  }
+}
+
+@keyframes qa-pin-glow-white {
+  from {
+    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.5)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+  }
+  to {
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.95)) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+  }
+}
+
+.qa-pin-here {
+  animation: qa-pin-glow-gold 1800ms var(--ease-standard) infinite alternate;
+}
+
+.qa-pin-next {
+  animation: qa-pin-glow-white 1800ms var(--ease-standard) infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qa-pin-here,
+  .qa-pin-next {
+    animation: none;
+    filter: drop-shadow(0 0 8px currentColor) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+  }
+}
