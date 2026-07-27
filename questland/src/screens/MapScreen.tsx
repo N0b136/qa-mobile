@@ -212,6 +212,9 @@ export default function MapScreen() {
           onCheckIn={handleCheckIn}
           here={standing?.stationId === openStation.id ? standing : null}
           sealed={sealedIds.has(openStation.id)}
+          checkable={!!quest && quest.nextStationId === openStation.id}
+          questStarted={!!quest}
+          nextName={quest?.nextStationName}
           episodeTitle={creditEpisodeFor(openStation)?.title}
           progress={progressLine(openStation)}
         />
@@ -312,6 +315,9 @@ function StationCard({
   onCheckIn,
   here,
   sealed,
+  checkable,
+  questStarted,
+  nextName,
   episodeTitle,
   progress,
 }: {
@@ -321,6 +327,10 @@ function StationCard({
   /** Set when this is where the guest is standing right now. */
   here: Presence | null
   sealed: boolean
+  /** True only for the next station on the rotation — the one seal that is open. */
+  checkable: boolean
+  questStarted: boolean
+  nextName?: string
   episodeTitle?: string
   progress: { done: number; total: number } | null
 }) {
@@ -422,19 +432,32 @@ function StationCard({
               {progress.done} of {progress.total} stations
               {episodeTitle ? ` — ${episodeTitle}` : ''}
             </p>
-          ) : (
-            <p style={{ margin: 0, font: 'var(--body-sm)', color: 'var(--text-on-media-muted)' }}>
-              Not on your current episode — checking in only marks where you are.
+          ) : null}
+
+          {/* A seal is only ever open at the station you are due at next. */}
+          {!checkable && !sealed ? (
+            <p
+              className="row"
+              style={{ gap: 6, margin: 0, font: 'var(--body-sm)', color: 'var(--text-on-media-muted)' }}
+            >
+              <Icon name="lock" size={14} />
+              {!questStarted
+                ? 'Take the quest at the Chief’s House first.'
+                : nextName
+                  ? `Not your next station — you are due at ${nextName}.`
+                  : 'Not on your current episode.'}
             </p>
-          )}
+          ) : null}
 
           <div style={{ marginTop: 'var(--space-md)', display: 'flex', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>
             <Button variant="ghost" onClick={onClose}>
               Close
             </Button>
-            <Button icon="stamp" onClick={onCheckIn}>
-              {here ? 'Check in again' : 'Check in here'}
-            </Button>
+            {checkable ? (
+              <Button icon="stamp" onClick={onCheckIn}>
+                Check in here
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>
