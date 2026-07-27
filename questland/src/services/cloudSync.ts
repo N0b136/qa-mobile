@@ -25,6 +25,7 @@ import type {
 } from '../types'
 import { load, save } from './store'
 import { uid } from './ids'
+import type { FirebaseHandle } from './firebase'
 import { ensureFirebase, ensureFirebaseWithin, setCloudState } from './firebase'
 import { totalXp, levelFor } from './progressService'
 import { getUserParty } from './partyService'
@@ -481,17 +482,158 @@ function mergeScheduledSnapshot(snap: QuerySnapshot<DocumentData>): void {
 
 // ── Listener lifecycles ───────────────────────────────────────────────────────
 
-export function startGuestSync(userId: string): () => void {
+type FirestoreApi = typeof import('firebase/firestore')
+
+/**
+ * Attaches listeners only once Firebase vouches for a REAL (non-anonymous)
+ * session, and re-attaches whenever that session changes.
+ *
+ * This gate is load-bearing now that the rules are closed. An anonymous session
+ * is refused the calls board and the schedule queue, and Firestore never retries
+ * a listener it was refused — so subscribing on mount and signing in afterwards
+ * left a permanently dead listener behind, which looks exactly like being
+ * offline. Waiting for the session rather than racing it is the whole fix.
+ *
+ * It also means a local-only fallback account subscribes to nothing, which is
+ * correct: its id is not a uid, so every owner-scoped query would be refused.
+ */
+function subscribeWhenAuthed(
+  attach: (fb: FirebaseHandle, fs: FirestoreApi) => Array<() => void>
+): () => void {
   let disposed = false
-  const unsubs: Array<() => void> = []
+  let inner: Array<() => void> = []
+  let stopAuth: (() => void) | null = null
+
+  const detach = () => {
+    inner.forEach((u) => u())
+    inner = []
+  }
 
   void ensureFirebase().then(async (fb) => {
     if (!fb || disposed) return
     try {
-      const { collection, query, where, onSnapshot } = await import('firebase/firestore')
+      const fs = await import('firebase/firestore')
+      const { onAuthStateChanged } = await import('firebase/auth')
 
-      const sosUnsub = onSnapshot(
-        query(collection(fb.db, 'sos'), where('userId', '==', userId)),
+      stopAuth = onAuthStateChanged(fb.auth, (account) => {
+        detach()
+        if (disposed) return
+        if (!account || account.isAnonymous) {
+          // Nothing we are allowed to read yet — say so rather than claim live.
+          setCloudState('offline')
+          return
+        }
+        try {
+          inner = attach(fb, fs)
+        } catch {
+          setCloudState('offline')
+        }
+      })
+
+      if (disposed) stopAuth()
+    } catch {
+      setCloudState('offline')
+    }
+  })
+
+  return () => {
+    disposed = true
+    detach()
+    stopAuth?.()
+  }
+}
+
+export function startGuestSync(userId: string): () => void {
+  return subscribeWhenAuthed((fb, { collection, query, where, onSnapshot }) => {
+    const unsubs: Array<() => void> = []
+
+    const sosUnsub = onSnapshot(
+      query(collection(fb.db, 'sos'), where('userId', '==', userId)),
+      { includeMetadataChanges: true },
+      (snap) => {
+        mergeSosSnapshot(snap)
+        setCloudState(snap.metadata.fromCache ? 'offline' : 'live')
+      },
+      () => setCloudState('offline')
+    )
+    unsubs.push(sosUnsub)
+
+    const syncStartTs = Date.now()
+    const preMergeLocalIds = new Set(
+      load<AppNotification[]>(notifKey(userId), []).map((n) => n.id)
+    )
+    const notifUnsub = onSnapshot(
+      query(collection(fb.db, 'notifications'), where('userId', '==', userId)),
+      { includeMetadataChanges: true },
+      (snap) => {
+        mergeNotifSnapshot(userId, snap)
+        snap.docChanges().forEach((change) => {
+          const data = change.doc.data() as AppNotification & { userId: string }
+          if (
+            change.type === 'added' &&
+            !change.doc.metadata.hasPendingWrites &&
+            data.createdAt > syncStartTs &&
+            !preMergeLocalIds.has(data.id)
+          ) {
+            void banner(data.title, data.body)
+          }
+        })
+        setCloudState(snap.metadata.fromCache ? 'offline' : 'live')
+      },
+      () => setCloudState('offline')
+    )
+    unsubs.push(notifUnsub)
+
+    // Your own passages, wherever they were booked.
+    unsubs.push(
+      onSnapshot(
+        query(collection(fb.db, 'bookings'), where('userId', '==', userId)),
+        (snap) => mergeBookingsSnapshot(userId, snap),
+        () => setCloudState('offline')
+      )
+    )
+
+    // Any party you belong to — the roster is authoritative in Firestore.
+    let partiesPrimed = false
+    unsubs.push(
+      onSnapshot(
+        query(collection(fb.db, 'parties'), where('memberIds', 'array-contains', userId)),
+        (snap) => {
+          mergePartiesSnapshot(snap, userId, partiesPrimed)
+          partiesPrimed = true
+        },
+        () => setCloudState('offline')
+      )
+    )
+
+    // The public directory + everyone's progress: what lets a party roster and
+    // the leaderboard show guests who signed up on a different device.
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'guests'),
+        (snap) => mergeGuestsSnapshot(snap),
+        () => setCloudState('offline')
+      )
+    )
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'progress'),
+        (snap) => mergeProgressSnapshot(snap, userId),
+        () => setCloudState('offline')
+      )
+    )
+
+    return unsubs
+  })
+}
+
+export function startConsoleSync(): () => void {
+  return subscribeWhenAuthed((fb, { collection, onSnapshot }) => {
+    const unsubs: Array<() => void> = []
+
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'sos'),
         { includeMetadataChanges: true },
         (snap) => {
           mergeSosSnapshot(snap)
@@ -499,130 +641,24 @@ export function startGuestSync(userId: string): () => void {
         },
         () => setCloudState('offline')
       )
-      unsubs.push(sosUnsub)
-
-      const syncStartTs = Date.now()
-      const preMergeLocalIds = new Set(
-        load<AppNotification[]>(notifKey(userId), []).map((n) => n.id)
-      )
-      const notifUnsub = onSnapshot(
-        query(collection(fb.db, 'notifications'), where('userId', '==', userId)),
-        { includeMetadataChanges: true },
-        (snap) => {
-          mergeNotifSnapshot(userId, snap)
-          snap.docChanges().forEach((change) => {
-            const data = change.doc.data() as AppNotification & { userId: string }
-            if (
-              change.type === 'added' &&
-              !change.doc.metadata.hasPendingWrites &&
-              data.createdAt > syncStartTs &&
-              !preMergeLocalIds.has(data.id)
-            ) {
-              void banner(data.title, data.body)
-            }
-          })
-          setCloudState(snap.metadata.fromCache ? 'offline' : 'live')
-        },
+    )
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'guests'),
+        (snap) => mergeGuestsSnapshot(snap),
         () => setCloudState('offline')
       )
-      unsubs.push(notifUnsub)
-
-      // Your own passages, wherever they were booked.
-      unsubs.push(
-        onSnapshot(
-          query(collection(fb.db, 'bookings'), where('userId', '==', userId)),
-          (snap) => mergeBookingsSnapshot(userId, snap),
-          () => setCloudState('offline')
-        )
+    )
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'scheduled'),
+        (snap) => mergeScheduledSnapshot(snap),
+        () => setCloudState('offline')
       )
+    )
 
-      // Any party you belong to — the roster is authoritative in Firestore.
-      let partiesPrimed = false
-      unsubs.push(
-        onSnapshot(
-          query(collection(fb.db, 'parties'), where('memberIds', 'array-contains', userId)),
-          (snap) => {
-            mergePartiesSnapshot(snap, userId, partiesPrimed)
-            partiesPrimed = true
-          },
-          () => setCloudState('offline')
-        )
-      )
-
-      // The public directory + everyone's progress: what lets a party roster and
-      // the leaderboard show guests who signed up on a different device.
-      unsubs.push(
-        onSnapshot(
-          collection(fb.db, 'guests'),
-          (snap) => mergeGuestsSnapshot(snap),
-          () => setCloudState('offline')
-        )
-      )
-      unsubs.push(
-        onSnapshot(
-          collection(fb.db, 'progress'),
-          (snap) => mergeProgressSnapshot(snap, userId),
-          () => setCloudState('offline')
-        )
-      )
-
-      if (disposed) unsubs.forEach((u) => u())
-    } catch {
-      setCloudState('offline')
-    }
+    return unsubs
   })
-
-  return () => {
-    disposed = true
-    unsubs.forEach((u) => u())
-  }
-}
-
-export function startConsoleSync(): () => void {
-  let disposed = false
-  const unsubs: Array<() => void> = []
-
-  void ensureFirebase().then(async (fb) => {
-    if (!fb || disposed) return
-    try {
-      const { collection, onSnapshot } = await import('firebase/firestore')
-
-      unsubs.push(
-        onSnapshot(
-          collection(fb.db, 'sos'),
-          { includeMetadataChanges: true },
-          (snap) => {
-            mergeSosSnapshot(snap)
-            setCloudState(snap.metadata.fromCache ? 'offline' : 'live')
-          },
-          () => setCloudState('offline')
-        )
-      )
-      unsubs.push(
-        onSnapshot(
-          collection(fb.db, 'guests'),
-          (snap) => mergeGuestsSnapshot(snap),
-          () => setCloudState('offline')
-        )
-      )
-      unsubs.push(
-        onSnapshot(
-          collection(fb.db, 'scheduled'),
-          (snap) => mergeScheduledSnapshot(snap),
-          () => setCloudState('offline')
-        )
-      )
-
-      if (disposed) unsubs.forEach((u) => u())
-    } catch {
-      setCloudState('offline')
-    }
-  })
-
-  return () => {
-    disposed = true
-    unsubs.forEach((u) => u())
-  }
 }
 
 // ── Write-through push functions (fire-and-forget, never throw) ───────────────

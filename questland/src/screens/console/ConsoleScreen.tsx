@@ -29,6 +29,16 @@ export default function ConsoleScreen() {
     document.body.classList.add('console-mode')
     // A cached staff session is only good while Firebase still vouches for it.
     void revalidateStaff().then(() => setStaff(currentStaff()))
+    return () => {
+      document.body.classList.remove('console-mode')
+    }
+  }, [])
+
+  // Everything here is a staff power, so none of it may start before sign-in.
+  // Reading the calls board or the schedule queue as the anonymous bootstrap
+  // session is refused outright, and a refused listener never recovers.
+  useEffect(() => {
+    if (!staff) return
     const stopSync = startConsoleSync()
     // Fire anything already overdue the moment the console opens, then poll.
     void fireDueSchedules()
@@ -36,11 +46,10 @@ export default function ConsoleScreen() {
       void fireDueSchedules()
     }, 15000)
     return () => {
-      document.body.classList.remove('console-mode')
       stopSync()
       window.clearInterval(interval)
     }
-  }, [])
+  }, [staff?.uid])
 
   if (!staff) {
     return <StaffGate onSignedIn={setStaff} />
