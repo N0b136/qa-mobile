@@ -49,7 +49,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,png,svg,webp,jpg,jpeg,ico,woff2}'],
+        globPatterns: ['**/*.{js,css,html,png,svg,webp,jpg,jpeg,ico,woff2,mp4}'],
         // Station card master PNGs (public/assets/stations/*.png) are source
         // art only — the app requests the optimized .webp siblings at
         // runtime, so keep the multi-MB masters out of the precache glob.

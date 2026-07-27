@@ -363,6 +363,39 @@ a.card:hover,
   font-family: var(--font-display);
 }
 
+/* gate-opening intro reveal — see GateIntro.tsx / Shell.tsx */
+@keyframes qa-shield-off {
+  to {
+    visibility: hidden;
+  }
+}
+@keyframes qa-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes qa-ui-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes qa-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* notification-badge pop — mechanical scale-in, no bounce/overshoot */
 @keyframes pop-bounce {
   from {
