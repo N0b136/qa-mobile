@@ -205,7 +205,7 @@ export default function MapScreen() {
     <div
       style={{
         position: 'fixed',
-        top: 'var(--topbar-height)',
+        top: 'calc(var(--install-banner-height) + var(--topbar-height))',
         bottom: 'calc(var(--nav-height) + var(--safe-bottom))',
         left: '50%',
         transform: 'translateX(-50%)',

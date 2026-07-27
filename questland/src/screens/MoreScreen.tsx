@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAppTick } from '../hooks/useAppTick'
 import { useInstallPrompt } from '../hooks/useInstallPrompt'
+import { InstallStepsDialog } from '../components/InstallBanner'
 import { currentUser, signOut } from '../services/authService'
 import { levelFor, totalXp } from '../services/progressService'
-import { Badge, Button, Card, Dialog, Icon } from '../ui'
+import { Badge, Button, Card, Icon } from '../ui'
 
 const MENU = [
   { to: '/leaderboard', label: 'Standings', icon: 'trophy' },
@@ -104,32 +105,7 @@ export default function MoreScreen() {
         Questland Adventures — pitch demo
       </p>
 
-      {showIosSteps ? (
-        <Dialog
-          title="Add to home screen"
-          onClose={() => setShowIosSteps(false)}
-          footer={
-            <Button variant="primary" onClick={() => setShowIosSteps(false)}>
-              Got it
-            </Button>
-          }
-        >
-          <div className="stack" style={{ gap: 14 }}>
-            <div className="row" style={{ gap: 10 }}>
-              <Icon name="share" size={20} style={{ color: 'var(--text-gold)', flexShrink: 0 }} />
-              <span>
-                Tap the <strong>Share</strong> control in Safari&apos;s toolbar.
-              </span>
-            </div>
-            <div className="row" style={{ gap: 10 }}>
-              <Icon name="square-plus" size={20} style={{ color: 'var(--text-gold)', flexShrink: 0 }} />
-              <span>
-                Choose <strong>Add to Home Screen</strong>, then confirm.
-              </span>
-            </div>
-          </div>
-        </Dialog>
-      ) : null}
+      {showIosSteps ? <InstallStepsDialog onClose={() => setShowIosSteps(false)} /> : null}
     </div>
   )
 }

@@ -29,14 +29,14 @@ export default function TopBar() {
       className="row row--between"
       style={{
         position: 'fixed',
-        top: 0,
+        top: 'var(--install-banner-height)',
         left: '50%',
         transform: 'translateX(-50%)',
         width: '100%',
         maxWidth: 480,
-        height: 'calc(var(--topbar-height) + var(--safe-top))',
+        height: 'calc(var(--topbar-height) + var(--chrome-safe-top))',
         padding: '0 14px',
-        paddingTop: 'var(--safe-top)',
+        paddingTop: 'var(--chrome-safe-top)',
         background: 'var(--parchment-card)',
         borderBottom: '1px solid var(--border-hairline)',
         zIndex: 50,
