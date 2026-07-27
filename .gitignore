@@ -15,6 +15,10 @@ content-intake/park-map-sample.svg
 scratch/
 *.log
 
+# Station card art masters — heavy source PNGs kept local only; the
+# optimized .webp siblings (tracked) are regenerated via `npm run stations`.
+questland/public/assets/stations/*.png
+
 # Business/financial — keep out of the repo
 content-intake/QA Revenue Model.docx
 
