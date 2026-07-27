@@ -3,11 +3,14 @@
 // config (isConfigured() === false) the firebase chunk is never fetched and
 // every cloud path is a silent no-op.
 //
-// Two kinds of session live on this Auth instance:
-//   • a REAL guest — email/password, uid === User.id, created by cloudAuth
-//   • an ANONYMOUS session — the fallback so the Back Office console (which has
-//     no guest account) and a signed-out phone can still read the comm lanes.
-// ensureFirebase() guarantees one or the other is present before it resolves.
+// One kind of session lives on this Auth instance: a REAL email/password
+// account — a guest (uid === User.id) or a staff member — created by cloudAuth.
+// There is deliberately NO anonymous fallback. It existed back when the console
+// had no account of its own and the comm lanes were open to any authenticated
+// caller; since staff accounts arrived, an anonymous session could read nothing
+// and own nothing, while being an identity anybody could mint from the public
+// web config. ensureFirebase() therefore resolves once Firebase has said
+// whether a session was restored — possibly none at all.
 
 import type { Auth } from 'firebase/auth'
 import type { Firestore } from 'firebase/firestore'
@@ -74,26 +77,24 @@ export function ensureFirebase(): Promise<FirebaseHandle | null> {
   fbPromise = (async () => {
     try {
       const { initializeApp } = await import('firebase/app')
-      const { getAuth, onAuthStateChanged, signInAnonymously } = await import('firebase/auth')
+      const { getAuth, onAuthStateChanged } = await import('firebase/auth')
       const { getFirestore } = await import('firebase/firestore')
 
       const app = initializeApp(FIREBASE_CONFIG)
       const auth = getAuth(app)
       currentAuth = auth
 
+      // Wait only for Firebase to say whether a session was restored. There is
+      // no anonymous fallback: every identity in this app is an email/password
+      // account, and an anonymous one — which anybody could mint from the
+      // public web config — would be an identity that owns nothing and is
+      // allowed nothing. Signed out simply means signed out.
       await new Promise<void>((resolve, reject) => {
         const unsub = onAuthStateChanged(
           auth,
-          (u) => {
+          () => {
             unsub()
-            if (u) {
-              resolve()
-            } else {
-              // No persisted session — take an anonymous one so reads still work.
-              signInAnonymously(auth)
-                .then(() => resolve())
-                .catch(reject)
-            }
+            resolve()
           },
           reject
         )
@@ -132,12 +133,16 @@ export function ensureFirebaseWithin(ms: number): Promise<FirebaseHandle | null>
   })
 }
 
-/** uid of whoever is signed in right now (anonymous included), or null. */
+/** uid of the signed-in account, or null. */
 export function authUid(): string | null {
   return currentAuth?.currentUser?.uid ?? null
 }
 
-/** true when the live Firebase session belongs to a real (non-anonymous) guest. */
+/**
+ * True when a real account is signed in. The anonymous check is belt and
+ * braces: this app never mints an anonymous session, and the rules would
+ * refuse one anyway.
+ */
 export function hasRealAuth(): boolean {
   const u = currentAuth?.currentUser
   return !!u && !u.isAnonymous

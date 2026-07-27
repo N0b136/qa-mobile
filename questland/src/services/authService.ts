@@ -309,7 +309,7 @@ export function updateProfile(
  * A cloud account's local session is only good while Firebase agrees you are
  * signed in. If the Firebase session is gone (cleared storage, revoked account)
  * we drop the local one so the guest is sent back to the gate rather than
- * writing under an anonymous uid that the rules will reject.
+ * writing under no identity at all, which the rules will reject.
  *
  * Deliberately conservative: local-only accounts are never touched, and an
  * unreachable cloud is never treated as a signed-out cloud.

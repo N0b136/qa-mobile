@@ -9,7 +9,10 @@ import { getUserParty, leaveParty, listParties } from './partyService'
 import { createBooking } from './bookingService'
 import { ARRIVAL_SLOTS } from '../content/bookingTiers'
 import * as notificationService from './notificationService'
+import { getEpisode } from '../content/quests'
+import { QUEST_START, VILLAGE_PLACE } from '../content/stationMap'
 import { createSos } from './sosService'
+import { clearPresenceFor, seedPresence } from './presenceService'
 import * as cloudSync from './cloudSync'
 
 const USERS_KEY = 'ql:users'
@@ -39,6 +42,7 @@ const CAST_USERS: User[] = [
   { id: 'demo-wren', email: 'demo-wren@questia.test', passHash: 'x', name: 'Wren Calder', avatar: 'feather', createdAt: Date.now(), orgId: 'alehiim' },
   { id: 'demo-sable', email: 'demo-sable@questia.test', passHash: 'x', name: 'Sable Ashworth', avatar: 'trees', createdAt: Date.now(), orgId: 'elm' },
   { id: 'demo-thorn', email: 'demo-thorn@questia.test', passHash: 'x', name: 'Thorn Vale', avatar: 'swords', createdAt: Date.now(), orgId: 'rangers' },
+  { id: 'demo-quill', email: 'demo-quill@questia.test', passHash: 'x', name: 'Quill Amberly', avatar: 'feather', createdAt: Date.now(), orgId: 'alehiim' },
 ]
 
 // Total completed episodes per cast member: bracken 12, wren 7, sable 20, thorn 3.
@@ -47,6 +51,7 @@ const CAST_PROGRESS: Record<string, ProgressMap> = {
   'demo-wren': { alehiim: episodeIds('ah', 7) },
   'demo-sable': { rangers: episodeIds('rg', 10), elm: episodeIds('el', 10) },
   'demo-thorn': { rangers: episodeIds('rg', 3) },
+  'demo-quill': { alehiim: episodeIds('ah', 2) },
 }
 
 export async function seedDemoWorld(currentUserId: string): Promise<void> {
@@ -115,6 +120,123 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
   // One open call for aid so the console has something to dispatch.
   createSos('demo-sable', 'emergency', { zoneId: 'st-06', message: 'Lost the trail past the old oak.' })
 
+  // Put the cast on the chart so the console's stations board opens with a park
+  // in motion: Lantern Circle standing at a station, and a lone Ranger who
+  // checked in twenty minutes ago and so reads as en route.
+  const now = Date.now()
+  const lantern = {
+    partyId: LANTERN_PARTY_ID,
+    partyName: 'Lantern Circle',
+    partyMemberNames: ['Sable Ashworth', 'Thorn Vale'],
+    byUserId: 'demo-sable',
+    byName: 'Sable Ashworth',
+  }
+  // Lantern Circle is standing at a station mid-episode; Ashen Vanguard took
+  // their quest at the chief's house twenty minutes ago, so they read as en
+  // route; and one lone traveller has only just come through the gate.
+  seedPresence([
+    {
+      ...lantern,
+      userId: 'demo-sable',
+      guestName: 'Sable Ashworth',
+      kind: 'station',
+      stationId: 'st-06',
+      placeName: "Brigand's Hideout",
+      at: now - 4 * 60 * 1000,
+      orgId: 'elm',
+      orgName: 'Order of the Elm',
+      episodeId: 'el-04',
+      episodeNumber: 4,
+      episodeTitle: getEpisode('el-04')?.title,
+      stationsDone: 3,
+      stationsTotal: 7,
+      nextStationId: 'st-12',
+      nextStationName: 'Shadetree Hollow',
+    },
+    {
+      ...lantern,
+      userId: 'demo-thorn',
+      guestName: 'Thorn Vale',
+      kind: 'station',
+      stationId: 'st-06',
+      placeName: "Brigand's Hideout",
+      at: now - 4 * 60 * 1000,
+      orgId: 'elm',
+      orgName: 'Order of the Elm',
+      episodeId: 'el-04',
+      episodeNumber: 4,
+      episodeTitle: getEpisode('el-04')?.title,
+      stationsDone: 3,
+      stationsTotal: 7,
+      nextStationId: 'st-12',
+      nextStationName: 'Shadetree Hollow',
+    },
+    {
+      userId: 'demo-bracken',
+      guestName: 'Bracken Hale',
+      kind: 'start',
+      stationId: QUEST_START.id,
+      placeName: QUEST_START.name,
+      at: now - 20 * 60 * 1000,
+      partyId: VANGUARD_PARTY_ID,
+      partyName: 'Ashen Vanguard',
+      partyMemberNames: [getUser(currentUserId)?.name ?? 'You', 'Bracken Hale', 'Wren Calder'],
+      orgId: 'rangers',
+      orgName: 'Rangers of Questia',
+      episodeId: 'rg-07',
+      episodeNumber: 7,
+      episodeTitle: getEpisode('rg-07')?.title,
+      stationsDone: 0,
+      stationsTotal: 7,
+      nextStationId: 'st-16',
+      nextStationName: 'Story Oak',
+      byUserId: 'demo-bracken',
+      byName: 'Bracken Hale',
+    },
+    {
+      userId: 'demo-wren',
+      guestName: 'Wren Calder',
+      kind: 'start',
+      stationId: QUEST_START.id,
+      placeName: QUEST_START.name,
+      at: now - 20 * 60 * 1000,
+      partyId: VANGUARD_PARTY_ID,
+      partyName: 'Ashen Vanguard',
+      partyMemberNames: [getUser(currentUserId)?.name ?? 'You', 'Bracken Hale', 'Wren Calder'],
+      orgId: 'rangers',
+      orgName: 'Rangers of Questia',
+      episodeId: 'rg-07',
+      episodeNumber: 7,
+      episodeTitle: getEpisode('rg-07')?.title,
+      stationsDone: 0,
+      stationsTotal: 7,
+      nextStationId: 'st-16',
+      nextStationName: 'Story Oak',
+      byUserId: 'demo-bracken',
+      byName: 'Bracken Hale',
+    },
+    // A lone traveller who has only just come through the gate: still in the
+    // village, no quest taken yet.
+    {
+      userId: 'demo-quill',
+      guestName: 'Quill Amberly',
+      kind: 'village',
+      stationId: VILLAGE_PLACE.id,
+      placeName: VILLAGE_PLACE.name,
+      at: now - 6 * 60 * 1000,
+      orgId: 'alehiim',
+      orgName: 'Hearers of the Alehiim',
+      episodeId: 'ah-03',
+      episodeNumber: 3,
+      episodeTitle: getEpisode('ah-03')?.title,
+      stationsDone: 0,
+      stationsTotal: 7,
+      nextStationName: 'The Chief’s House',
+      byUserId: 'demo-quill',
+      byName: 'Quill Amberly',
+    },
+  ])
+
   // Publish the cast to the console's guest roster. save(USERS_KEY, ...) never
   // triggers a guest push, so without this the roster would never see them.
   // Runs last so pushGuestProfile derives the right level (progress saved above)
@@ -132,10 +254,17 @@ export function resetDemoData(currentUserId: string): void {
   save(USERS_KEY, listUsers().filter((u) => !u.id.startsWith('demo-')))
 
   Object.keys(localStorage).forEach((k) => {
-    if (/^ql:progress:demo-/.test(k) || /^ql:notifications:demo-/.test(k)) {
+    if (
+      /^ql:progress:demo-/.test(k) ||
+      /^ql:notifications:demo-/.test(k) ||
+      /^ql:stations:demo-/.test(k)
+    ) {
       localStorage.removeItem(k)
     }
   })
+
+  // Take everybody off the chart, cast and host alike.
+  clearPresenceFor([...CAST_USERS.map((u) => u.id), currentUserId])
 
   const user = getUser(currentUserId)
   save(PARTIES_KEY, listParties().filter((p) => !p.id.startsWith('demo-')))
@@ -144,6 +273,7 @@ export function resetDemoData(currentUserId: string): void {
   }
 
   save(progressKey(currentUserId), {})
+  save(`ql:stations:${currentUserId}`, {})
   save(`ql:bookings:${currentUserId}`, [])
   save(`ql:notifications:${currentUserId}`, [])
 

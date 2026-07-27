@@ -2,9 +2,16 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useAppTick } from '../hooks/useAppTick'
 import { currentUser } from '../services/authService'
-import { currentEpisode, validateQrText, validateStaffCode } from '../services/progressService'
+import {
+  currentEpisode,
+  stationsDone,
+  validateQrText,
+  validateStaffCode,
+} from '../services/progressService'
+import { checkIn, presenceFor, statusOf, windowLeft } from '../services/presenceService'
 import { getOrg } from '../content/orgs'
 import { stationsFor } from '../content/stations'
+import type { Station } from '../content/types'
 import { useToast } from '../components/Toast'
 import { QrScanner } from '../components/QrScanner'
 import { Badge, Button, Card, Icon, IconButton, Input, Ornament, Tag } from '../ui'
@@ -42,6 +49,27 @@ export default function CheckInScreen() {
     navigate(`/quests/${org!.id}`)
   }
 
+  // Tapping a station is the ordinary way through an episode: seven stations,
+  // seven check-ins, and the seventh seals it. The Guide's code below stays as
+  // the override for a marker that will not read.
+  function handleStationCheckIn(station: Station) {
+    const outcome = checkIn(user!.id, station.id, { orgId: org!.id })
+    if (!outcome) return
+
+    show({
+      title: `Checked in — ${station.name}`,
+      body: outcome.carried.length ? `${outcome.partyName} checked in with you.` : undefined,
+      icon: 'stamp',
+    })
+
+    const credit = outcome.credit
+    if (credit?.completion?.ok) {
+      finishOk(credit.completion)
+    } else if (credit?.repeat) {
+      show({ title: 'Already sealed here', icon: 'stamp' })
+    }
+  }
+
   function handleStaffCode() {
     const result = validateStaffCode(user!.id, org!.id, code)
     if (result.ok) {
@@ -75,6 +103,10 @@ export default function CheckInScreen() {
   }
 
   const stations = stationsFor(ep.id)
+  const done = stationsDone(user.id, ep.id)
+  const here = presenceFor(user.id)
+  const hereId = here && statusOf(here) === 'at-station' ? here.stationId : null
+  const minutesLeft = here ? Math.max(1, Math.ceil(windowLeft(here) / 60000)) : 0
 
   return (
     <div className="screen">
@@ -122,20 +154,57 @@ export default function CheckInScreen() {
         {ep.tagline}
       </Card>
 
-      <h2 className="section-title" style={{ textTransform: 'uppercase', letterSpacing: 'var(--tracking-display)' }}>
-        Stations on this episode
-      </h2>
-      <div className="stack">
-        {stations.map((st) => (
-          <div key={st.id} className="row" style={{ gap: 10 }}>
-            <span style={{ color: 'var(--text-gold)', display: 'inline-flex', flexShrink: 0 }}>
-              <Icon name={STATION_ICON[st.type] ?? 'map-pin'} size={20} />
-            </span>
-            <span style={{ flex: 1 }}>{st.name}</span>
-            <Tag>{st.type}</Tag>
-          </div>
-        ))}
+      <div className="row row--between" style={{ marginTop: 18, alignItems: 'baseline' }}>
+        <h2
+          className="section-title"
+          style={{ margin: 0, textTransform: 'uppercase', letterSpacing: 'var(--tracking-display)' }}
+        >
+          Stations on this episode
+        </h2>
+        <span style={{ font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
+          {done.length} of {stations.length}
+        </span>
       </div>
+
+      <div className="stack" style={{ marginTop: 10 }}>
+        {stations.map((st) => {
+          const sealed = done.includes(st.id)
+          const standing = hereId === st.id
+          return (
+            <div key={st.id} className="row" style={{ gap: 10 }}>
+              <span
+                style={{
+                  color: sealed ? 'var(--text-gold)' : 'var(--text-muted)',
+                  display: 'inline-flex',
+                  flexShrink: 0,
+                }}
+              >
+                <Icon name={sealed ? 'stamp' : (STATION_ICON[st.type] ?? 'map-pin')} size={20} />
+              </span>
+              <span style={{ flex: 1, color: sealed ? 'var(--text-body)' : 'var(--text-muted)' }}>
+                {st.name}
+                {standing ? (
+                  <span style={{ display: 'block', font: 'var(--body-sm)', color: 'var(--text-gold)' }}>
+                    You are here — {minutesLeft} min left
+                  </span>
+                ) : null}
+              </span>
+              {sealed ? (
+                <Tag icon="stamp">Sealed</Tag>
+              ) : (
+                <Button size="sm" variant="ghost" icon="stamp" onClick={() => handleStationCheckIn(st)}>
+                  Check in
+                </Button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <p style={{ marginTop: 10, font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
+        Tap a station as you reach it — on this list or on the chart. Walk all seven and the episode
+        seals itself. A party checks in together.
+      </p>
 
       <Ornament style={{ margin: '20px 0' }} />
 
@@ -150,6 +219,9 @@ export default function CheckInScreen() {
         }}
         error={codeError}
       />
+      <p style={{ marginTop: 6, font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
+        A Guide can seal the whole episode at once if a marker will not read.
+      </p>
       <Button
         fullWidth
         size="lg"

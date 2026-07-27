@@ -63,11 +63,12 @@ Firebase Auth user as well stops them signing in at all.
 
 **Can:** read the whole calls board and dispatch or resolve any call; send word
 to any guest, party or order; create, fire and cancel scheduled sends; read the
-guest directory.
+guest directory; watch the stations board (who is checked in where).
 
 **Cannot:** read any guest's `accounts` doc (nobody but the guest can — that is
 the only place an email is stored), read a guest's bookings, or alter anyone's
-progress or party membership.
+progress, party membership or station check-ins. Presence is written by the
+guest's own device only — even staff cannot place somebody at a station.
 
 ## If a guest signs in to the console
 

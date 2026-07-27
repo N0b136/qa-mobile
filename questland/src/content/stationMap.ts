@@ -48,6 +48,31 @@ export const STATION_COORDS: Record<string, { x: number; y: number }> = {
   'st-21': { x: 0.915, y: 0.873 }, // ElmRoot (Elm base)
 }
 
+/**
+ * The village chief's house — where every quest is given out, whichever order
+ * you walk for. It is not one of the canon 21 stations (it earns no seal and is
+ * not on any episode's rotation), so it lives here rather than in stations.ts;
+ * checking in marks the start of a walk and holds you for five minutes.
+ *
+ * SYNTHETIC PIN: the generated art does not label it. Placed inside the Queston
+ * cluster between the village mark and the tavern — nudge the coords if the
+ * house should sit on a particular roof.
+ */
+export const QUEST_START = {
+  id: 'st-chief',
+  name: "The Chief's House",
+  blurb: 'The chief hands out the day’s quest here. Take it before you walk.',
+  icon: 'home',
+  x: 0.845,
+  y: 0.175,
+}
+
+/** Village of Queston — the hub a guest occupies between the gate and the trail. */
+export const VILLAGE_PLACE = {
+  id: 'village',
+  name: 'Village of Queston',
+}
+
 // Amenity POIs — info-only, no check-in.
 export const MAP_LANDMARKS: MapLandmark[] = [
   {

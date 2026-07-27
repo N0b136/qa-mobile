@@ -9,6 +9,8 @@ import { ORGS, getOrg } from '../content/orgs'
 import ProgressBar from '../components/ProgressBar'
 import { useToast } from '../components/Toast'
 import { Badge, Button, Card, Dialog, Icon, Input } from '../ui'
+import { isTracked, placeNameFor, presenceFor, statusOf, windowLeft } from '../services/presenceService'
+import { romanNumeral } from './questIcons'
 
 // content/orgs.ts still carries an emoji `sigil` field (data-level purge is a
 // separate later pass) — this screen derives a Lucide glyph per org id instead.
@@ -201,6 +203,7 @@ export default function PartyScreen() {
                         </div>
                         <Badge>Lv {levelFor(xp)}</Badge>
                       </div>
+                      <MemberWhereabouts memberId={member.id} />
                     </div>
                   </div>
                   <div className="stack" style={{ gap: 8, marginTop: 12 }}>
@@ -250,6 +253,46 @@ export default function PartyScreen() {
         >
           <p>You&apos;ll need a fresh invite code to rejoin {party?.name ?? 'this party'} later.</p>
         </Dialog>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * Where a party member is and what they are walking, read straight off their
+ * presence record — the same package the Back Office sees.
+ */
+function MemberWhereabouts({ memberId }: { memberId: string }) {
+  const p = presenceFor(memberId)
+  if (!p || !isTracked(p)) return null
+
+  const status = statusOf(p)
+  const place = placeNameFor(p)
+  const mins = Math.max(1, Math.ceil(windowLeft(p) / 60000))
+
+  const where =
+    status === 'village'
+      ? `In the ${place}`
+      : status === 'en-route'
+        ? `En route from ${place}`
+        : `At ${place} — ${mins} min left`
+
+  const walk =
+    p.episodeNumber && p.stationsTotal
+      ? `Episode ${romanNumeral(p.episodeNumber)} · ${p.stationsDone ?? 0} of ${p.stationsTotal}`
+      : null
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div className="row muted" style={{ gap: 6, fontSize: 12 }}>
+        <Icon name={status === 'en-route' ? 'footprints' : status === 'village' ? 'castle' : 'map-pin'} size={12} />
+        {where}
+      </div>
+      {walk ? (
+        <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+          {walk}
+          {p.nextStationName ? ` · next ${p.nextStationName}` : ''}
+        </div>
       ) : null}
     </div>
   )
