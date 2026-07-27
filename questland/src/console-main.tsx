@@ -35,10 +35,19 @@ import './theme/ds/base.css'
 import './theme/tokens.css'
 import './theme/global.css'
 
+import { ToastProvider } from './components/Toast'
 import ConsoleScreen from './screens/console/ConsoleScreen'
 
 registerSW({ immediate: true })
 
-// No Router: every console screen is plain component state, so there is no
-// route to match and nothing to keep in the URL.
-createRoot(document.getElementById('root')!).render(<ConsoleScreen />)
+// ToastProvider is required, not decoration: SendWord calls useToast(), which
+// throws without it. In the guest app App.tsx wraps the whole route tree, so
+// the console inherited one for free — mounting it standalone does not.
+//
+// No Router, though: every console screen is plain component state, so there
+// is no route to match and nothing to keep in the URL.
+createRoot(document.getElementById('root')!).render(
+  <ToastProvider>
+    <ConsoleScreen />
+  </ToastProvider>
+)
