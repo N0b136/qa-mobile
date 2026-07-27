@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { signIn, signUp } from '../services/authService'
+import { MIN_PASSWORD_LENGTH } from '../services/cloudAuth'
 import { Button, Card, Input } from '../ui'
 
 type Tab = 'signin' | 'signup'
@@ -34,8 +35,8 @@ export default function AuthScreen() {
         setError('Those passwords do not match.')
         return
       }
-      if (password.length < 4) {
-        setError('Choose a password with at least 4 characters.')
+      if (password.length < MIN_PASSWORD_LENGTH) {
+        setError(`Choose a password with at least ${MIN_PASSWORD_LENGTH} characters.`)
         return
       }
     }

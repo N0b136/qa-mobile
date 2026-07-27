@@ -51,7 +51,7 @@ const CAST_PROGRESS: Record<string, ProgressMap> = {
   'demo-thorn': { rangers: episodeIds('rg', 3) },
 }
 
-export function seedDemoWorld(currentUserId: string): void {
+export async function seedDemoWorld(currentUserId: string): Promise<void> {
   // Cast — merge into ql:users, replacing any prior demo record, keeping real users.
   const castIds = new Set(CAST_USERS.map((u) => u.id))
   save(USERS_KEY, [...listUsers().filter((u) => !castIds.has(u.id)), ...CAST_USERS])
@@ -74,9 +74,11 @@ export function seedDemoWorld(currentUserId: string): void {
   // The host must end up in exactly one party. If they're already in a real
   // party (not the demo Vanguard from a prior seed), leave it first so we
   // don't corrupt /party and leaderboard state by belonging to two at once.
+  // Awaited: leaveParty now settles a cloud write before touching the local
+  // mirror, and its local write would otherwise land after the seed below.
   const existingParty = getUserParty(currentUserId)
   if (existingParty && existingParty.id !== VANGUARD_PARTY_ID) {
-    leaveParty(currentUserId)
+    await leaveParty(currentUserId)
   }
 
   // Parties — merge, replacing the demo parties by id, keeping real ones.

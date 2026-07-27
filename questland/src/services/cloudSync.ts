@@ -15,17 +15,23 @@ import type {
 } from 'firebase/firestore'
 import type {
   AppNotification,
+  Booking,
   NotificationType,
+  Party,
+  ProgressMap,
   SosRequest,
   SosStatus,
   User,
 } from '../types'
 import { load, save } from './store'
 import { uid } from './ids'
-import { ensureFirebase, setCloudState } from './firebase'
+import { ensureFirebase, ensureFirebaseWithin, setCloudState } from './firebase'
 import { totalXp, levelFor } from './progressService'
 import { getUserParty } from './partyService'
 import { getOrg } from '../content/orgs'
+
+/** Party writes happen behind a spinner, so they get the same deadline as auth. */
+const PARTY_TIMEOUT_MS = 10_000
 
 // ── Shared / pure types (console layer imports these from here) ───────────────
 
@@ -62,12 +68,26 @@ export interface ScheduledSend {
   count?: number
 }
 
+/** Outcome of a party write that had to be adjudicated by the server. */
+export type PartyResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; reason: 'not-found' }
+  | { ok: false; reason: 'unavailable' }
+
 // Local mirror keys
 const SOS_KEY = 'ql:sos'
 const SOS_META_KEY = 'ql:sosMeta'
 const GUEST_DIR_KEY = 'ql:guestDirectory'
 const SCHEDULED_KEY = 'ql:scheduled'
+const USERS_KEY = 'ql:users'
+const PARTIES_KEY = 'ql:parties'
 const notifKey = (userId: string) => `ql:notifications:${userId}`
+const progressKey = (userId: string) => `ql:progress:${userId}`
+const bookingsKey = (userId: string) => `ql:bookings:${userId}`
+
+function normalizePartyCode(code: string): string {
+  return code.trim().toUpperCase().replace(/\s+/g, '')
+}
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────
 
@@ -296,6 +316,115 @@ function mergeGuestsSnapshot(snap: QuerySnapshot<DocumentData>): void {
   })
   dir.sort((a, b) => b.updatedAt - a.updatedAt)
   if (!deepEqual(dir, load<GuestDoc[]>(GUEST_DIR_KEY, []))) save(GUEST_DIR_KEY, dir)
+  mergeGuestShadows(dir)
+}
+
+/**
+ * Mirrors the public directory into ql:users as read-only shells, so a party
+ * roster or the leaderboard can name and rank guests whose accounts were made on
+ * another device. A shell never overwrites a real local account (yours, or the
+ * seeded demo cast) — those records own their own id.
+ */
+function mergeGuestShadows(dir: GuestDoc[]): void {
+  const users = load<User[]>(USERS_KEY, [])
+  const byId = new Map(users.map((u) => [u.id, u] as const))
+  let changed = false
+
+  for (const g of dir) {
+    const existing = byId.get(g.id)
+    if (existing && !existing.remote) continue
+    const shell: User = {
+      id: g.id,
+      email: '',
+      name: g.name,
+      avatar: g.avatar ?? 'shield',
+      createdAt: existing?.createdAt ?? 0,
+      remote: true,
+      updatedAt: g.updatedAt,
+    }
+    if (g.orgId) shell.orgId = g.orgId
+    if (g.partyId) shell.partyId = g.partyId
+    if (!existing || !deepEqual(existing, shell)) {
+      byId.set(g.id, shell)
+      changed = true
+    }
+  }
+
+  if (changed) save(USERS_KEY, Array.from(byId.values()))
+}
+
+function mergePartiesSnapshot(snap: QuerySnapshot<DocumentData>): void {
+  const local = load<Party[]>(PARTIES_KEY, [])
+  const byId = new Map(local.map((p) => [p.id, p] as const))
+
+  snap.docChanges().forEach((c) => {
+    if (c.type === 'removed') byId.delete(c.doc.id)
+  })
+
+  snap.forEach((d) => {
+    const data = d.data() as Party
+    const party: Party = {
+      id: data.id ?? d.id,
+      code: data.code,
+      name: data.name,
+      memberIds: data.memberIds ?? [],
+      cloud: true,
+    }
+    if (data.createdAt !== undefined) party.createdAt = data.createdAt
+    if (data.updatedAt !== undefined) party.updatedAt = data.updatedAt
+    byId.set(party.id, party)
+  })
+
+  const merged = Array.from(byId.values())
+  if (!deepEqual(merged, local)) save(PARTIES_KEY, merged)
+}
+
+/**
+ * Progress is monotonic — an episode is only ever added — so your own doc merges
+ * as a UNION and a stale snapshot can never erase a completion you just earned.
+ * Other guests' docs are taken as-is; this device never writes them.
+ */
+function mergeProgressSnapshot(snap: QuerySnapshot<DocumentData>, selfId: string): void {
+  snap.forEach((d) => {
+    const data = d.data() as { id?: string; map?: ProgressMap }
+    const id = data.id ?? d.id
+    const incoming = data.map ?? {}
+    const localMap = load<ProgressMap>(progressKey(id), {})
+
+    let next: ProgressMap
+    if (id === selfId) {
+      next = { ...localMap }
+      for (const orgId of Object.keys(incoming)) {
+        next[orgId] = Array.from(new Set([...(localMap[orgId] ?? []), ...incoming[orgId]]))
+      }
+    } else {
+      next = incoming
+    }
+    if (!deepEqual(next, localMap)) save(progressKey(id), next)
+  })
+}
+
+function bookingStamp(b: Booking | undefined): number {
+  if (!b) return -1
+  return b.updatedAt ?? b.createdAt
+}
+
+function mergeBookingsSnapshot(userId: string, snap: QuerySnapshot<DocumentData>): void {
+  const local = load<Booking[]>(bookingsKey(userId), [])
+  const byId = new Map(local.map((b) => [b.id, b] as const))
+
+  snap.docChanges().forEach((c) => {
+    if (c.type === 'removed') byId.delete(c.doc.id)
+  })
+
+  snap.forEach((d) => {
+    const incoming = d.data() as Booking
+    const existing = byId.get(incoming.id)
+    if (bookingStamp(incoming) >= bookingStamp(existing)) byId.set(incoming.id, incoming)
+  })
+
+  const merged = Array.from(byId.values()).sort((a, b) => a.createdAt - b.createdAt)
+  if (!deepEqual(merged, local)) save(bookingsKey(userId), merged)
 }
 
 function mergeScheduledSnapshot(snap: QuerySnapshot<DocumentData>): void {
@@ -352,6 +481,41 @@ export function startGuestSync(userId: string): () => void {
         () => setCloudState('offline')
       )
       unsubs.push(notifUnsub)
+
+      // Your own passages, wherever they were booked.
+      unsubs.push(
+        onSnapshot(
+          query(collection(fb.db, 'bookings'), where('userId', '==', userId)),
+          (snap) => mergeBookingsSnapshot(userId, snap),
+          () => setCloudState('offline')
+        )
+      )
+
+      // Any party you belong to — the roster is authoritative in Firestore.
+      unsubs.push(
+        onSnapshot(
+          query(collection(fb.db, 'parties'), where('memberIds', 'array-contains', userId)),
+          (snap) => mergePartiesSnapshot(snap),
+          () => setCloudState('offline')
+        )
+      )
+
+      // The public directory + everyone's progress: what lets a party roster and
+      // the leaderboard show guests who signed up on a different device.
+      unsubs.push(
+        onSnapshot(
+          collection(fb.db, 'guests'),
+          (snap) => mergeGuestsSnapshot(snap),
+          () => setCloudState('offline')
+        )
+      )
+      unsubs.push(
+        onSnapshot(
+          collection(fb.db, 'progress'),
+          (snap) => mergeProgressSnapshot(snap, userId),
+          () => setCloudState('offline')
+        )
+      )
 
       if (disposed) unsubs.forEach((u) => u())
     } catch {
@@ -474,6 +638,189 @@ export function pushGuestProfile(user: User): void {
     try {
       const { doc, setDoc } = await import('firebase/firestore')
       await setDoc(doc(fb.db, 'guests', user.id), buildGuestDoc(user))
+    } catch {
+      // swallow
+    }
+  })
+}
+
+/**
+ * Unions local progress into progress/{userId} inside a transaction and writes
+ * the result back to both sides. Because episodes are only ever added, a union
+ * is always the correct resolution — this can neither lose a completion earned
+ * offline on this phone nor one earned earlier on another.
+ */
+export function pushProgress(userId: string): void {
+  void ensureFirebase().then(async (fb) => {
+    if (!fb) return
+    try {
+      const { doc, runTransaction } = await import('firebase/firestore')
+      const ref = doc(fb.db, 'progress', userId)
+
+      const union = await runTransaction(fb.db, async (tx) => {
+        const snap = await tx.get(ref)
+        const remote = snap.exists() ? ((snap.data() as { map?: ProgressMap }).map ?? {}) : {}
+        const localMap = load<ProgressMap>(progressKey(userId), {})
+        const merged: ProgressMap = { ...remote }
+        for (const orgId of Object.keys(localMap)) {
+          merged[orgId] = Array.from(new Set([...(remote[orgId] ?? []), ...localMap[orgId]]))
+        }
+        tx.set(ref, { id: userId, map: merged, updatedAt: Date.now() })
+        return merged
+      })
+
+      if (!deepEqual(union, load<ProgressMap>(progressKey(userId), {}))) {
+        save(progressKey(userId), union)
+      }
+    } catch {
+      // swallow
+    }
+  })
+}
+
+export function pushBooking(booking: Booking): void {
+  void ensureFirebase().then(async (fb) => {
+    if (!fb) return
+    try {
+      const { doc, setDoc } = await import('firebase/firestore')
+      await setDoc(doc(fb.db, 'bookings', booking.id), clean({ ...booking }))
+    } catch {
+      // swallow
+    }
+  })
+}
+
+/** One-shot upload of a whole local booking list — used after an account migration. */
+export function pushBookings(userId: string): void {
+  for (const booking of load<Booking[]>(bookingsKey(userId), [])) pushBooking(booking)
+}
+
+// ── Party writes (server-adjudicated) ────────────────────────────────────────
+//
+// A party's invite code is claimed in partyCodes/{CODE} inside a transaction, so
+// two phones generating the same 6-character code can never both keep it, and a
+// join is an O(1) lookup on that same doc rather than a scan.
+
+function partyFromDoc(data: Party): Party {
+  const party: Party = {
+    id: data.id,
+    code: data.code,
+    name: data.name,
+    memberIds: data.memberIds ?? [],
+    cloud: true,
+  }
+  if (data.createdAt !== undefined) party.createdAt = data.createdAt
+  if (data.updatedAt !== undefined) party.updatedAt = data.updatedAt
+  return party
+}
+
+/** Registers a party and claims its code atomically. `not-found` means the code was taken. */
+export async function createPartyDoc(party: Party): Promise<PartyResult<Party>> {
+  const fb = await ensureFirebaseWithin(PARTY_TIMEOUT_MS)
+  if (!fb) return { ok: false, reason: 'unavailable' }
+  try {
+    const { doc, runTransaction } = await import('firebase/firestore')
+    const code = normalizePartyCode(party.code)
+    const stored: Party = {
+      ...party,
+      code,
+      cloud: true,
+      createdAt: party.createdAt ?? Date.now(),
+      updatedAt: Date.now(),
+    }
+
+    const claimed = await runTransaction(fb.db, async (tx) => {
+      const codeRef = doc(fb.db, 'partyCodes', code)
+      if ((await tx.get(codeRef)).exists()) return false
+      tx.set(codeRef, { code, partyId: stored.id })
+      tx.set(doc(fb.db, 'parties', stored.id), {
+        id: stored.id,
+        code: stored.code,
+        name: stored.name,
+        memberIds: stored.memberIds,
+        createdAt: stored.createdAt,
+        updatedAt: stored.updatedAt,
+      })
+      return true
+    })
+    return claimed ? { ok: true, value: stored } : { ok: false, reason: 'not-found' }
+  } catch {
+    return { ok: false, reason: 'unavailable' }
+  }
+}
+
+/**
+ * Validates an invite code against Firestore and adds the guest to that party.
+ * Returns the party plus the roster as it stood BEFORE the join, so the caller
+ * can notify exactly the people who were already travelling together.
+ */
+export async function joinPartyDoc(
+  code: string,
+  userId: string
+): Promise<PartyResult<{ party: Party; previousMemberIds: string[] }>> {
+  const fb = await ensureFirebaseWithin(PARTY_TIMEOUT_MS)
+  if (!fb) return { ok: false, reason: 'unavailable' }
+  try {
+    const { doc, runTransaction } = await import('firebase/firestore')
+    const normalized = normalizePartyCode(code)
+
+    const result = await runTransaction(fb.db, async (tx) => {
+      const codeSnap = await tx.get(doc(fb.db, 'partyCodes', normalized))
+      if (!codeSnap.exists()) return null
+      const partyId = (codeSnap.data() as { partyId?: string }).partyId
+      if (!partyId) return null
+
+      const partyRef = doc(fb.db, 'parties', partyId)
+      const partySnap = await tx.get(partyRef)
+      if (!partySnap.exists()) return null
+
+      const data = partyFromDoc(partySnap.data() as Party)
+      const previousMemberIds = data.memberIds
+      const memberIds = previousMemberIds.includes(userId)
+        ? previousMemberIds
+        : [...previousMemberIds, userId]
+      const updatedAt = Date.now()
+      tx.update(partyRef, { memberIds, updatedAt })
+      return { party: { ...data, memberIds, updatedAt }, previousMemberIds }
+    })
+
+    return result ? { ok: true, value: result } : { ok: false, reason: 'not-found' }
+  } catch {
+    return { ok: false, reason: 'unavailable' }
+  }
+}
+
+/** Removes the guest; the last one out takes the party and its code with them. */
+export async function leavePartyDoc(partyId: string, userId: string): Promise<PartyResult<null>> {
+  const fb = await ensureFirebaseWithin(PARTY_TIMEOUT_MS)
+  if (!fb) return { ok: false, reason: 'unavailable' }
+  try {
+    const { doc, runTransaction } = await import('firebase/firestore')
+    await runTransaction(fb.db, async (tx) => {
+      const partyRef = doc(fb.db, 'parties', partyId)
+      const snap = await tx.get(partyRef)
+      if (!snap.exists()) return
+      const data = partyFromDoc(snap.data() as Party)
+      const memberIds = data.memberIds.filter((id) => id !== userId)
+      if (memberIds.length === 0) {
+        tx.delete(partyRef)
+        tx.delete(doc(fb.db, 'partyCodes', normalizePartyCode(data.code)))
+      } else {
+        tx.update(partyRef, { memberIds, updatedAt: Date.now() })
+      }
+    })
+    return { ok: true, value: null }
+  } catch {
+    return { ok: false, reason: 'unavailable' }
+  }
+}
+
+export function renamePartyDoc(partyId: string, name: string): void {
+  void ensureFirebase().then(async (fb) => {
+    if (!fb) return
+    try {
+      const { doc, updateDoc } = await import('firebase/firestore')
+      await updateDoc(doc(fb.db, 'parties', partyId), { name, updatedAt: Date.now() })
     } catch {
       // swallow
     }
