@@ -28,8 +28,20 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // A validated guest or staff member — NOT the anonymous bootstrap session.
+    //
+    // Anonymous is a fallback identity anybody can mint from the public web
+    // config, so it must never own data. Nothing in the app needs it to: a real
+    // guest signs in with email/password, a local-only fallback account has an
+    // id that is not a uid (so it could never satisfy an owner check anyway),
+    // and cloudSync refuses to attach a single listener until the session is
+    // non-anonymous. The anonymous session exists only to bootstrap Firebase.
+    function isRealUser() {
+      return signedIn() && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
     function isSelf(uid) {
-      return signedIn() && request.auth.uid == uid;
+      return isRealUser() && request.auth.uid == uid;
     }
 
     // Staff are an allowlist, not a claim the client can assert. exists() is a
@@ -39,22 +51,22 @@ service cloud.firestore {
     }
 
     function ownsExisting() {
-      return signedIn() && resource.data.userId == request.auth.uid;
+      return isRealUser() && resource.data.userId == request.auth.uid;
     }
 
     function ownsIncoming() {
-      return signedIn() && request.resource.data.userId == request.auth.uid;
+      return isRealUser() && request.resource.data.userId == request.auth.uid;
     }
 
     // The seeded demo cast. `demo-` ids cannot collide with a Firebase uid, so
     // these two grant nothing over a real guest's data — they exist only so the
     // presenter's /demo remote can stage a world. Drop them for production.
     function demoIncoming() {
-      return signedIn() && request.resource.data.userId.matches('demo-.*');
+      return isRealUser() && request.resource.data.userId.matches('demo-.*');
     }
 
     function demoExisting() {
-      return signedIn() && resource.data.userId.matches('demo-.*');
+      return isRealUser() && resource.data.userId.matches('demo-.*');
     }
 
     // The staff roster. Provisioned BY HAND from the Firebase console — no
@@ -81,7 +93,7 @@ service cloud.firestore {
     // a Firebase uid, so it grants nothing over a real guest's row.
     match /guests/{uid} {
       allow read: if signedIn();
-      allow write: if isSelf(uid) || (signedIn() && uid.matches('demo-.*'));
+      allow write: if isSelf(uid) || (isRealUser() && uid.matches('demo-.*'));
     }
 
     // Read-for-all so party rosters and the leaderboard can rank other guests;
@@ -97,16 +109,18 @@ service cloud.firestore {
       allow create: if ownsIncoming();
     }
 
-    // Station check-ins. Readable by every signed-in client — a party member's
+    // Station check-ins. Readable by every VALIDATED client — a party member's
     // phone needs the whole board to notice it has been carried along with the
-    // party, and the console's stations map reads all of it.
+    // party, and the console's park map reads all of it. Anonymous is excluded
+    // on both sides: these rows carry guest names and locations, and nothing in
+    // the app reads them before a real session exists.
     //
     // WRITE IS OWN-ROW ONLY, which is what makes party check-in safe: nobody can
     // plant another guest at a station. When one member taps in, each other
     // member's device adopts that check-in and writes its OWN row.
     match /presence/{uid} {
-      allow read: if signedIn();
-      allow write: if isSelf(uid) || (signedIn() && uid.matches('demo-.*'));
+      allow read: if isRealUser();
+      allow write: if isSelf(uid) || (isRealUser() && uid.matches('demo-.*'));
     }
 
     // ── Parties ─────────────────────────────────────────────────────────────
@@ -114,17 +128,17 @@ service cloud.firestore {
     // The code doc is the join lookup, so any signed-in guest may read it. It is
     // claimed on create and released when the last member leaves.
     match /partyCodes/{code} {
-      allow read, create, delete: if signedIn();
+      allow read, create, delete: if isRealUser();
     }
 
     match /parties/{partyId} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.auth.uid in request.resource.data.memberIds;
+      allow create: if isRealUser() && request.auth.uid in request.resource.data.memberIds;
 
       // A guest may add or remove ONLY themselves. Renaming is open to members
       // and must leave the roster untouched. Nobody can conscript or evict
       // anyone else.
-      allow update: if signedIn() && (
+      allow update: if isRealUser() && (
         request.resource.data.memberIds.toSet().difference(resource.data.memberIds.toSet())
           == [request.auth.uid].toSet()
         || resource.data.memberIds.toSet().difference(request.resource.data.memberIds.toSet())
@@ -134,7 +148,7 @@ service cloud.firestore {
       );
 
       // Only the last member out can strike the party.
-      allow delete: if signedIn() && resource.data.memberIds.toSet() == [request.auth.uid].toSet();
+      allow delete: if isRealUser() && resource.data.memberIds.toSet() == [request.auth.uid].toSet();
     }
 
     // ── Comm lanes (guest phone <-> Back Office console) ────────────────────
