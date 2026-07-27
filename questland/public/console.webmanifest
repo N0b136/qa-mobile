@@ -1,0 +1,27 @@
+{
+  "id": "questland-console",
+  "name": "Questland Back Office",
+  "short_name": "Back Office",
+  "description": "Warden and Guide console — calls for aid, sending word, and the guest roll.",
+  "theme_color": "#1A1A1C",
+  "background_color": "#121214",
+  "display": "standalone",
+  "start_url": "console.html",
+  "scope": "./",
+  "icons": [
+    { "src": "icons/console-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/console-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    {
+      "src": "icons/console-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/console-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

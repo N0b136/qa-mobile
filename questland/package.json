@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "icons": "node scripts/generate-icons.mjs",
+    "icons:console": "node scripts/generate-console-icons.mjs",
     "optimize:brand": "node scripts/optimize-brand.mjs",
     "stations": "node scripts/optimize-stations.mjs"
   },

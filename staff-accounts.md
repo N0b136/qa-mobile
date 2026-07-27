@@ -30,6 +30,29 @@ UID**. Fields:
 Repeat per staff member. The four canon personas are only presentation; the
 account and its `staff` doc are the real identity.
 
+## Installing the console on a home screen
+
+The Back Office installs as **its own app**, separate from the guest app, with
+its own icon — a gold Warden's shield on slate, rather than the gemstone Q.
+
+Open **`/console.html`** (for the Pages deploy, `https://n0b136.github.io/qa-mobile/console.html`)
+and install from there:
+
+- **Android / desktop Chrome or Edge** — the install control appears in the
+  address bar, or under the browser menu as *Install Questland Back Office*.
+- **iPhone / iPad** — Safari only: *Share* → *Add to Home Screen*. Chrome on iOS
+  cannot install web apps.
+
+The plain `/console` address still works and now forwards to `console.html`, so
+old bookmarks are fine. Install from `console.html` specifically, though:
+an app's identity comes from the manifest the page links, so installing while
+inside the guest app would install the *guest* app under a Back Office name.
+
+One caution: both apps share the same browser storage, because they are the same
+site. A device signed in to the console holds a staff Firebase session, which is
+not the session the guest app expects — so keep staff devices and guest devices
+separate rather than installing both on one phone.
+
 ## Removing a staff member
 
 Delete their `staff/{uid}` document. That revokes every staff power immediately

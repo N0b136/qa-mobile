@@ -22,7 +22,16 @@ import PartyScreen from './screens/PartyScreen'
 import LeaderboardScreen from './screens/LeaderboardScreen'
 import HelpScreen from './screens/HelpScreen'
 import DemoConsoleScreen from './screens/DemoConsoleScreen'
-import ConsoleScreen from './screens/console/ConsoleScreen'
+/**
+ * /console is kept for old bookmarks, but it hands over to console.html — the
+ * separate document that carries the Back Office manifest. Installing from
+ * inside the guest app would install the GUEST app, since the manifest a
+ * document links is what decides the app's identity.
+ */
+function ConsoleDoor() {
+  window.location.replace(`${import.meta.env.BASE_URL}console.html`)
+  return null
+}
 
 import { currentUser, reconcileSession } from './services/authService'
 import { useAppTick } from './hooks/useAppTick'
@@ -80,7 +89,7 @@ export default function App() {
           <Route path="notifications" element={<NotificationsScreen />} />
           <Route path="more" element={<MoreScreen />} />
         </Route>
-        <Route path="/console" element={<ConsoleScreen />} />
+        <Route path="/console" element={<ConsoleDoor />} />
         <Route path="*" element={<NotFoundRedirect />} />
       </Routes>
     </ToastProvider>
