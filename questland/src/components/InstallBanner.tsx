@@ -46,6 +46,8 @@ function InstallBannerBar({
   onDismiss: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const [ctaHover, setCtaHover] = useState(false)
+  const [ctaPress, setCtaPress] = useState(false)
 
   // Reserve room above the fixed TopBar (and inside .screen padding) for as
   // long as the banner is up; the CSS vars are cleared again on unmount.
@@ -82,48 +84,76 @@ function InstallBannerBar({
         display: 'flex',
         alignItems: 'center',
         gap: 10,
-        padding: '10px 12px',
+        padding: '10px 10px 10px 4px',
         paddingTop: 'calc(var(--safe-top) + 10px)',
-        background: 'var(--surface-card-raised)',
-        borderBottom: '1px solid var(--border-strong)',
+        // Gold metal band — the one place the app shouts. Gold stays metal
+        // (a struck gradient, never a flat fill), so the CTA inverts to carved
+        // stone rather than sitting gold-on-gold.
+        background: 'var(--gradient-gold)',
+        borderBottom: '1px solid var(--gold-900)',
         boxShadow: 'var(--shadow-md)',
       }}
     >
-      <IconButton icon="x" label="Dismiss install banner" size="sm" onClick={onDismiss} />
+      <IconButton
+        icon="x"
+        label="Dismiss install banner"
+        size="sm"
+        onClick={onDismiss}
+        style={{ color: 'var(--stone-900)', flexShrink: 0 }}
+      />
       <img
         src={`${import.meta.env.BASE_URL}icons/icon-192.png`}
         alt=""
         aria-hidden="true"
         style={{
-          width: 42,
-          height: 42,
+          width: 52,
+          height: 52,
           borderRadius: 'var(--radius-sm)',
-          border: '1px solid var(--border-hairline)',
+          border: '1px solid var(--gold-900)',
           flexShrink: 0,
         }}
       />
       <div style={{ minWidth: 0, flex: 1 }}>
         <div
           style={{
-            font: '700 var(--text-sm)/1.2 var(--font-display)',
+            font: '700 var(--text-md)/1.15 var(--font-display)',
             letterSpacing: 'var(--tracking-display-tight)',
             textTransform: 'uppercase',
-            color: 'var(--text-heading)',
+            color: 'var(--stone-950)',
           }}
         >
           Install Questland
         </div>
         <div
           style={{
-            font: '400 var(--text-xs)/1.35 var(--font-ui)',
-            color: 'var(--text-muted)',
-            marginTop: 2,
+            font: '600 var(--text-sm)/1.3 var(--font-ui)',
+            color: 'rgba(18,18,20,.78)',
+            marginTop: 3,
           }}
         >
-          Keep your map and passages a tap away, even offline.
+          Faster entry, even offline.
         </div>
       </div>
-      <Button size="sm" variant="primary" onClick={onGet} style={{ flexShrink: 0 }}>
+      <Button
+        size="lg"
+        variant="primary"
+        onClick={onGet}
+        onMouseEnter={() => setCtaHover(true)}
+        onMouseLeave={() => {
+          setCtaHover(false)
+          setCtaPress(false)
+        }}
+        onMouseDown={() => setCtaPress(true)}
+        onMouseUp={() => setCtaPress(false)}
+        style={{
+          flexShrink: 0,
+          background: ctaPress ? 'var(--stone-950)' : ctaHover ? 'var(--stone-700)' : 'var(--stone-900)',
+          color: 'var(--gold-200)',
+          border: '1px solid var(--stone-950)',
+          boxShadow: ctaPress ? 'var(--shadow-carve-in)' : 'var(--shadow-sm)',
+          transform: ctaPress ? 'translateY(1px)' : 'none',
+        }}
+      >
         Get
       </Button>
     </div>
