@@ -378,14 +378,22 @@ a.card:hover,
     opacity: 1;
   }
 }
+/* Rises via `top` (position: relative on the Outlet wrapper), not `transform`:
+   transform/translate/filter/perspective/etc on an ancestor becomes the
+   containing block for any `position: fixed` descendant (e.g. MapScreen's
+   fixed root), so a lingering — or even just transiently-animating —
+   transform on this wrapper resolves fixed screens against its near-zero
+   intrinsic height instead of the viewport and collapses them. `top` never
+   establishes a containing block, so this is safe for the whole animation
+   lifetime, not just after it settles. */
 @keyframes qa-ui-rise {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    top: 10px;
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    top: 0;
   }
 }
 @keyframes qa-scrim-in {
