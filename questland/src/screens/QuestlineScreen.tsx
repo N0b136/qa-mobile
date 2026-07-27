@@ -7,14 +7,17 @@ import { getOrg } from '../content/orgs'
 import { episodesFor } from '../content/quests'
 import { stationsFor } from '../content/stations'
 import type { Episode } from '../content/types'
-import { activeQuest } from '../services/presenceService'
+import { activeQuest, checkIn } from '../services/presenceService'
+import { QUEST_START } from '../content/stationMap'
+import { useToast } from '../components/Toast'
 import { ArchCard, Badge, Button, Dialog, Ornament, ProgressTrail, Seal } from '../ui'
 import type { TrailStep } from '../ui'
-import { METHOD_LABEL, ORG_SEAL_ART, romanNumeral } from './questIcons'
+import { ORG_SEAL_ART, romanNumeral } from './questIcons'
 
 export default function QuestlineScreen() {
   useAppTick()
   const navigate = useNavigate()
+  const { show } = useToast()
   const { orgId } = useParams<{ orgId: string }>()
   const user = currentUser()
   const [loreEpisode, setLoreEpisode] = useState<Episode | null>(null)
@@ -39,6 +42,29 @@ export default function QuestlineScreen() {
       state,
     }
   })
+
+  /**
+   * Taking the quest. The chief hands it out, so this is where a walk begins:
+   * it checks the whole party in at his house — which is what makes the quest
+   * active — and then opens the station list they will be working through.
+   */
+  function handleTakeQuest() {
+    if (!user || !org) return
+    const outcome = checkIn(user.id, QUEST_START.id, { orgId: org.id })
+    if (outcome) {
+      show({
+        title: `Checked in — ${outcome.placeName}`,
+        body: outcome.carried.length
+          ? `${outcome.partyName} checked in with you.`
+          : 'The quest is yours. Five minutes here, then the trail.',
+        icon: 'stamp',
+      })
+      if (outcome.walk.nextStationName) {
+        show({ title: `First station — ${outcome.walk.nextStationName}`, icon: 'footprints' })
+      }
+    }
+    navigate(`/quests/${org.id}/check-in`)
+  }
 
   function handleStepClick(index: number) {
     const episode = episodes[index]
@@ -86,17 +112,31 @@ export default function QuestlineScreen() {
             track={org.track}
             numeral={romanNumeral(current.number)}
             title={current.title}
-            subtitle={`${stationsFor(current.id).length} Stations · ${METHOD_LABEL[current.method]}`}
+            subtitle={`${stationsFor(current.id).length} Stations · Tap in as you arrive`}
             state="available"
           />
           <Button
             fullWidth
             size="lg"
-            icon={walking ? 'footprints' : 'door-open'}
-            style={{ marginTop: 12 }}
-            onClick={() => navigate(`/quests/${org!.id}/check-in`)}
+            icon={walking ? 'footprints' : 'house'}
+            style={
+              walking
+                ? { marginTop: 12 }
+                : // "Check in with Village Chief" is longer than the lg button's
+                  // default tracking and padding allow — ease both rather than
+                  // let it run under the edge.
+                  {
+                    marginTop: 12,
+                    padding: '0 var(--space-md)',
+                    // Override the shorthand Button sets, not just its size —
+                    // mixing `font` with `fontSize` makes React complain.
+                    font: '700 var(--text-sm)/1 var(--font-ui)',
+                    letterSpacing: '0.05em',
+                  }
+            }
+            onClick={walking ? () => navigate(`/quests/${org!.id}/check-in`) : handleTakeQuest}
           >
-            {walking ? 'Continue quest' : 'Begin check-in'}
+            {walking ? 'Continue quest' : 'Check in with Village Chief'}
           </Button>
         </div>
       ) : (
