@@ -8,8 +8,9 @@ import {
   validateQrText,
   validateStaffCode,
 } from '../services/progressService'
-import { checkIn, presenceFor, statusOf, windowLeft } from '../services/presenceService'
+import { activeQuest, checkIn, presenceFor, statusOf, windowLeft } from '../services/presenceService'
 import { getOrg } from '../content/orgs'
+import { QUEST_START } from '../content/stationMap'
 import { stationsFor } from '../content/stations'
 import type { Station } from '../content/types'
 import { useToast } from '../components/Toast'
@@ -70,6 +71,19 @@ export default function CheckInScreen() {
     }
   }
 
+  /** Same as the questline screen: the chief hands out the quest, which starts the walk. */
+  function handleTakeQuest() {
+    const outcome = checkIn(user!.id, QUEST_START.id, { orgId: org!.id })
+    if (!outcome) return
+    show({
+      title: `Checked in — ${outcome.placeName}`,
+      body: outcome.carried.length
+        ? `${outcome.partyName} checked in with you.`
+        : 'The quest is yours. The first station is open.',
+      icon: 'stamp',
+    })
+  }
+
   function handleStaffCode() {
     const result = validateStaffCode(user!.id, org!.id, code)
     if (result.ok) {
@@ -107,6 +121,12 @@ export default function CheckInScreen() {
   const here = presenceFor(user.id)
   const hereId = here && statusOf(here) === 'at-station' ? here.stationId : null
   const minutesLeft = here ? Math.max(1, Math.ceil(windowLeft(here) / 60000)) : 0
+
+  // The rotation is walked in order and the road ahead is dark: a station you
+  // have not reached yet keeps its name hidden, so the episode is discovered on
+  // foot rather than read off a list. Only the next one can be checked into.
+  const walking = activeQuest(user.id)?.orgId === org.id
+  const nextId = walking ? stations.find((st) => !done.includes(st.id))?.id : undefined
 
   return (
     <div className="screen">
@@ -161,7 +181,7 @@ export default function CheckInScreen() {
         >
           Stations on this episode
         </h2>
-        <span style={{ font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
+        <span style={{ font: 'var(--body-sm)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
           {done.length} of {stations.length}
         </span>
       </div>
@@ -169,6 +189,8 @@ export default function CheckInScreen() {
       <div className="stack" style={{ marginTop: 10 }}>
         {stations.map((st) => {
           const sealed = done.includes(st.id)
+          const isNext = st.id === nextId
+          const hidden = !sealed && !isNext
           const standing = hereId === st.id
           return (
             <div key={st.id} className="row" style={{ gap: 10 }}>
@@ -179,10 +201,23 @@ export default function CheckInScreen() {
                   flexShrink: 0,
                 }}
               >
-                <Icon name={sealed ? 'stamp' : (STATION_ICON[st.type] ?? 'map-pin')} size={20} />
+                <Icon
+                  name={sealed ? 'stamp' : hidden ? 'circle-help' : (STATION_ICON[st.type] ?? 'map-pin')}
+                  size={20}
+                />
               </span>
-              <span style={{ flex: 1, color: sealed ? 'var(--text-body)' : 'var(--text-muted)' }}>
-                {st.name}
+              <span style={{ flex: 1, minWidth: 0, color: sealed ? 'var(--text-body)' : 'var(--text-muted)' }}>
+                <span
+                  title={hidden ? 'Not yet reached' : undefined}
+                  aria-label={hidden ? 'Station not yet reached' : undefined}
+                  style={
+                    hidden
+                      ? { display: 'inline-block', filter: 'blur(4px)', userSelect: 'none' }
+                      : undefined
+                  }
+                >
+                  {st.name}
+                </span>
                 {standing ? (
                   <span style={{ display: 'block', font: 'var(--body-sm)', color: 'var(--text-gold)' }}>
                     You are here — {minutesLeft} min left
@@ -191,10 +226,12 @@ export default function CheckInScreen() {
               </span>
               {sealed ? (
                 <Tag icon="stamp">Sealed</Tag>
-              ) : (
+              ) : isNext ? (
                 <Button size="sm" variant="ghost" icon="stamp" onClick={() => handleStationCheckIn(st)}>
                   Check in
                 </Button>
+              ) : (
+                <Tag icon="lock">Ahead</Tag>
               )}
             </div>
           )
@@ -202,9 +239,27 @@ export default function CheckInScreen() {
       </div>
 
       <p style={{ marginTop: 10, font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
-        Tap a station as you reach it — on this list or on the chart. Walk all seven and the episode
-        seals itself. A party checks in together.
+        {walking
+          ? 'Check in at each station as you reach it — on this list or on the chart. The road ahead stays dark until you walk it. A party checks in together.'
+          : 'Call on the Village Chief to take this quest. The trail opens one station at a time.'}
       </p>
+
+      {!walking ? (
+        <Button
+          fullWidth
+          size="lg"
+          icon="house"
+          style={{
+            marginTop: 14,
+            padding: '0 var(--space-md)',
+            font: '700 var(--text-sm)/1 var(--font-ui)',
+            letterSpacing: '0.05em',
+          }}
+          onClick={handleTakeQuest}
+        >
+          Check in with Village Chief
+        </Button>
+      ) : null}
 
       <Ornament style={{ margin: '20px 0' }} />
 
