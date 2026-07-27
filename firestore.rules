@@ -97,6 +97,18 @@ service cloud.firestore {
       allow create: if ownsIncoming();
     }
 
+    // Station check-ins. Readable by every signed-in client — a party member's
+    // phone needs the whole board to notice it has been carried along with the
+    // party, and the console's stations map reads all of it.
+    //
+    // WRITE IS OWN-ROW ONLY, which is what makes party check-in safe: nobody can
+    // plant another guest at a station. When one member taps in, each other
+    // member's device adopts that check-in and writes its OWN row.
+    match /presence/{uid} {
+      allow read: if signedIn();
+      allow write: if isSelf(uid) || (signedIn() && uid.matches('demo-.*'));
+    }
+
     // ── Parties ─────────────────────────────────────────────────────────────
 
     // The code doc is the join lookup, so any signed-in guest may read it. It is

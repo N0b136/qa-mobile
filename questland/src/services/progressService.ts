@@ -1,7 +1,8 @@
-import type { Episode, Rank } from '../content/types'
+import type { Episode, Rank, Station } from '../content/types'
 import { episodesFor, getEpisode } from '../content/quests'
 import { getOrg } from '../content/orgs'
-import type { ProgressMap } from '../types'
+import { getStation, stationsFor } from '../content/stations'
+import type { ProgressMap, StationMap } from '../types'
 import { load, save } from './store'
 import { getUser } from './authService'
 import * as notificationService from './notificationService'
@@ -15,6 +16,10 @@ type CompleteResult =
 
 function key(userId: string): string {
   return `ql:progress:${userId}`
+}
+
+function stationKey(userId: string): string {
+  return `ql:stations:${userId}`
 }
 
 export function getProgress(userId: string): ProgressMap {
@@ -65,7 +70,21 @@ export function xpIntoLevel(xp: number): number {
   return xp % XP_PER_LEVEL
 }
 
-export function completeEpisode(userId: string, episodeId: string): CompleteResult {
+/**
+ * Seals an episode.
+ *
+ * `notify` is only ever false for a party member being carried along by
+ * somebody else's check-in on THIS device: their own phone credits the same
+ * station off the presence snapshot and tells them itself, so announcing it
+ * here would either double up or, worse, try to write into their inbox — which
+ * the Firestore rules refuse (a guest may only address themselves).
+ */
+export function completeEpisode(
+  userId: string,
+  episodeId: string,
+  opts: { notify?: boolean } = {}
+): CompleteResult {
+  const notify = opts.notify !== false
   const episode = getEpisode(episodeId)
   if (!episode) return { ok: false, error: 'That chapter is not yet open to you.' }
 
@@ -85,6 +104,12 @@ export function completeEpisode(userId: string, episodeId: string): CompleteResu
   const beforeCount = done.length
   const nextDone = [...done, episodeId]
   setProgress(userId, { ...progress, [orgId]: nextDone })
+  // A sealed episode counts as every one of its stations walked, whichever path
+  // got you here (station taps, a Guide's code, or a scanned marker).
+  setStationMap(userId, {
+    ...getStationMap(userId),
+    [episodeId]: stationsFor(episodeId).map((s) => s.id),
+  })
   cloudSync.pushProgress(userId)
   const afterCount = nextDone.length
 
@@ -96,14 +121,16 @@ export function completeEpisode(userId: string, episodeId: string): CompleteResu
     const afterRank = rankFor(orgId, afterCount)
     if (afterRank.name !== beforeRank.name) rankUp = afterRank
 
-    notificationService.add(userId, {
-      type: 'lore',
-      title: `${episode.title} — complete`,
-      body: episode.loreOnComplete,
-      icon: 'scroll-text',
-    })
+    if (notify) {
+      notificationService.add(userId, {
+        type: 'lore',
+        title: `${episode.title} — complete`,
+        body: episode.loreOnComplete,
+        icon: 'scroll-text',
+      })
+    }
 
-    if (rankUp) {
+    if (rankUp && notify) {
       notificationService.add(userId, {
         type: 'lore',
         title: `Rank up — ${rankUp.name}`,
@@ -117,6 +144,88 @@ export function completeEpisode(userId: string, episodeId: string): CompleteResu
   if (fresh) cloudSync.pushGuestProfile(fresh)
 
   return { ok: true, episode, orgId, rankUp }
+}
+
+// ── Station check-ins ─────────────────────────────────────────────────────────
+//
+// An episode is sealed by walking its seven stations, not by one code. The map
+// records which of the current episode's stations a guest has stood at; the
+// seventh one seals the episode through completeEpisode above, so ranks, XP,
+// lore and notifications all keep working exactly as they did.
+
+export function getStationMap(userId: string): StationMap {
+  return load<StationMap>(stationKey(userId), {})
+}
+
+function setStationMap(userId: string, map: StationMap): void {
+  save(stationKey(userId), map)
+}
+
+export function stationsDone(userId: string, episodeId: string): string[] {
+  return getStationMap(userId)[episodeId] ?? []
+}
+
+export interface StationCredit {
+  station: Station
+  orgId: string
+  episode: Episode
+  /** Stations of this episode now walked, and how many it takes. */
+  done: number
+  total: number
+  /** True when the guest had already checked in here on this episode. */
+  repeat: boolean
+  /** Set only when this check-in was the one that sealed the episode. */
+  completion: CompleteResult | null
+}
+
+/**
+ * Which questline a station tap counts toward: a base station always belongs to
+ * its own order, anything else counts toward the order the guest is walking.
+ */
+export function creditOrgFor(stationId: string, userOrgId?: string): string | null {
+  return getStation(stationId)?.orgId ?? userOrgId ?? null
+}
+
+/**
+ * Credits one station toward the guest's current episode in `orgId`. Returns
+ * null when the station is not on that episode's rotation — the guest still
+ * stood there (presence records it), it just earns nothing.
+ */
+export function creditStation(
+  userId: string,
+  stationId: string,
+  orgId: string,
+  opts: { notify?: boolean } = {}
+): StationCredit | null {
+  const station = getStation(stationId)
+  if (!station) return null
+
+  const episode = currentEpisode(userId, orgId)
+  if (!episode) return null
+
+  const rotation = stationsFor(episode.id).map((s) => s.id)
+  if (!rotation.includes(stationId)) return null
+
+  const already = stationsDone(userId, episode.id)
+  const repeat = already.includes(stationId)
+  const next = repeat ? already : [...already, stationId]
+
+  if (!repeat) setStationMap(userId, { ...getStationMap(userId), [episode.id]: next })
+
+  const sealed = next.length >= rotation.length
+  // completeEpisode rewrites the station set for the episode itself, so this
+  // stays correct whichever of the two paths sealed it.
+  const completion = sealed && !repeat ? completeEpisode(userId, episode.id, opts) : null
+
+  return {
+    station,
+    orgId,
+    episode,
+    done: next.length,
+    total: rotation.length,
+    repeat,
+    completion: completion && completion.ok ? completion : null,
+  }
 }
 
 function normalizeCode(s: string): string {

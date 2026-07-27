@@ -18,9 +18,11 @@ import type {
   Booking,
   NotificationType,
   Party,
+  Presence,
   ProgressMap,
   SosRequest,
   SosStatus,
+  StationMap,
   User,
 } from '../types'
 import { load, save } from './store'
@@ -82,8 +84,10 @@ const GUEST_DIR_KEY = 'ql:guestDirectory'
 const SCHEDULED_KEY = 'ql:scheduled'
 const USERS_KEY = 'ql:users'
 const PARTIES_KEY = 'ql:parties'
+const PRESENCE_KEY = 'ql:presence'
 const notifKey = (userId: string) => `ql:notifications:${userId}`
 const progressKey = (userId: string) => `ql:progress:${userId}`
+const stationKey = (userId: string) => `ql:stations:${userId}`
 const bookingsKey = (userId: string) => `ql:bookings:${userId}`
 
 function normalizePartyCode(code: string): string {
@@ -430,24 +434,71 @@ function mergePartiesSnapshot(snap: QuerySnapshot<DocumentData>, selfId: string,
  * as a UNION and a stale snapshot can never erase a completion you just earned.
  * Other guests' docs are taken as-is; this device never writes them.
  */
+function unionLists<T extends Record<string, string[]>>(local: T, incoming: T): T {
+  const next = { ...local } as T
+  for (const k of Object.keys(incoming)) {
+    ;(next as Record<string, string[]>)[k] = Array.from(
+      new Set([...(local[k] ?? []), ...incoming[k]])
+    )
+  }
+  return next
+}
+
 function mergeProgressSnapshot(snap: QuerySnapshot<DocumentData>, selfId: string): void {
   snap.forEach((d) => {
-    const data = d.data() as { id?: string; map?: ProgressMap }
+    const data = d.data() as { id?: string; map?: ProgressMap; stations?: StationMap }
     const id = data.id ?? d.id
     const incoming = data.map ?? {}
     const localMap = load<ProgressMap>(progressKey(id), {})
 
     let next: ProgressMap
     if (id === selfId) {
-      next = { ...localMap }
-      for (const orgId of Object.keys(incoming)) {
-        next[orgId] = Array.from(new Set([...(localMap[orgId] ?? []), ...incoming[orgId]]))
-      }
+      next = unionLists(localMap, incoming)
     } else {
       next = incoming
     }
     if (!deepEqual(next, localMap)) save(progressKey(id), next)
+
+    // Station check-ins ride in the same doc and merge the same way: within an
+    // episode a station is only ever added, so a union can never lose one.
+    const incomingStations = data.stations ?? {}
+    const localStations = load<StationMap>(stationKey(id), {})
+    const nextStations =
+      id === selfId ? unionLists(localStations, incomingStations) : incomingStations
+    if (!deepEqual(nextStations, localStations)) save(stationKey(id), nextStations)
   })
+}
+
+/**
+ * Presence is a straight last-write-wins by `at` — a guest is only ever in one
+ * place, and the newest check-in is the truth. After merging, this device asks
+ * the presence layer whether a party-mate's check-in should carry it along too.
+ */
+function mergePresenceSnapshot(snap: QuerySnapshot<DocumentData>, selfId: string | null): void {
+  const local = load<Presence[]>(PRESENCE_KEY, [])
+  const byUser = new Map(local.map((p) => [p.userId, p] as const))
+
+  snap.docChanges().forEach((c) => {
+    if (c.type === 'removed') byUser.delete(c.doc.id)
+  })
+
+  snap.forEach((d) => {
+    const incoming = d.data() as Presence
+    if (!incoming?.userId || typeof incoming.at !== 'number') return
+    const existing = byUser.get(incoming.userId)
+    if (!existing || incoming.at >= existing.at) byUser.set(incoming.userId, incoming)
+  })
+
+  const merged = Array.from(byUser.values()).sort((a, b) => b.at - a.at)
+  if (!deepEqual(merged, local)) save(PRESENCE_KEY, merged)
+
+  // Lazy import for the same reason as banner(): presenceService imports this
+  // module for its write-throughs, so a static import here would be a cycle.
+  if (selfId) {
+    void import('./presenceService')
+      .then((m) => m.syncParty(selfId))
+      .catch(() => {})
+  }
 }
 
 function bookingStamp(b: Booking | undefined): number {
@@ -623,6 +674,16 @@ export function startGuestSync(userId: string): () => void {
       )
     )
 
+    // Where everybody is. A guest needs the whole board, not just their own
+    // row: a party-mate's check-in is what carries this phone along with it.
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'presence'),
+        (snap) => mergePresenceSnapshot(snap, userId),
+        () => setCloudState('offline')
+      )
+    )
+
     return unsubs
   })
 }
@@ -653,6 +714,15 @@ export function startConsoleSync(): () => void {
       onSnapshot(
         collection(fb.db, 'scheduled'),
         (snap) => mergeScheduledSnapshot(snap),
+        () => setCloudState('offline')
+      )
+    )
+    // The stations board. The console watches only — it never carries anybody
+    // along, so it passes no self id.
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'presence'),
+        (snap) => mergePresenceSnapshot(snap, null),
         () => setCloudState('offline')
       )
     )
@@ -717,6 +787,23 @@ export function pushNotification(userId: string, n: AppNotification, demo?: bool
   })
 }
 
+/**
+ * Own row only. The rules let a guest write presence/{their own uid} and no
+ * other, which is exactly right: a party member's phone adopts the check-in off
+ * the snapshot and writes its own row itself.
+ */
+export function pushPresence(p: Presence): void {
+  void ensureFirebase().then(async (fb) => {
+    if (!fb) return
+    try {
+      const { doc, setDoc } = await import('firebase/firestore')
+      await setDoc(doc(fb.db, 'presence', p.userId), clean({ ...p }))
+    } catch {
+      // swallow
+    }
+  })
+}
+
 export function pushGuestProfile(user: User): void {
   void ensureFirebase().then(async (fb) => {
     if (!fb) return
@@ -744,18 +831,18 @@ export function pushProgress(userId: string): void {
 
       const union = await runTransaction(fb.db, async (tx) => {
         const snap = await tx.get(ref)
-        const remote = snap.exists() ? ((snap.data() as { map?: ProgressMap }).map ?? {}) : {}
-        const localMap = load<ProgressMap>(progressKey(userId), {})
-        const merged: ProgressMap = { ...remote }
-        for (const orgId of Object.keys(localMap)) {
-          merged[orgId] = Array.from(new Set([...(remote[orgId] ?? []), ...localMap[orgId]]))
-        }
-        tx.set(ref, { id: userId, map: merged, updatedAt: Date.now() })
-        return merged
+        const data = snap.exists() ? (snap.data() as { map?: ProgressMap; stations?: StationMap }) : {}
+        const merged = unionLists(data.map ?? {}, load<ProgressMap>(progressKey(userId), {}))
+        const stations = unionLists(data.stations ?? {}, load<StationMap>(stationKey(userId), {}))
+        tx.set(ref, { id: userId, map: merged, stations, updatedAt: Date.now() })
+        return { merged, stations }
       })
 
-      if (!deepEqual(union, load<ProgressMap>(progressKey(userId), {}))) {
-        save(progressKey(userId), union)
+      if (!deepEqual(union.merged, load<ProgressMap>(progressKey(userId), {}))) {
+        save(progressKey(userId), union.merged)
+      }
+      if (!deepEqual(union.stations, load<StationMap>(stationKey(userId), {}))) {
+        save(stationKey(userId), union.stations)
       }
     } catch {
       // swallow
@@ -1049,6 +1136,14 @@ export async function deleteDemoCommDocs(currentUserId: string): Promise<void> {
   await gather(async () => {
     const guests = await getDocs(query(collection(fb.db, 'guests'), where('demo', '==', true)))
     guests.forEach((d) => refs.push(d.ref))
+  })
+  // Take the cast off the stations board. Presence rows are keyed by user id,
+  // so the staged ones are exactly the demo- documents.
+  await gather(async () => {
+    const staged = await getDocs(collection(fb.db, 'presence'))
+    staged.forEach((d) => {
+      if (d.id.startsWith('demo-') || d.id === currentUserId) refs.push(d.ref)
+    })
   })
 
   const seen = new Set<string>()

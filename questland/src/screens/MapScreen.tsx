@@ -1,6 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
 
 import { currentUser } from '../services/authService'
 import { load } from '../services/store'
@@ -8,43 +6,22 @@ import { getOrg } from '../content/orgs'
 import { episodesFor } from '../content/quests'
 import { STATIONS, stationsFor } from '../content/stations'
 import type { Station } from '../content/types'
-import { currentEpisode, completedCount } from '../services/progressService'
-import { DEFAULT_POSITION, MAP_LANDMARKS, MAP_META, STATION_COORDS } from '../content/stationMap'
+import type { Presence } from '../types'
+import { completedCount, creditOrgFor, currentEpisode, stationsDone } from '../services/progressService'
+import { checkIn, presenceFor, statusOf, windowLeft } from '../services/presenceService'
+import { DEFAULT_POSITION, MAP_LANDMARKS, STATION_COORDS } from '../content/stationMap'
 import type { MapLandmark } from '../content/stationMap'
 import { useAppTick } from '../hooks/useAppTick'
+import { useToast } from '../components/Toast'
+import MapCanvas from '../components/MapCanvas'
 import { Button, Dialog, Icon, IconButton, Tag } from '../ui'
 import { STATION_ICON, STATION_NOTE } from './questIcons'
 
-const ASPECT = MAP_META.width / MAP_META.height
-const MIN_SCALE = 1
-const MAX_SCALE = 3
-const DRAG_THRESHOLD = 6
-
-type Transform = { scale: number; tx: number; ty: number }
 type PinVariant = 'active' | 'home' | 'visited' | 'neutral'
-
-function clampTransform(scale: number, tx: number, ty: number, w: number, h: number) {
-  const baseH = w / ASPECT
-  const dispW = w * scale
-  const dispH = baseH * scale
-  const clampedTx = dispW <= w ? (w - dispW) / 2 : Math.min(0, Math.max(w - dispW, tx))
-  const clampedTy = dispH <= h ? (h - dispH) / 2 : Math.min(0, Math.max(h - dispH, ty))
-  return { tx: clampedTx, ty: clampedTy }
-}
-
-function computeZoom(prev: Transform, w: number, h: number, px: number, py: number, newScaleRaw: number): Transform {
-  const scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, newScaleRaw))
-  const wx = (px - prev.tx) / prev.scale
-  const wy = (py - prev.ty) / prev.scale
-  const rawTx = px - wx * scale
-  const rawTy = py - wy * scale
-  const { tx, ty } = clampTransform(scale, rawTx, rawTy, w, h)
-  return { scale, tx, ty }
-}
 
 export default function MapScreen() {
   useAppTick()
-  const navigate = useNavigate()
+  const { show } = useToast()
   const user = currentUser()
   const org = user?.orgId ? getOrg(user.orgId) : undefined
 
@@ -60,145 +37,65 @@ export default function MapScreen() {
       .forEach((e) => stationsFor(e.id).forEach((s) => visitedIds.add(s.id)))
   }
 
-  const herePos = load('ql:demo:position', DEFAULT_POSITION)
+  // Stations of the current episode already walked — the pin wears a seal.
+  const sealedIds = new Set(user && ep ? stationsDone(user.id, ep.id) : [])
 
-  // ---- pan/zoom ----
-  const viewportRef = useRef<HTMLDivElement>(null)
-  const [size, setSize] = useState({ w: 0, h: 0 })
-  const sizeRef = useRef(size)
-  const [transform, setTransform] = useState<Transform>({ scale: MIN_SCALE, tx: 0, ty: 0 })
-
-  useEffect(() => {
-    sizeRef.current = size
-  }, [size])
-
-  useEffect(() => {
-    function measure() {
-      const el = viewportRef.current
-      if (!el) return
-      const w = el.clientWidth
-      const h = el.clientHeight
-      setSize({ w, h })
-      setTransform((prev) => {
-        const { tx, ty } = clampTransform(prev.scale, prev.tx, prev.ty, w, h)
-        return { ...prev, tx, ty }
-      })
-    }
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [])
-
-  // Wheel listener attached natively (not passive) so preventDefault actually
-  // stops page scroll — React's onWheel prop is passive by default.
-  useEffect(() => {
-    const el = viewportRef.current
-    if (!el) return
-    function handleWheel(e: WheelEvent) {
-      e.preventDefault()
-      const rect = el!.getBoundingClientRect()
-      const px = e.clientX - rect.left
-      const py = e.clientY - rect.top
-      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
-      const s = sizeRef.current
-      setTransform((prev) => computeZoom(prev, s.w, s.h, px, py, prev.scale * factor))
-    }
-    el.addEventListener('wheel', handleWheel, { passive: false })
-    return () => el.removeEventListener('wheel', handleWheel)
-  }, [])
-
-  const pointers = useRef(new Map<number, { x: number; y: number }>())
-  const dragStart = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null)
-  const pinchStart = useRef<{ dist: number; scale: number; tx: number; ty: number } | null>(null)
-  const draggedRef = useRef(false)
-
-  function localPoint(e: ReactPointerEvent) {
-    const rect = viewportRef.current!.getBoundingClientRect()
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+  /** The episode a check-in here would count toward (base stations keep their own order). */
+  function creditEpisodeFor(st: Station) {
+    if (!user) return null
+    const orgId = creditOrgFor(st.id, user.orgId)
+    return orgId ? currentEpisode(user.id, orgId) : null
   }
 
-  function handlePointerDown(e: ReactPointerEvent) {
-    const p = localPoint(e)
-    pointers.current.set(e.pointerId, p)
-    if (pointers.current.size === 1) {
-      draggedRef.current = false
-      dragStart.current = { x: p.x, y: p.y, tx: transform.tx, ty: transform.ty }
-    } else if (pointers.current.size === 2) {
-      draggedRef.current = true
-      dragStart.current = null
-      const pts = Array.from(pointers.current.values())
-      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
-      pinchStart.current = { dist, scale: transform.scale, tx: transform.tx, ty: transform.ty }
-    }
+  /** "3 of 7" for a station on your current rotation, null for one that is not. */
+  function progressLine(st: Station): { done: number; total: number } | null {
+    const episode = creditEpisodeFor(st)
+    if (!episode || !user) return null
+    const rotation = stationsFor(episode.id).map((s) => s.id)
+    if (!rotation.includes(st.id)) return null
+    return { done: stationsDone(user.id, episode.id).length, total: rotation.length }
   }
 
-  function handlePointerMove(e: ReactPointerEvent) {
-    if (!pointers.current.has(e.pointerId)) return
-    const p = localPoint(e)
-    pointers.current.set(e.pointerId, p)
-
-    if (pointers.current.size >= 2 && pinchStart.current) {
-      const pts = Array.from(pointers.current.values())
-      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)
-      const midX = (pts[0].x + pts[1].x) / 2
-      const midY = (pts[0].y + pts[1].y) / 2
-      const start = pinchStart.current
-      const ratio = dist / (start.dist || 1)
-      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, start.scale * ratio))
-      const wx = (midX - start.tx) / start.scale
-      const wy = (midY - start.ty) / start.scale
-      const rawTx = midX - wx * newScale
-      const rawTy = midY - wy * newScale
-      const { tx, ty } = clampTransform(newScale, rawTx, rawTy, size.w, size.h)
-      setTransform({ scale: newScale, tx, ty })
-    } else if (pointers.current.size === 1 && dragStart.current) {
-      const d = dragStart.current
-      if (Math.hypot(p.x - d.x, p.y - d.y) > DRAG_THRESHOLD) draggedRef.current = true
-      const rawTx = d.tx + (p.x - d.x)
-      const rawTy = d.ty + (p.y - d.y)
-      const { tx, ty } = clampTransform(transform.scale, rawTx, rawTy, size.w, size.h)
-      setTransform({ scale: transform.scale, tx, ty })
-    }
-  }
-
-  function handlePointerUp(e: ReactPointerEvent) {
-    pointers.current.delete(e.pointerId)
-    pinchStart.current = null
-    if (pointers.current.size === 1) {
-      const [[, p]] = Array.from(pointers.current.entries())
-      dragStart.current = { x: p.x, y: p.y, tx: transform.tx, ty: transform.ty }
-    } else {
-      dragStart.current = null
-    }
-  }
-
-  // A pan/pinch that moved past the threshold shouldn't also register as a
-  // tap on whatever pin the finger happened to lift over.
-  function handleClickCapture(e: ReactMouseEvent) {
-    if (draggedRef.current) {
-      e.preventDefault()
-      e.stopPropagation()
-    }
-  }
-
-  function zoomBy(factor: number) {
-    setTransform((prev) => computeZoom(prev, size.w, size.h, size.w / 2, size.h / 2, prev.scale * factor))
-  }
-
-  function handleRecenter() {
-    const { tx, ty } = clampTransform(MIN_SCALE, 0, 0, size.w, size.h)
-    setTransform({ scale: MIN_SCALE, tx, ty })
-  }
+  // ---- where you are ----
+  //
+  // A check-in holds you at a station for fifteen minutes; after that you read
+  // as en route and the marker falls back to the demo position.
+  const here = user ? presenceFor(user.id) : null
+  const atStation = here && statusOf(here) === 'at-station' ? here : null
+  const hereCoord = atStation ? STATION_COORDS[atStation.stationId] : undefined
+  const herePos = hereCoord ?? load('ql:demo:position', DEFAULT_POSITION)
 
   // ---- dialogs ----
   const [openStation, setOpenStation] = useState<Station | null>(null)
   const [openLandmark, setOpenLandmark] = useState<MapLandmark | null>(null)
 
   function handleCheckIn() {
-    if (!openStation) return
-    const targetOrg = openStation.orgId ?? user?.orgId
+    if (!openStation || !user) return
+    const outcome = checkIn(user.id, openStation.id)
     setOpenStation(null)
-    navigate(targetOrg ? `/quests/${targetOrg}/check-in` : '/quests')
+    if (!outcome) return
+
+    show({
+      title: `Checked in — ${outcome.station.name}`,
+      body: outcome.carried.length
+        ? `${outcome.partyName} checked in with you.`
+        : 'Fifteen minutes at this station.',
+      icon: 'stamp',
+    })
+
+    const credit = outcome.credit
+    if (credit?.completion?.ok) {
+      show({ title: `${credit.completion.episode.title} — sealed`, icon: 'scroll-text' })
+      if (credit.completion.rankUp) {
+        show({ title: `New rank — ${credit.completion.rankUp.name}`, icon: 'award' })
+      }
+    } else if (credit && !credit.repeat) {
+      show({
+        title: `${credit.done} of ${credit.total} stations`,
+        body: credit.episode.title,
+        icon: 'map-pin',
+      })
+    }
   }
 
   return (
@@ -215,92 +112,50 @@ export default function MapScreen() {
         background: 'var(--surface-page)',
       }}
     >
-      <div
-        ref={viewportRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onClickCapture={handleClickCapture}
-        style={{ position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none', overscrollBehavior: 'contain' }}
-      >
-        <div
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            width: size.w || '100%',
-            height: size.w ? size.w / ASPECT : '100%',
-            transform: `translate(${transform.tx}px, ${transform.ty}px) scale(${transform.scale})`,
-            transformOrigin: '0 0',
-            willChange: 'transform',
-          }}
-        >
-          <img
-            src={MAP_META.src}
-            alt="Chart of the Wilds of Questia"
-            draggable={false}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              userSelect: 'none',
-              pointerEvents: 'none',
-            }}
-          />
+      <MapCanvas>
+        {MAP_LANDMARKS.map((lm) => (
+          <AmenityPin key={lm.id} landmark={lm} onOpen={() => setOpenLandmark(lm)} />
+        ))}
 
-          {MAP_LANDMARKS.map((lm) => (
-            <AmenityPin key={lm.id} landmark={lm} onOpen={() => setOpenLandmark(lm)} />
-          ))}
+        {STATIONS.map((st) => {
+          const coord = STATION_COORDS[st.id]
+          if (!coord) return null
+          const variant: PinVariant = activeIds.has(st.id)
+            ? 'active'
+            : st.id === homeId
+              ? 'home'
+              : visitedIds.has(st.id)
+                ? 'visited'
+                : 'neutral'
+          return (
+            <StationPin
+              key={st.id}
+              station={st}
+              coord={coord}
+              variant={variant}
+              isHome={st.id === homeId}
+              sealed={sealedIds.has(st.id)}
+              trackColor={org?.color}
+              onOpen={() => setOpenStation(st)}
+            />
+          )
+        })}
 
-          {STATIONS.map((st) => {
-            const coord = STATION_COORDS[st.id]
-            if (!coord) return null
-            const variant: PinVariant = activeIds.has(st.id)
-              ? 'active'
-              : st.id === homeId
-                ? 'home'
-                : visitedIds.has(st.id)
-                  ? 'visited'
-                  : 'neutral'
-            return (
-              <StationPin
-                key={st.id}
-                station={st}
-                coord={coord}
-                variant={variant}
-                isHome={st.id === homeId}
-                trackColor={org?.color}
-                onOpen={() => setOpenStation(st)}
-              />
-            )
-          })}
-
-          <HereMarker x={herePos.x} y={herePos.y} />
-        </div>
-      </div>
-
-      <div
-        style={{
-          position: 'absolute',
-          right: 12,
-          bottom: 16,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 8,
-        }}
-      >
-        <IconButton icon="plus" label="Zoom in" variant="solid" onClick={() => zoomBy(1.4)} />
-        <IconButton icon="minus" label="Zoom out" variant="solid" onClick={() => zoomBy(1 / 1.4)} />
-        <IconButton icon="compass" label="Recentre the chart" variant="solid" onClick={handleRecenter} />
-      </div>
+        <HereMarker x={herePos.x} y={herePos.y} />
+      </MapCanvas>
 
       {org ? <MapLegend trackColor={org.color} /> : null}
 
       {openStation ? (
-        <StationCard station={openStation} onClose={() => setOpenStation(null)} onCheckIn={handleCheckIn} />
+        <StationCard
+          station={openStation}
+          onClose={() => setOpenStation(null)}
+          onCheckIn={handleCheckIn}
+          here={atStation?.stationId === openStation.id ? atStation : null}
+          sealed={sealedIds.has(openStation.id)}
+          episodeTitle={creditEpisodeFor(openStation)?.title}
+          progress={progressLine(openStation)}
+        />
       ) : null}
 
       {openLandmark ? (
@@ -330,11 +185,21 @@ function StationCard({
   station,
   onClose,
   onCheckIn,
+  here,
+  sealed,
+  episodeTitle,
+  progress,
 }: {
   station: Station
   onClose: () => void
   onCheckIn: () => void
+  /** Set when this is where the guest is standing right now. */
+  here: Presence | null
+  sealed: boolean
+  episodeTitle?: string
+  progress: { done: number; total: number } | null
 }) {
+  const minutesLeft = here ? Math.max(1, Math.ceil(windowLeft(here) / 60000)) : 0
   return (
     <div
       onClick={onClose}
@@ -409,18 +274,41 @@ function StationCard({
           >
             {station.name}
           </h2>
-          <div>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
             <Tag icon={STATION_ICON[station.type] ?? 'map-pin'}>{station.type}</Tag>
+            {sealed ? <Tag icon="stamp">Sealed</Tag> : null}
           </div>
           <p style={{ margin: 0, font: 'var(--body-base)', color: 'var(--text-on-media-muted)' }}>
             {STATION_NOTE[station.type] ?? 'A station on the trail.'}
           </p>
+
+          {here ? (
+            <p
+              className="row"
+              style={{ gap: 6, margin: 0, font: 'var(--body-base)', color: 'var(--text-on-media)' }}
+            >
+              <Icon name="timer" size={15} />
+              {here.partyName ? `${here.partyName} is here` : 'You are here'} — {minutesLeft} min left
+            </p>
+          ) : null}
+
+          {progress ? (
+            <p style={{ margin: 0, font: 'var(--body-sm)', color: 'var(--text-on-media-muted)' }}>
+              {progress.done} of {progress.total} stations
+              {episodeTitle ? ` — ${episodeTitle}` : ''}
+            </p>
+          ) : (
+            <p style={{ margin: 0, font: 'var(--body-sm)', color: 'var(--text-on-media-muted)' }}>
+              Not on your current episode — checking in only marks where you are.
+            </p>
+          )}
+
           <div style={{ marginTop: 'var(--space-md)', display: 'flex', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>
             <Button variant="ghost" onClick={onClose}>
               Close
             </Button>
             <Button icon="stamp" onClick={onCheckIn}>
-              Check in here
+              {here ? 'Check in again' : 'Check in here'}
             </Button>
           </div>
         </div>
@@ -442,6 +330,7 @@ function StationPin({
   coord,
   variant,
   isHome,
+  sealed,
   trackColor,
   onOpen,
 }: {
@@ -449,6 +338,8 @@ function StationPin({
   coord: { x: number; y: number }
   variant: PinVariant
   isHome: boolean
+  /** Already checked in on the current episode. */
+  sealed: boolean
   trackColor?: string
   onOpen: () => void
 }) {
@@ -457,7 +348,7 @@ function StationPin({
   return (
     <button
       onClick={onOpen}
-      aria-label={`${station.name} — ${station.type} station`}
+      aria-label={`${station.name} — ${station.type} station${sealed ? ', sealed' : ''}`}
       style={{
         position: 'absolute',
         left: `${coord.x * 100}%`,
@@ -475,7 +366,7 @@ function StationPin({
       }}
     >
       <span style={{ position: 'relative', display: 'block' }}>
-        <Icon name="map-pin" size={spec.size} />
+        <Icon name={sealed ? 'map-pin-check' : 'map-pin'} size={spec.size} />
         {isHome ? (
           <span
             style={{

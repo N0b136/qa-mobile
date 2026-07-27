@@ -10,6 +10,7 @@ import { createBooking } from './bookingService'
 import { ARRIVAL_SLOTS } from '../content/bookingTiers'
 import * as notificationService from './notificationService'
 import { createSos } from './sosService'
+import { clearPresenceFor, seedPresence } from './presenceService'
 import * as cloudSync from './cloudSync'
 
 const USERS_KEY = 'ql:users'
@@ -115,6 +116,49 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
   // One open call for aid so the console has something to dispatch.
   createSos('demo-sable', 'emergency', { zoneId: 'st-06', message: 'Lost the trail past the old oak.' })
 
+  // Put the cast on the chart so the console's stations board opens with a park
+  // in motion: Lantern Circle standing at a station, and a lone Ranger who
+  // checked in twenty minutes ago and so reads as en route.
+  const now = Date.now()
+  seedPresence([
+    {
+      userId: 'demo-sable',
+      guestName: 'Sable Ashworth',
+      stationId: 'st-06',
+      at: now - 4 * 60 * 1000,
+      partyId: LANTERN_PARTY_ID,
+      partyName: 'Lantern Circle',
+      partyMemberNames: ['Sable Ashworth', 'Thorn Vale'],
+      orgId: 'elm',
+      byUserId: 'demo-sable',
+      byName: 'Sable Ashworth',
+    },
+    {
+      userId: 'demo-thorn',
+      guestName: 'Thorn Vale',
+      stationId: 'st-06',
+      at: now - 4 * 60 * 1000,
+      partyId: LANTERN_PARTY_ID,
+      partyName: 'Lantern Circle',
+      partyMemberNames: ['Sable Ashworth', 'Thorn Vale'],
+      orgId: 'rangers',
+      byUserId: 'demo-sable',
+      byName: 'Sable Ashworth',
+    },
+    {
+      userId: 'demo-bracken',
+      guestName: 'Bracken Hale',
+      stationId: 'st-11',
+      at: now - 22 * 60 * 1000,
+      partyId: VANGUARD_PARTY_ID,
+      partyName: 'Ashen Vanguard',
+      partyMemberNames: [getUser(currentUserId)?.name ?? 'You', 'Bracken Hale', 'Wren Calder'],
+      orgId: 'rangers',
+      byUserId: 'demo-bracken',
+      byName: 'Bracken Hale',
+    },
+  ])
+
   // Publish the cast to the console's guest roster. save(USERS_KEY, ...) never
   // triggers a guest push, so without this the roster would never see them.
   // Runs last so pushGuestProfile derives the right level (progress saved above)
@@ -132,10 +176,17 @@ export function resetDemoData(currentUserId: string): void {
   save(USERS_KEY, listUsers().filter((u) => !u.id.startsWith('demo-')))
 
   Object.keys(localStorage).forEach((k) => {
-    if (/^ql:progress:demo-/.test(k) || /^ql:notifications:demo-/.test(k)) {
+    if (
+      /^ql:progress:demo-/.test(k) ||
+      /^ql:notifications:demo-/.test(k) ||
+      /^ql:stations:demo-/.test(k)
+    ) {
       localStorage.removeItem(k)
     }
   })
+
+  // Take everybody off the chart, cast and host alike.
+  clearPresenceFor([...CAST_USERS.map((u) => u.id), currentUserId])
 
   const user = getUser(currentUserId)
   save(PARTIES_KEY, listParties().filter((p) => !p.id.startsWith('demo-')))
@@ -144,6 +195,7 @@ export function resetDemoData(currentUserId: string): void {
   }
 
   save(progressKey(currentUserId), {})
+  save(`ql:stations:${currentUserId}`, {})
   save(`ql:bookings:${currentUserId}`, [])
   save(`ql:notifications:${currentUserId}`, [])
 

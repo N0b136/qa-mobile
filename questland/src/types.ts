@@ -24,6 +24,36 @@ export interface User {
 /** orgId -> completed episodeIds */
 export type ProgressMap = Record<string, string[]>
 
+/** episodeId -> station ids checked in on that episode */
+export type StationMap = Record<string, string[]>
+
+/**
+ * Where a guest last checked in. One record per guest — a check-in overwrites
+ * the previous one, because a guest is only ever in one place. Freshness, not a
+ * separate field, decides whether they read as AT the station or EN ROUTE:
+ * inside `STATION_WINDOW_MS` of `at` they are at the station, after that they
+ * are somewhere on the paths (we never track precise locations).
+ */
+export interface Presence {
+  userId: string
+  guestName: string
+  stationId: string
+  /** When the check-in happened, in ms. */
+  at: number
+  partyId?: string
+  partyName?: string
+  /**
+   * The party roster as it stood at check-in, carried in the record itself so
+   * the console can name a whole party from the one doc its phone wrote —
+   * rather than waiting for every member's device to report in separately.
+   */
+  partyMemberNames?: string[]
+  orgId?: string
+  /** The party member who actually tapped in — the rest are carried along. */
+  byUserId?: string
+  byName?: string
+}
+
 export interface Booking {
   id: string
   userId: string

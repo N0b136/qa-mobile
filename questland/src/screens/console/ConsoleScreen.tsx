@@ -15,6 +15,7 @@ import StaffGate from './StaffGate'
 import CallsBoard from './CallsBoard'
 import SendWord from './SendWord'
 import GuestRoster from './GuestRoster'
+import StationsBoard from './StationsBoard'
 import './console.css'
 
 // The desktop Back Office console. It lives OUTSIDE the guest Shell (no TopBar /
@@ -66,6 +67,7 @@ export default function ConsoleScreen() {
         }}
       />
       <div className="console-grid">
+        <StationsBoard />
         <CallsBoard persona={persona} />
         <SendWord persona={persona} prefillAudience={prefillAudience} />
         <GuestRoster onSend={setPrefillAudience} />
