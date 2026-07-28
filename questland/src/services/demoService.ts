@@ -13,6 +13,7 @@ import { getEpisode } from '../content/quests'
 import { QUEST_START, VILLAGE_PLACE } from '../content/stationMap'
 import { createSos } from './sosService'
 import { clearPresenceFor, seedPresence } from './presenceService'
+import { clearUsesFor } from './passService'
 import * as cloudSync from './cloudSync'
 
 const USERS_KEY = 'ql:users'
@@ -93,11 +94,23 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
   save(PARTIES_KEY, [...listParties().filter((p) => !demoPartyIds.has(p.id)), ...demoParties])
   updateProfile(currentUserId, { partyId: VANGUARD_PARTY_ID })
 
-  // A confirmed upcoming booking so Bookings/Home have something to show.
+  // Two passages: a Hero Pass good TODAY, because a quest cannot be taken
+  // without one and the pitch walks straight into the park — and an Adventurer
+  // Pass a few days out so My Passages shows an upcoming booking too.
   createBooking(currentUserId, {
+    // Three: the Ashen Vanguard walks in on this one passage, and a passage
+    // only covers the headcount it was booked for.
     tierId: 'hero',
-    date: plusDays(3),
+    date: plusDays(0),
     slot: ARRIVAL_SLOTS[0],
+    adults: 3,
+    children: 0,
+    addOnIds: [],
+  })
+  createBooking(currentUserId, {
+    tierId: 'adventurer',
+    date: plusDays(3),
+    slot: ARRIVAL_SLOTS[1],
     adults: 2,
     children: 0,
     addOnIds: [],
@@ -130,6 +143,10 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
     partyMemberNames: ['Sable Ashworth', 'Thorn Vale'],
     byUserId: 'demo-sable',
     byName: 'Sable Ashworth',
+    // The passage Sable presented at the chief's door — one Group Hero Pass
+    // walked the whole circle in.
+    passCode: 'QST-4KDR2M',
+    passName: 'Group Hero Pass',
   }
   // Lantern Circle is standing at a station mid-episode; Ashen Vanguard took
   // their quest at the chief's house twenty minutes ago, so they read as en
@@ -192,6 +209,8 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
       nextStationName: 'Story Oak',
       byUserId: 'demo-bracken',
       byName: 'Bracken Hale',
+      passCode: 'QST-9TLW71',
+      passName: 'Hero Pass',
     },
     {
       userId: 'demo-wren',
@@ -214,6 +233,8 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
       nextStationName: 'Story Oak',
       byUserId: 'demo-bracken',
       byName: 'Bracken Hale',
+      passCode: 'QST-9TLW71',
+      passName: 'Hero Pass',
     },
     // A lone traveller who has only just come through the gate: still in the
     // village, no quest taken yet.
@@ -257,14 +278,18 @@ export function resetDemoData(currentUserId: string): void {
     if (
       /^ql:progress:demo-/.test(k) ||
       /^ql:notifications:demo-/.test(k) ||
-      /^ql:stations:demo-/.test(k)
+      /^ql:stations:demo-/.test(k) ||
+      /^ql:passUses:demo-/.test(k)
     ) {
       localStorage.removeItem(k)
     }
   })
 
-  // Take everybody off the chart, cast and host alike.
+  // Take everybody off the chart, cast and host alike, and wipe the passage
+  // ledger with the bookings it draws on — otherwise a reseeded world would
+  // start with quests already paid for.
   clearPresenceFor([...CAST_USERS.map((u) => u.id), currentUserId])
+  clearUsesFor([...CAST_USERS.map((u) => u.id), currentUserId])
 
   const user = getUser(currentUserId)
   save(PARTIES_KEY, listParties().filter((p) => !p.id.startsWith('demo-')))

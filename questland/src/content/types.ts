@@ -61,6 +61,28 @@ export interface Poi {
 
 export type TicketCategory = 'day' | 'day-group' | 'membership' | 'birthday'
 
+/** The span a passage rule counts over. */
+export type PassPeriod = 'day' | 'week' | 'month'
+
+/**
+ * What a passage actually entitles its holder to, read straight off the ticket
+ * description in content-intake/ticketing.json.
+ *
+ * A "Quest Experience" is one episode: taking a quest at the Village Chief's
+ * house spends one, and walking its seven stations costs nothing further. A day
+ * pass is good only on its booked date; a membership runs a month from its
+ * start date and refreshes its allowance on whatever period the tier states
+ * ("one visit per week, 1 Quest Experience per visit").
+ */
+export interface PassRule {
+  /** How long the passage is good for, counted from the booked date. */
+  validFor: PassPeriod
+  /** Quest Experiences each covered guest gets per `per`. null = unlimited. */
+  questsPerGuest: number | null
+  /** The period the quest allowance refreshes on. */
+  per: PassPeriod
+}
+
 export interface BookingTier {
   id: string
   category: TicketCategory
@@ -76,6 +98,8 @@ export interface BookingTier {
   /** true for recurring monthly membership products */
   monthly?: boolean
   maxParty?: number
+  /** What this passage buys you in the park — see PassRule. */
+  pass: PassRule
   perks: string[]
   featured?: boolean
   icon: string

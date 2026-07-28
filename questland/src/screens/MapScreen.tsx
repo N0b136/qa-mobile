@@ -17,11 +17,14 @@ import {
   statusOf,
   windowLeft,
 } from '../services/presenceService'
+import type { CheckInResult } from '../services/presenceService'
+import { getUserParty } from '../services/partyService'
 import { DEFAULT_POSITION, MAP_LANDMARKS, QUEST_START, STATION_COORDS } from '../content/stationMap'
 import type { MapLandmark } from '../content/stationMap'
 import { useAppTick } from '../hooks/useAppTick'
 import { useToast } from '../components/Toast'
 import MapCanvas from '../components/MapCanvas'
+import PassagePicker from '../components/PassagePicker'
 import { Button, Dialog, Icon, IconButton, Tag } from '../ui'
 import { STATION_ICON, STATION_NOTE } from './questIcons'
 
@@ -98,9 +101,15 @@ export default function MapScreen() {
   const [openStation, setOpenStation] = useState<Station | null>(null)
   const [openLandmark, setOpenLandmark] = useState<MapLandmark | null>(null)
   const [startOpen, setStartOpen] = useState(false)
+  const [passOpen, setPassOpen] = useState(false)
+  const [passError, setPassError] = useState<string | undefined>(undefined)
 
-  function announce(outcome: ReturnType<typeof checkIn>) {
-    if (!outcome) return
+  function announce(result: CheckInResult) {
+    if (!result.ok) {
+      show({ title: result.error, icon: 'triangle-alert' })
+      return
+    }
+    const outcome = result
     show({
       title: `Checked in — ${outcome.placeName}`,
       body: outcome.carried.length
@@ -137,11 +146,23 @@ export default function MapScreen() {
     announce(outcome)
   }
 
-  function handleQuestStart() {
+  /**
+   * Taking the quest. Tried without a passage first: an episode already paid
+   * for goes straight through, and anything else comes back asking for one —
+   * which is the picker's cue.
+   */
+  function handleQuestStart(passBookingId?: string) {
     if (!user) return
-    const outcome = checkIn(user.id, QUEST_START.id)
+    const result = checkIn(user.id, QUEST_START.id, { passBookingId })
+    if (!result.ok && result.needPass) {
+      setPassError(passBookingId ? result.error : undefined)
+      setStartOpen(false)
+      setPassOpen(true)
+      return
+    }
     setStartOpen(false)
-    announce(outcome)
+    setPassOpen(false)
+    announce(result)
   }
 
   function handleGateCheckIn() {
@@ -259,7 +280,7 @@ export default function MapScreen() {
               <Button variant="ghost" onClick={() => setStartOpen(false)}>
                 Close
               </Button>
-              <Button icon="scroll-text" onClick={handleQuestStart}>
+              <Button icon="scroll-text" onClick={() => handleQuestStart()}>
                 Take the quest
               </Button>
             </div>
@@ -272,7 +293,25 @@ export default function MapScreen() {
               {stationsFor(ep.id).find((s) => !sealedIds.has(s.id))?.name ?? '—'}.
             </p>
           ) : null}
+          <p className="row" style={{ gap: 6, marginTop: 8, font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
+            <Icon name="ticket" size={14} />
+            The chief will ask for your passage — one Quest Experience.
+          </p>
         </Dialog>
+      ) : null}
+
+      {passOpen && user ? (
+        <PassagePicker
+          userId={user.id}
+          guests={getUserParty(user.id)?.memberIds.length ?? 1}
+          subtitle={ep && org ? `${org.name} — Episode ${ep.number}, ${ep.title}.` : undefined}
+          error={passError}
+          onPick={(bookingId) => handleQuestStart(bookingId)}
+          onClose={() => {
+            setPassOpen(false)
+            setPassError(undefined)
+          }}
+        />
       ) : null}
     </div>
   )
@@ -442,7 +481,7 @@ function StationCard({
             >
               <Icon name="lock" size={14} />
               {!questStarted
-                ? 'Take the quest at the Chief’s House first.'
+                ? 'Take the quest at the Chief’s House first — passage in hand.'
                 : nextName
                   ? `Not your next station — you are due at ${nextName}.`
                   : 'Not on your current episode.'}

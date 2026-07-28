@@ -8,8 +8,10 @@ import { episodesFor } from '../content/quests'
 import { stationsFor } from '../content/stations'
 import type { Episode } from '../content/types'
 import { activeQuest, checkIn } from '../services/presenceService'
+import { getUserParty } from '../services/partyService'
 import { QUEST_START } from '../content/stationMap'
 import { useToast } from '../components/Toast'
+import PassagePicker from '../components/PassagePicker'
 import { ArchCard, Badge, Button, Dialog, Ornament, ProgressTrail, Seal } from '../ui'
 import type { TrailStep } from '../ui'
 import { ORG_SEAL_ART, romanNumeral } from './questIcons'
@@ -21,6 +23,8 @@ export default function QuestlineScreen() {
   const { orgId } = useParams<{ orgId: string }>()
   const user = currentUser()
   const [loreEpisode, setLoreEpisode] = useState<Episode | null>(null)
+  const [passOpen, setPassOpen] = useState(false)
+  const [passError, setPassError] = useState<string | undefined>(undefined)
 
   if (!user) return null
   const org = orgId ? getOrg(orgId) : undefined
@@ -47,21 +51,33 @@ export default function QuestlineScreen() {
    * Taking the quest. The chief hands it out, so this is where a walk begins:
    * it checks the whole party in at his house — which is what makes the quest
    * active — and then opens the station list they will be working through.
+   *
+   * A quest costs a Quest Experience, so the first attempt goes without a
+   * passage: an episode already paid for passes straight through, and anything
+   * else comes back asking, which opens the picker.
    */
-  function handleTakeQuest() {
+  function handleTakeQuest(passBookingId?: string) {
     if (!user || !org) return
-    const outcome = checkIn(user.id, QUEST_START.id, { orgId: org.id })
-    if (outcome) {
-      show({
-        title: `Checked in — ${outcome.placeName}`,
-        body: outcome.carried.length
-          ? `${outcome.partyName} checked in with you.`
-          : 'The quest is yours. Five minutes here, then the trail.',
-        icon: 'stamp',
-      })
-      if (outcome.walk.nextStationName) {
-        show({ title: `First station — ${outcome.walk.nextStationName}`, icon: 'footprints' })
+    const result = checkIn(user.id, QUEST_START.id, { orgId: org.id, passBookingId })
+    if (!result.ok) {
+      if (result.needPass) {
+        setPassError(passBookingId ? result.error : undefined)
+        setPassOpen(true)
+        return
       }
+      show({ title: result.error, icon: 'triangle-alert' })
+      return
+    }
+    setPassOpen(false)
+    show({
+      title: `Checked in — ${result.placeName}`,
+      body: result.carried.length
+        ? `${result.partyName} checked in with you.`
+        : 'The quest is yours. Five minutes here, then the trail.',
+      icon: 'stamp',
+    })
+    if (result.walk.nextStationName) {
+      show({ title: `First station — ${result.walk.nextStationName}`, icon: 'footprints' })
     }
     navigate(`/quests/${org.id}/check-in`)
   }
@@ -134,7 +150,7 @@ export default function QuestlineScreen() {
                     letterSpacing: '0.05em',
                   }
             }
-            onClick={walking ? () => navigate(`/quests/${org!.id}/check-in`) : handleTakeQuest}
+            onClick={walking ? () => navigate(`/quests/${org!.id}/check-in`) : () => handleTakeQuest()}
           >
             {walking ? 'Continue quest' : 'Check in with Village Chief'}
           </Button>
@@ -167,6 +183,20 @@ export default function QuestlineScreen() {
       >
         {loreEpisode?.loreOnComplete}
       </Dialog>
+
+      {passOpen && current ? (
+        <PassagePicker
+          userId={user.id}
+          guests={getUserParty(user.id)?.memberIds.length ?? 1}
+          subtitle={`${org.name} — Episode ${current.number}, ${current.title}.`}
+          error={passError}
+          onPick={(bookingId) => handleTakeQuest(bookingId)}
+          onClose={() => {
+            setPassOpen(false)
+            setPassError(undefined)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

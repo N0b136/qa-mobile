@@ -15,6 +15,8 @@ export const TIERS: BookingTier[] = [
     icon: 'backpack',
     priceAdult: 25,
     priceChild: 25,
+    // "1 Quest Experience" — one episode, on the booked day only.
+    pass: { validFor: 'day', questsPerGuest: 1, per: 'day' },
     perks: [
       'Access to Village of Queston',
       '1 Quest Experience',
@@ -30,6 +32,8 @@ export const TIERS: BookingTier[] = [
     priceAdult: 35,
     priceChild: 35,
     featured: true,
+    // "Full-day access ... ALL THREE Quest Experiences" — unlimited for the day.
+    pass: { validFor: 'day', questsPerGuest: null, per: 'day' },
     perks: [
       'Full-day access to Village of Queston',
       'ALL THREE Quest Experiences',
@@ -47,6 +51,8 @@ export const TIERS: BookingTier[] = [
     flatPrice: 90,
     maxParty: 6,
     perPersonOver: { included: 6, price: 5 },
+    // Group rate on the Adventurer terms: one Quest Experience each, that day.
+    pass: { validFor: 'day', questsPerGuest: 1, per: 'day' },
     perks: [
       'Admission for up to 6 guests',
       'Village of Queston access + 1 Quest Experience',
@@ -63,6 +69,8 @@ export const TIERS: BookingTier[] = [
     flatPrice: 125,
     maxParty: 6,
     perPersonOver: { included: 6, price: 5 },
+    // Group rate on the Hero terms: all three quests, all day.
+    pass: { validFor: 'day', questsPerGuest: null, per: 'day' },
     perks: [
       'Admission for up to 6 guests',
       'Full-day access to Village of Queston',
@@ -81,6 +89,9 @@ export const TIERS: BookingTier[] = [
     icon: 'badge',
     monthly: true,
     flatPrice: 30,
+    // "One visit per week ... 1 Quest Experience per visit" — the allowance
+    // refreshes weekly and the membership runs a month from its start date.
+    pass: { validFor: 'month', questsPerGuest: 1, per: 'week' },
     perks: [
       'One visit per week',
       'Village of Queston access',
@@ -96,6 +107,8 @@ export const TIERS: BookingTier[] = [
     icon: 'badge-check',
     monthly: true,
     flatPrice: 35,
+    // "Unlimited visits, unlimited access to ALL 3 Quests", all month.
+    pass: { validFor: 'month', questsPerGuest: null, per: 'month' },
     perks: [
       'Unlimited visits',
       'Unlimited access to ALL 3 Quests',
@@ -117,6 +130,8 @@ export const TIERS: BookingTier[] = [
     flatPrice: 45,
     maxParty: 6,
     perPersonOver: { included: 6, price: 5 },
+    // Unlimited, all month, for the whole household.
+    pass: { validFor: 'month', questsPerGuest: null, per: 'month' },
     perks: [
       'Unlimited visits for up to 6 family members',
       'Unlimited access to ALL 3 Quests',
@@ -136,6 +151,9 @@ export const TIERS: BookingTier[] = [
     tagline: 'A full quest-party celebration.',
     icon: 'cake',
     flatPrice: 350,
+    // "Exclusive 1h Quest Lane Reservation" — one Quest Experience each,
+    // on the day of the party.
+    pass: { validFor: 'day', questsPerGuest: 1, per: 'day' },
     perks: [
       'Up to 15 children (plus adults)',
       'Exclusive 1-hour Quest Lane reservation',
@@ -151,6 +169,8 @@ export const TIERS: BookingTier[] = [
     tagline: 'The full hero treatment.',
     icon: 'party-popper',
     flatPrice: 450,
+    // Everything in the Adventurer package: one Quest Experience each, that day.
+    pass: { validFor: 'day', questsPerGuest: 1, per: 'day' },
     perks: [
       'Everything in the Adventurer package',
       "Birthday child's choice: custom Blacksmith Sword or Hero Cape",
