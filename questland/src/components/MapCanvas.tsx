@@ -73,22 +73,33 @@ export default function MapCanvas({
     sizeRef.current = size
   }, [size])
 
+  // Watch the container itself, not the window.
+  //
+  // Measuring once on mount is not enough: a child's effects run before its
+  // parent's, so on the console the chart would measure while the page was
+  // still clamped to the guest app's 480px column — ConsoleScreen lifts that
+  // clamp from its own effect, one tick later — and a chart sized for a phone
+  // would sit pinned to the left of a desktop panel until something happened to
+  // fire a window resize. A ResizeObserver catches that and every other reflow
+  // (panel growth, a scrollbar appearing, browser zoom) for free.
   useEffect(() => {
+    const el = viewportRef.current
+    if (!el) return
     function measure() {
-      const el = viewportRef.current
-      if (!el) return
-      const w = el.clientWidth
-      const h = el.clientHeight
-      setSize({ w, h })
+      const w = el!.clientWidth
+      const h = el!.clientHeight
+      if (w === 0 || h === 0) return
+      setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }))
       setTransform((prev) => {
         const { tx, ty } = clampTransform(prev.scale, prev.tx, prev.ty, w, h, baseWidth(w, h, fit))
-        return { ...prev, tx, ty }
+        return prev.tx === tx && prev.ty === ty ? prev : { ...prev, tx, ty }
       })
     }
     measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [])
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [fit])
 
   // Attached natively (not passive) so preventDefault actually stops the page
   // scrolling — React's onWheel is passive by default.

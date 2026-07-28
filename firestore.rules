@@ -123,6 +123,18 @@ service cloud.firestore {
       allow write: if isSelf(uid) || (isRealUser() && uid.matches('demo-.*'));
     }
 
+    // The station records: an append-only log of every leg walked, kept after
+    // the party has gone home. This is the operations record the Back Office
+    // exports at the end of the day, so STAFF read all of it and nobody edits
+    // any of it — a leg is written once, by the phone that tapped, and revised
+    // never. A guest reaches only their own rows, which is all a demo reset
+    // needs to clear up after itself.
+    match /legs/{id} {
+      allow create: if ownsIncoming() || demoIncoming();
+      allow read, delete: if isStaff() || ownsExisting() || demoExisting();
+      allow update: if false;
+    }
+
     // ── Parties ─────────────────────────────────────────────────────────────
 
     // The code doc is the join lookup, so any signed-in guest may read it. It is

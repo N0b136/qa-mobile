@@ -101,6 +101,52 @@ export interface Presence {
   byName?: string
 }
 
+/**
+ * One check-in, kept forever.
+ *
+ * Presence answers "where is this party NOW" and is overwritten on every
+ * check-in; this is the other half — the record of the walk itself, appended
+ * and never revised. A leg is written once per check-in EVENT, by the device
+ * that tapped, and carries the party it walked in with, so the day's log reads
+ * as parties and quests rather than as individual guests.
+ *
+ * This is the operations record: what the times between legs say about the flow
+ * of the park is the whole reason it is kept.
+ */
+export interface QuestLeg {
+  /** `${groupId}:${placeId}:${at}` — stable, so a re-sync can never double it. */
+  id: string
+  at: number
+  /** The guest whose device recorded it — the one who tapped. */
+  userId: string
+  byName: string
+  /** The party, or the lone guest walking as a party of one. */
+  groupId: string
+  groupKind: 'party' | 'solo'
+  groupName: string
+  partySize: number
+  memberNames: string[]
+  kind: PresenceKind
+  placeId: string
+  placeName: string
+  orgId?: string
+  orgName?: string
+  episodeId?: string
+  episodeNumber?: number
+  episodeTitle?: string
+  /** 0 at the chief's house, then the station's ordinal in the episode. */
+  legNumber?: number
+  stationsTotal?: number
+  /** True when this leg sealed the episode. */
+  sealed?: boolean
+  passCode?: string
+  passName?: string
+  /** group + order + episode — the walk this leg belongs to. Unset at the gate. */
+  runId?: string
+  /** Staged by the presenter's demo remote, so a reset can find it. */
+  demo?: true
+}
+
 export interface Booking {
   id: string
   userId: string

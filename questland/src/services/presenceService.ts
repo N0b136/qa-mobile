@@ -19,13 +19,16 @@
 // phones it happens off the presence snapshot — see `syncParty`, which the
 // cloud bridge calls after every merge.
 //
+// Every check-in is also written to the permanent log (questLogService), which
+// is what presence cannot be: a position is overwritten, a record is kept.
+//
 // Taking the quest is the one check-in that COSTS something. The chief hands
 // out one Quest Experience, and a Quest Experience is what a passage buys — so
 // a quest start must present a valid passage and spends one use of it (see
 // passService). Everything downstream of that is free: the seven stations of
 // the episode are the walk you already paid for.
 
-import type { Presence, PresenceKind } from '../types'
+import type { Presence, PresenceKind, User } from '../types'
 import { load, save } from './store'
 import { getUser } from './authService'
 import { getUserParty } from './partyService'
@@ -38,6 +41,7 @@ import type { StationCredit } from './progressService'
 import { stationsFor } from '../content/stations'
 import { recordCover, redeem as redeemPass, useForEpisode } from './passService'
 import type { PassUse } from './passService'
+import { recordLeg } from './questLogService'
 import * as cloudSync from './cloudSync'
 
 const PRESENCE_KEY = 'ql:presence'
@@ -318,6 +322,48 @@ function partyRefFor(userId: string): { ref?: PartyRef; memberIds: string[] } {
   }
 }
 
+/**
+ * Writes the check-in to the permanent log (questLogService).
+ *
+ * Presence is overwritten on the next check-in, so nothing above this line
+ * survives the walk. One leg per check-in EVENT, raised by the device that
+ * tapped and carrying the party it walked in with — a party is one row in the
+ * records, not one per member, and `syncParty` deliberately does not log again.
+ */
+function logLeg(
+  user: User,
+  place: { id: string; name: string; kind: PresenceKind },
+  at: number,
+  walk: Walk,
+  party: PartyRef | undefined,
+  sealed: boolean
+): void {
+  recordLeg({
+    at,
+    userId: user.id,
+    byName: user.name,
+    group: party
+      ? { kind: 'party', id: party.id, name: party.name, memberNames: party.memberNames }
+      : { kind: 'solo', id: user.id, name: user.name, memberNames: [user.name] },
+    kind: place.kind,
+    placeId: place.id,
+    placeName: place.name,
+    orgId: walk.orgId,
+    orgName: walk.orgName,
+    episodeId: walk.episodeId,
+    episodeNumber: walk.episodeNumber,
+    episodeTitle: walk.episodeTitle,
+    // The chief's house opens the walk at 0; a station's ordinal is how many are
+    // sealed once it has been credited. A gate arrival is not a leg of any one
+    // quest, so it is numbered not at all.
+    legNumber: place.kind === 'village' ? undefined : place.kind === 'start' ? 0 : walk.stationsDone,
+    stationsTotal: walk.stationsTotal,
+    sealed,
+    passCode: walk.passCode,
+    passName: walk.passName,
+  })
+}
+
 export interface CheckInOptions {
   at?: number
   /**
@@ -445,6 +491,9 @@ export function checkIn(
   const own = records.find((r) => r.userId === user.id)
   if (own) cloudSync.pushPresence(own)
 
+  const walk = walks.get(user.id) ?? {}
+  logLeg(user, place, at, walk, partyRef, sealed.has(user.id))
+
   return {
     ok: true,
     placeName: place.name,
@@ -452,7 +501,7 @@ export function checkIn(
     carried: records.filter((r) => r.userId !== user.id).map((r) => r.guestName),
     partyName: partyRef?.name,
     credit,
-    walk: walks.get(user.id) ?? {},
+    walk,
     pass,
   }
 }
@@ -481,6 +530,9 @@ export function checkInAtGate(userId: string, at: number = Date.now()): CheckInR
   const own = records.find((r) => r.userId === user.id)
   if (own) cloudSync.pushPresence(own)
 
+  const walk = walkFor(user.id, user.orgId)
+  logLeg(user, place, at, walk, partyRef, false)
+
   return {
     ok: true,
     placeName: place.name,
@@ -488,7 +540,7 @@ export function checkInAtGate(userId: string, at: number = Date.now()): CheckInR
     carried: records.filter((r) => r.userId !== user.id).map((r) => r.guestName),
     partyName: partyRef?.name,
     credit: null,
-    walk: walkFor(user.id, user.orgId),
+    walk,
   }
 }
 

@@ -20,6 +20,7 @@ import type {
   Party,
   Presence,
   ProgressMap,
+  QuestLeg,
   SosRequest,
   SosStatus,
   StationMap,
@@ -85,6 +86,9 @@ const SCHEDULED_KEY = 'ql:scheduled'
 const USERS_KEY = 'ql:users'
 const PARTIES_KEY = 'ql:parties'
 const PRESENCE_KEY = 'ql:presence'
+const LOG_KEY = 'ql:questLog'
+/** Matches questLogService's cap — the mirror is a working window, not an archive. */
+const LOG_CAP = 2000
 const notifKey = (userId: string) => `ql:notifications:${userId}`
 const progressKey = (userId: string) => `ql:progress:${userId}`
 const stationKey = (userId: string) => `ql:stations:${userId}`
@@ -501,6 +505,30 @@ function mergePresenceSnapshot(snap: QuerySnapshot<DocumentData>, selfId: string
   }
 }
 
+/**
+ * The station records. A leg is written once and never revised, so the merge is
+ * a plain union by id — there is no conflict a log entry can have with itself.
+ */
+function mergeLegsSnapshot(snap: QuerySnapshot<DocumentData>): void {
+  const local = load<QuestLeg[]>(LOG_KEY, [])
+  const byId = new Map(local.map((l) => [l.id, l] as const))
+
+  snap.docChanges().forEach((c) => {
+    if (c.type === 'removed') byId.delete(c.doc.id)
+  })
+
+  snap.forEach((d) => {
+    const leg = d.data() as QuestLeg
+    if (!leg?.id || typeof leg.at !== 'number') return
+    byId.set(leg.id, leg)
+  })
+
+  const merged = Array.from(byId.values())
+    .sort((a, b) => b.at - a.at)
+    .slice(0, LOG_CAP)
+  if (!deepEqual(merged, local)) save(LOG_KEY, merged)
+}
+
 function bookingStamp(b: Booking | undefined): number {
   if (!b) return -1
   return b.updatedAt ?? b.createdAt
@@ -689,7 +717,7 @@ export function startGuestSync(userId: string): () => void {
 }
 
 export function startConsoleSync(): () => void {
-  return subscribeWhenAuthed((fb, { collection, onSnapshot }) => {
+  return subscribeWhenAuthed((fb, { collection, limit, onSnapshot, orderBy, query }) => {
     const unsubs: Array<() => void> = []
 
     unsubs.push(
@@ -723,6 +751,16 @@ export function startConsoleSync(): () => void {
       onSnapshot(
         collection(fb.db, 'presence'),
         (snap) => mergePresenceSnapshot(snap, null),
+        () => setCloudState('offline')
+      )
+    )
+    // The station records. Bounded to the most recent legs rather than the whole
+    // history: the console is a working board, and a day is exported and then
+    // read in a spreadsheet, not scrolled here forever.
+    unsubs.push(
+      onSnapshot(
+        query(collection(fb.db, 'legs'), orderBy('at', 'desc'), limit(LOG_CAP)),
+        (snap) => mergeLegsSnapshot(snap),
         () => setCloudState('offline')
       )
     )
@@ -798,6 +836,23 @@ export function pushPresence(p: Presence): void {
     try {
       const { doc, setDoc } = await import('firebase/firestore')
       await setDoc(doc(fb.db, 'presence', p.userId), clean({ ...p }))
+    } catch {
+      // swallow
+    }
+  })
+}
+
+/**
+ * Appends one leg to the station records. Written once, never updated — the id
+ * is derived from the check-in itself, so a retry lands on the same document
+ * instead of doubling the row.
+ */
+export function pushLeg(leg: QuestLeg): void {
+  void ensureFirebase().then(async (fb) => {
+    if (!fb) return
+    try {
+      const { doc, setDoc } = await import('firebase/firestore')
+      await setDoc(doc(fb.db, 'legs', leg.id), clean({ ...leg }))
     } catch {
       // swallow
     }
@@ -1101,17 +1156,25 @@ export async function fireDueSchedules(): Promise<void> {
 }
 
 /**
- * Clears the demo world's cloud docs. Every query here is one the presenter's
+ * Clears the demo world's cloud docs. Every read here is one the presenter's
  * own (guest) account is allowed to run: their own calls and inbox, plus the
  * demo- guest shells. Scheduled sends belong to staff and are left alone — the
  * console clears its own.
  *
- * Each collection is isolated so a denial on one cannot abandon the rest.
+ * WHY THE CAST'S DOCS ARE DELETED BY ID rather than found by a `demo == true`
+ * query: where a rule gates reads on the document's own fields (sos and legs
+ * both do — `demoExisting()` reads `resource.data.userId`), a QUERY is refused
+ * outright, because that filter alone does not prove every match belongs to a
+ * demo- id. A delete addressed at one document IS checked against that
+ * document, so it passes. The local mirrors already hold exactly those ids.
+ * (`guests` reads open to any signed-in client, so its query is fine.)
+ *
+ * Each step is isolated so a denial on one cannot abandon the rest.
  */
 export async function deleteDemoCommDocs(currentUserId: string): Promise<void> {
   const fb = await ensureFirebase()
   if (!fb) return
-  const { collection, query, where, getDocs, writeBatch } = await import('firebase/firestore')
+  const { collection, doc, query, where, getDocs, writeBatch } = await import('firebase/firestore')
   const refs: DocumentReference[] = []
 
   const gather = async (run: () => Promise<void>) => {
@@ -1122,17 +1185,19 @@ export async function deleteDemoCommDocs(currentUserId: string): Promise<void> {
     }
   }
 
-  for (const col of ['sos', 'notifications']) {
+  for (const col of ['sos', 'notifications', 'legs']) {
     await gather(async () => {
       const own = await getDocs(query(collection(fb.db, col), where('userId', '==', currentUserId)))
       own.forEach((d) => refs.push(d.ref))
     })
   }
-  // The staged cast's calls for aid — reachable under the demo- exception.
-  await gather(async () => {
-    const demoSos = await getDocs(query(collection(fb.db, 'sos'), where('demo', '==', true)))
-    demoSos.forEach((d) => refs.push(d.ref))
-  })
+  // The staged cast's calls for aid and station records, addressed by id.
+  for (const r of load<SosRequest[]>(SOS_KEY, [])) {
+    if (r.userId?.startsWith('demo-')) refs.push(doc(fb.db, 'sos', r.id))
+  }
+  for (const l of load<QuestLeg[]>(LOG_KEY, [])) {
+    if (l.userId?.startsWith('demo-')) refs.push(doc(fb.db, 'legs', l.id))
+  }
   await gather(async () => {
     const guests = await getDocs(query(collection(fb.db, 'guests'), where('demo', '==', true)))
     guests.forEach((d) => refs.push(d.ref))
