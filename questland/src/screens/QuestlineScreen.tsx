@@ -7,7 +7,7 @@ import { getOrg } from '../content/orgs'
 import { episodesFor } from '../content/quests'
 import { stationsFor } from '../content/stations'
 import type { Episode } from '../content/types'
-import { activeQuest, checkIn } from '../services/presenceService'
+import { checkIn, questTaken } from '../services/presenceService'
 import { getUserParty } from '../services/partyService'
 import { QUEST_START } from '../content/stationMap'
 import { useToast } from '../components/Toast'
@@ -35,8 +35,11 @@ export default function QuestlineScreen() {
   const current = currentEpisode(user.id, org.id)
   const count = doneIds.size
   const rank = rankFor(org.id, count)
-  // "Continue" rather than "Begin" once they are actually out on this questline.
-  const walking = activeQuest(user.id)?.orgId === org.id
+  // "Continue" rather than "Check in with Village Chief" once THIS questline's
+  // current episode has been taken. Read per questline, not off the one quest
+  // they are physically walking: a Hero Pass opens all three at once, and
+  // sealing an episode moves the questline on to one nobody has paid for yet.
+  const walking = questTaken(user.id, org.id)
 
   const steps: TrailStep[] = episodes.map((ep) => {
     const state: TrailStep['state'] = doneIds.has(ep.id) ? 'complete' : current?.id === ep.id ? 'current' : 'locked'

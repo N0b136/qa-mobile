@@ -99,6 +99,7 @@ export default function MapScreen() {
 
   // ---- dialogs ----
   const [openStation, setOpenStation] = useState<Station | null>(null)
+
   const [openLandmark, setOpenLandmark] = useState<MapLandmark | null>(null)
   const [startOpen, setStartOpen] = useState(false)
   const [passOpen, setPassOpen] = useState(false)
@@ -139,9 +140,17 @@ export default function MapScreen() {
     }
   }
 
+  /**
+   * Sealing a station off the chart.
+   *
+   * All but the three base stations are shared between the questlines, so the
+   * credit has to be told which walk it belongs to — the one the chart is
+   * lighting. Without it a guest walking somebody else's questline would earn
+   * nothing here, however plainly the marker pointed them at the station.
+   */
   function handleCheckIn() {
     if (!openStation || !user) return
-    const outcome = checkIn(user.id, openStation.id)
+    const outcome = checkIn(user.id, openStation.id, quest?.orgId ? { orgId: quest.orgId } : {})
     setOpenStation(null)
     announce(outcome)
   }
@@ -233,7 +242,7 @@ export default function MapScreen() {
           onCheckIn={handleCheckIn}
           here={standing?.stationId === openStation.id ? standing : null}
           sealed={sealedIds.has(openStation.id)}
-          checkable={!!quest && quest.nextStationId === openStation.id}
+          checkable={quest?.nextStationId === openStation.id}
           questStarted={!!quest}
           nextName={quest?.nextStationName}
           episodeTitle={creditEpisodeFor(openStation)?.title}

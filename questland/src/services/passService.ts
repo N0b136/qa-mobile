@@ -9,12 +9,18 @@
 // The rules come off the tickets themselves (`content/bookingTiers.ts`, in turn
 // from content-intake/ticketing.json), so nothing here hard-codes a tier:
 //
-//   Adventurer Pass       1 Quest Experience per guest, on the booked day
+//   Adventurer Pass       1 Quest Experience, on the booked day
 //   Hero Pass             unlimited, all day
 //   Group passes          the same terms, for everyone the group covers
-//   Adventurer Membership 1 Quest Experience per guest per week, for a month
+//   Adventurer Membership 1 Quest Experience per week, for a month
 //   Hero / Family Hero    unlimited, for a month
-//   Birthday packages     one Quest Experience each, on the day of the party
+//   Birthday packages     1 Quest Experience, on the day of the party
+//
+// An allowance belongs to the passage, not to each head on it: a passage booked
+// for five walks five guests through the chief's door on ONE Quest Experience.
+// Headcount buys a bigger party, never more quests — so an Adventurer Pass is
+// spent the moment it is presented, whoever it came in with, while a Hero Pass
+// stays good for the rest of the day.
 //
 // The ledger (`ql:passUses:${userId}`) is per guest. Two shapes live in it:
 // a redemption, which names the booking it was charged to and counts against
@@ -156,7 +162,7 @@ export function useForEpisode(userId: string, orgId: string, episodeId: string):
   )
 }
 
-/** Guests a passage was bought for — the headcount its allowance multiplies by. */
+/** Guests a passage was bought for — how many it walks in on one quest. */
 export function guestsOf(booking: Booking): number {
   return Math.max(1, booking.adults + booking.children)
 }
@@ -164,7 +170,7 @@ export function guestsOf(booking: Booking): number {
 // ── Reading a passage ─────────────────────────────────────────────────────────
 
 function noteFor(state: Omit<PassState, 'note'>, at: number): string {
-  const { booking, tier, status, remaining } = state
+  const { booking, tier, status, remaining, guests } = state
   switch (status) {
     case 'cancelled':
       return 'This passage was cancelled.'
@@ -178,9 +184,15 @@ function noteFor(state: Omit<PassState, 'note'>, at: number): string {
       return tier.pass.per === 'week'
         ? 'This week’s quest is claimed. The next one opens in a few days.'
         : 'Every Quest Experience on this passage is claimed.'
-    default:
-      if (remaining === null) return 'Unlimited Quest Experiences.'
-      return `${remaining} Quest Experience${remaining === 1 ? '' : 's'} left.`
+    default: {
+      // The headcount is the part a guest at the chief's door needs to hear —
+      // it is what the passage carries in, now that it is not what it buys.
+      const covers = guests > 1 ? ` Walks in ${guests} guests.` : ''
+      if (remaining === null) {
+        return `Unlimited Quest Experiences ${tier.pass.validFor === 'month' ? 'this month' : 'today'}.${covers}`
+      }
+      return `${remaining} Quest Experience${remaining === 1 ? '' : 's'} left.${covers}`
+    }
   }
 }
 
@@ -190,7 +202,10 @@ export function passStateFor(userId: string, booking: Booking, at: number = Date
   if (!tier) return null
 
   const guests = guestsOf(booking)
-  const allowance = tier.pass.questsPerGuest === null ? null : tier.pass.questsPerGuest * guests
+  // The allowance is the PASSAGE's, not each head's. A passage booked for five
+  // walks all five through the chief's door on one Quest Experience — booking
+  // for a crowd buys a bigger party, never a longer season.
+  const allowance = tier.pass.quests
 
   const validity = validityOf(booking, tier)
   const period = periodBounds(booking, tier, at)

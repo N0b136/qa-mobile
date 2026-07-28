@@ -191,13 +191,30 @@ export interface ActiveQuest extends Walk {
 }
 
 /**
+ * Whether the questline's CURRENT episode has been taken.
+ *
+ * The ledger is the truth: a quest starts by spending a Quest Experience at the
+ * chief's house, so a redemption for this episode means it is paid for and
+ * underway. Sealed stations count too, for progress that arrived by some other
+ * path — a Guide's staff code, or a party-mate carrying the walk.
+ *
+ * Note this reads the CURRENT episode. Sealing one moves the questline on to
+ * the next, which nobody has taken yet — so finishing a quest ends it, and the
+ * chief must be called on again for the one after.
+ */
+export function questTaken(userId: string, orgId: string): boolean {
+  const episode = currentEpisode(userId, orgId)
+  if (!episode) return false
+  return !!useForEpisode(userId, orgId, episode.id) || stationsDone(userId, episode.id).length > 0
+}
+
+/**
  * The quest a guest is actually walking, or null if they are not on one.
  *
- * A quest becomes active when they take it at the chief's house or check in at
- * a station — arriving at the gate is not enough, since standing in the village
- * is not yet walking anything. It stays active while any station of the episode
- * is sealed, so leaving the board (or an expired window) does not abandon a walk
- * that is genuinely half done.
+ * A quest becomes active when they take it at the chief's house — arriving at
+ * the gate is not enough, since standing in the village is not yet walking
+ * anything. It stays active until the episode is sealed, so leaving the board
+ * (or an expired window) does not abandon a walk that is genuinely half done.
  *
  * The numbers are recomputed rather than read off the record, so they are right
  * even if progress moved by some other path.
@@ -206,8 +223,11 @@ export function activeQuest(userId: string, now: number = Date.now()): ActiveQue
   const user = getUser(userId)
   if (!user) return null
 
+  // Where they were last seen decides WHICH questline, but only the ledger
+  // decides whether one is open: a presence row outlives the quest that made it
+  // by up to its window, and a sealed episode is a finished quest.
   const p = presenceFor(userId)
-  if (p && isTracked(p, now) && p.kind !== 'village' && p.orgId) {
+  if (p && isTracked(p, now) && p.kind !== 'village' && p.orgId && questTaken(userId, p.orgId)) {
     return {
       ...walkFor(userId, p.orgId),
       atStationId:
@@ -218,8 +238,7 @@ export function activeQuest(userId: string, now: number = Date.now()): ActiveQue
   // Off the board, but part-way through an episode: still their active quest.
   const orgIds = [user.orgId, ...ORGS.map((o) => o.id)].filter((id): id is string => !!id)
   for (const orgId of orgIds) {
-    const episode = currentEpisode(userId, orgId)
-    if (episode && stationsDone(userId, episode.id).length > 0) return walkFor(userId, orgId)
+    if (questTaken(userId, orgId)) return walkFor(userId, orgId)
   }
   return null
 }
