@@ -13,8 +13,10 @@ import { getOrg } from '../content/orgs'
 import { QUEST_START } from '../content/stationMap'
 import { stationsFor } from '../content/stations'
 import type { Station } from '../content/types'
+import { getUserParty } from '../services/partyService'
 import { useToast } from '../components/Toast'
 import { QrScanner } from '../components/QrScanner'
+import PassagePicker from '../components/PassagePicker'
 import { Badge, Button, Card, Icon, IconButton, Input, Ornament, Tag } from '../ui'
 import { romanNumeral, STATION_ICON } from './questIcons'
 
@@ -35,6 +37,8 @@ export default function CheckInScreen() {
   const [codeError, setCodeError] = useState<string | undefined>(undefined)
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | undefined>(undefined)
+  const [passOpen, setPassOpen] = useState(false)
+  const [passError, setPassError] = useState<string | undefined>(undefined)
 
   if (!user) return null
   const org = orgId ? getOrg(orgId) : undefined
@@ -54,16 +58,19 @@ export default function CheckInScreen() {
   // seven check-ins, and the seventh seals it. The Guide's code below stays as
   // the override for a marker that will not read.
   function handleStationCheckIn(station: Station) {
-    const outcome = checkIn(user!.id, station.id, { orgId: org!.id })
-    if (!outcome) return
+    const result = checkIn(user!.id, station.id, { orgId: org!.id })
+    if (!result.ok) {
+      show({ title: result.error, icon: 'triangle-alert' })
+      return
+    }
 
     show({
       title: `Checked in — ${station.name}`,
-      body: outcome.carried.length ? `${outcome.partyName} checked in with you.` : undefined,
+      body: result.carried.length ? `${result.partyName} checked in with you.` : undefined,
       icon: 'stamp',
     })
 
-    const credit = outcome.credit
+    const credit = result.credit
     if (credit?.completion?.ok) {
       finishOk(credit.completion)
     } else if (credit?.repeat) {
@@ -71,14 +78,26 @@ export default function CheckInScreen() {
     }
   }
 
-  /** Same as the questline screen: the chief hands out the quest, which starts the walk. */
-  function handleTakeQuest() {
-    const outcome = checkIn(user!.id, QUEST_START.id, { orgId: org!.id })
-    if (!outcome) return
+  /**
+   * Same as the questline screen: the chief hands out the quest, which starts
+   * the walk — and asks for the passage that pays for it.
+   */
+  function handleTakeQuest(passBookingId?: string) {
+    const result = checkIn(user!.id, QUEST_START.id, { orgId: org!.id, passBookingId })
+    if (!result.ok) {
+      if (result.needPass) {
+        setPassError(passBookingId ? result.error : undefined)
+        setPassOpen(true)
+        return
+      }
+      show({ title: result.error, icon: 'triangle-alert' })
+      return
+    }
+    setPassOpen(false)
     show({
-      title: `Checked in — ${outcome.placeName}`,
-      body: outcome.carried.length
-        ? `${outcome.partyName} checked in with you.`
+      title: `Checked in — ${result.placeName}`,
+      body: result.carried.length
+        ? `${result.partyName} checked in with you.`
         : 'The quest is yours. The first station is open.',
       icon: 'stamp',
     })
@@ -241,7 +260,7 @@ export default function CheckInScreen() {
       <p style={{ marginTop: 10, font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
         {walking
           ? 'Check in at each station as you reach it — on this list or on the chart. The road ahead stays dark until you walk it. A party checks in together.'
-          : 'Call on the Village Chief to take this quest. The trail opens one station at a time.'}
+          : 'Call on the Village Chief to take this quest — he will ask to see your passage. The trail opens one station at a time.'}
       </p>
 
       {!walking ? (
@@ -255,7 +274,7 @@ export default function CheckInScreen() {
             font: '700 var(--text-sm)/1 var(--font-ui)',
             letterSpacing: '0.05em',
           }}
-          onClick={handleTakeQuest}
+          onClick={() => handleTakeQuest()}
         >
           Check in with Village Chief
         </Button>
@@ -310,6 +329,20 @@ export default function CheckInScreen() {
           </p>
         ) : null}
       </div>
+
+      {passOpen ? (
+        <PassagePicker
+          userId={user.id}
+          guests={getUserParty(user.id)?.memberIds.length ?? 1}
+          subtitle={`${org.name} — Episode ${ep.number}, ${ep.title}.`}
+          error={passError}
+          onPick={(bookingId) => handleTakeQuest(bookingId)}
+          onClose={() => {
+            setPassOpen(false)
+            setPassError(undefined)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

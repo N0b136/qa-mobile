@@ -66,6 +66,20 @@ export interface Presence {
   /** Where they are headed next on the rotation. */
   nextStationId?: string
   nextStationName?: string
+  /**
+   * The passage this walk was taken on. A quest costs one Quest Experience off
+   * a passage, so the Back Office can see which one paid for the party in front
+   * of it without opening anybody's bookings.
+   */
+  passCode?: string
+  passName?: string
+  /**
+   * The guests that passage actually paid for. A passage covers its booked
+   * headcount, so a larger party can walk in together while the guests beyond
+   * the count still owe the chief a passage of their own — this is how their
+   * phones tell which case they are in.
+   */
+  passCovers?: string[]
   partyId?: string
   partyName?: string
   /**

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAppTick } from '../hooks/useAppTick'
 import { currentUser } from '../services/authService'
 import { cancelBooking, getTier, listBookings } from '../services/bookingService'
+import { passStateFor } from '../services/passService'
 import type { Booking } from '../types'
 import EmptyState from '../components/EmptyState'
 import { Badge, Button, Card, Dialog, Icon, Tag } from '../ui'
@@ -73,6 +74,9 @@ export default function BookingsScreen() {
           {ordered.map((b) => {
             const tier = getTier(b.tierId)
             const cancellable = isUpcoming(b)
+            // What the passage still buys in the park — the same reading the
+            // chief's door uses when it asks to see one.
+            const pass = passStateFor(user.id, b)
             return (
               <Card key={b.id}>
                 <div className="row row--between">
@@ -100,7 +104,28 @@ export default function BookingsScreen() {
                     <span className="muted">Confirmation</span>
                     <span style={{ fontWeight: 700, letterSpacing: '0.04em' }}>{b.code}</span>
                   </div>
+                  {pass && b.status === 'confirmed' ? (
+                    <div className="row row--between">
+                      <span className="muted">Quest Experiences</span>
+                      <span
+                        style={{
+                          color: pass.status === 'valid' ? 'var(--text-gold)' : 'var(--text-muted)',
+                          textAlign: 'right',
+                        }}
+                      >
+                        {pass.remaining === null
+                          ? 'Unlimited'
+                          : `${pass.remaining} of ${pass.allowance} left`}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
+                {pass && b.status === 'confirmed' ? (
+                  <p className="row muted" style={{ gap: 6, marginTop: 10, fontSize: 12 }}>
+                    <Icon name={pass.status === 'valid' ? 'ticket-check' : 'clock'} size={13} />
+                    {pass.note}
+                  </p>
+                ) : null}
                 {cancellable ? (
                   <Button
                     variant="ghost"

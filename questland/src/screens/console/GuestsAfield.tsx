@@ -106,6 +106,15 @@ export default function GuestsAfield({ onSend }: Props) {
                       </div>
                     ) : null}
 
+                    {/* The passage that paid for this walk — what a Warden asks
+                        to see when a party is where it should not be. */}
+                    {o.passCode ? (
+                      <div className="row muted" style={{ gap: 6, marginTop: 3, fontSize: 12 }}>
+                        <Icon name="ticket-check" size={12} />
+                        {o.passName ?? 'Passage'} · {o.passCode}
+                      </div>
+                    ) : null}
+
                     {o.kind === 'party' ? (
                       <div className="muted" style={{ marginTop: 3, fontSize: 12 }}>
                         {o.memberNames.join(', ')}

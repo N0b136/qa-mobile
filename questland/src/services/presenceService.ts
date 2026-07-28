@@ -18,6 +18,12 @@
 // with them: on this device that happens immediately (below), and on their own
 // phones it happens off the presence snapshot — see `syncParty`, which the
 // cloud bridge calls after every merge.
+//
+// Taking the quest is the one check-in that COSTS something. The chief hands
+// out one Quest Experience, and a Quest Experience is what a passage buys — so
+// a quest start must present a valid passage and spends one use of it (see
+// passService). Everything downstream of that is free: the seven stations of
+// the episode are the walk you already paid for.
 
 import type { Presence, PresenceKind } from '../types'
 import { load, save } from './store'
@@ -30,6 +36,8 @@ import type { Station } from '../content/types'
 import { creditOrgFor, creditStation, currentEpisode, stationsDone } from './progressService'
 import type { StationCredit } from './progressService'
 import { stationsFor } from '../content/stations'
+import { recordCover, redeem as redeemPass, useForEpisode } from './passService'
+import type { PassUse } from './passService'
 import * as cloudSync from './cloudSync'
 
 const PRESENCE_KEY = 'ql:presence'
@@ -59,6 +67,9 @@ export interface Walk {
   stationsTotal?: number
   nextStationId?: string
   nextStationName?: string
+  /** The passage this walk was taken on — what a Warden asks to see. */
+  passCode?: string
+  passName?: string
 }
 
 /**
@@ -158,6 +169,7 @@ export function walkFor(userId: string, orgId?: string): Walk {
   const rotation = stationsFor(episode.id)
   const done = stationsDone(userId, episode.id)
   const next = rotation.find((s) => !done.includes(s.id))
+  const pass = useForEpisode(userId, orgId, episode.id)
   return {
     orgId,
     orgName: org?.name,
@@ -168,6 +180,8 @@ export function walkFor(userId: string, orgId?: string): Walk {
     stationsTotal: rotation.length,
     nextStationId: next?.id,
     nextStationName: next?.name,
+    passCode: pass?.code,
+    passName: pass?.passName,
   }
 }
 
@@ -221,7 +235,19 @@ export interface CheckInOutcome {
   /** Progress earned by the guest who tapped, if the station was on their episode. */
   credit: StationCredit | null
   walk: Walk
+  /** The passage spent to take the quest, when this check-in was a quest start. */
+  pass?: PassUse
 }
+
+/**
+ * A check-in either happened or it was turned away.
+ *
+ * `needPass` is the one refusal a screen can act on: it means the guest must
+ * present a passage before the chief will hand out the quest.
+ */
+export type CheckInResult =
+  | ({ ok: true } & CheckInOutcome)
+  | { ok: false; error: string; needPass?: boolean }
 
 interface PartyRef {
   id: string
@@ -281,23 +307,31 @@ export interface CheckInOptions {
    * A base station always overrules it and keeps its own order.
    */
   orgId?: string
+  /**
+   * The passage presented at the chief's house. Required to take a quest,
+   * unless this episode has already been paid for.
+   */
+  passBookingId?: string
 }
 
 /**
  * Records `userId` (and their whole party) at `stationId` and credits the
- * station toward each member's current episode. Returns null only when the
- * guest or the place is unknown.
+ * station toward each member's current episode.
+ *
+ * Taking the quest at the chief's house spends a Quest Experience off a
+ * passage, so that one check-in can be refused — see CheckInResult.
  */
 export function checkIn(
   userId: string,
   stationId: string,
   opts: CheckInOptions = {}
-): CheckInOutcome | null {
+): CheckInResult {
   const at = opts.at ?? Date.now()
   const user = getUser(userId)
   const isStart = stationId === QUEST_START.id
   const station = isStart ? null : getStation(stationId)
-  if (!user || (!station && !isStart)) return null
+  if (!user) return { ok: false, error: 'We could not find you on the roll.' }
+  if (!station && !isStart) return { ok: false, error: 'That place is not on the chart.' }
 
   const place = {
     id: stationId,
@@ -307,12 +341,35 @@ export function checkIn(
   const { ref: partyRef, memberIds } = partyRefFor(userId)
   const by = { id: user.id, name: user.name }
 
+  // The gate the whole feature turns on: the chief will not hand out a quest
+  // without a passage, and handing one out spends a Quest Experience.
+  let pass: PassUse | undefined
+  if (isStart) {
+    const questOrgId = opts.orgId ?? user.orgId
+    const episode = questOrgId ? currentEpisode(userId, questOrgId) : null
+    if (!questOrgId || !episode) {
+      return { ok: false, error: 'There is no quest open for you to take.' }
+    }
+    const spent = redeemPass(userId, {
+      bookingId: opts.passBookingId,
+      orgId: questOrgId,
+      episodeId: episode.id,
+      guests: memberIds.length,
+      at,
+    })
+    if (!spent.ok) return { ok: false, error: spent.error, needPass: spent.needPass }
+    pass = spent.use
+  }
+
   // Credit first: whether this station sealed a member's episode is what marks
   // their row final, and the walk package below must read the progress this
   // check-in just earned.
   let credit: StationCredit | null = null
   const sealed = new Set<string>()
   const walks = new Map<string, Walk>()
+  // Seats left on the presented passage after the guest who presented it.
+  let seatsLeft = pass ? Math.max(0, pass.covers - 1) : 0
+  const covered = pass ? [user.id] : []
   for (const id of memberIds) {
     const member = getUser(id)
     if (!member) continue
@@ -325,6 +382,31 @@ export function checkIn(
       if (earned?.completion) sealed.add(id)
       if (self) credit = earned
     }
+    // One passage walks the party in, as far as its headcount reaches. Each
+    // guest it covers records that theirs was paid for — on their own
+    // questline — so the chief never asks them twice for the same episode.
+    // Anyone past the count still walks along; they present their own passage
+    // when they call on the chief from their own phone.
+    if (isStart && pass && !self && orgId && seatsLeft > 0) {
+      const theirs = currentEpisode(id, orgId)
+      if (theirs) {
+        recordCover(
+          id,
+          {
+            code: pass.code,
+            passName: pass.passName,
+            orgId,
+            episodeId: theirs.id,
+            at,
+            guests: pass.guests,
+            covers: pass.covers,
+          },
+          user.id
+        )
+        seatsLeft--
+        covered.push(id)
+      }
+    }
     walks.set(id, walkFor(id, orgId ?? member.orgId))
   }
 
@@ -333,6 +415,9 @@ export function checkIn(
       buildRecord(id, place, at, by, walks.get(id) ?? {}, partyRef, sealed.has(id))
     )
     .filter((r): r is Presence => r !== null)
+    // Who the presented passage paid for rides in the record, so a party-mate's
+    // phone can tell whether it was carried in or still owes the chief one.
+    .map((r) => (pass ? { ...r, passCovers: covered } : r))
   upsert(records)
 
   // Only ever our own doc: the rules let a guest write their own presence and
@@ -342,12 +427,14 @@ export function checkIn(
   if (own) cloudSync.pushPresence(own)
 
   return {
+    ok: true,
     placeName: place.name,
     kind: place.kind,
     carried: records.filter((r) => r.userId !== user.id).map((r) => r.guestName),
     partyName: partyRef?.name,
     credit,
     walk: walks.get(user.id) ?? {},
+    pass,
   }
 }
 
@@ -356,9 +443,9 @@ export function checkIn(
  * Queston, and stays there until they take a quest at the chief's house. This is
  * what puts a party on the Back Office's Guests Afield list in the first place.
  */
-export function checkInAtGate(userId: string, at: number = Date.now()): CheckInOutcome | null {
+export function checkInAtGate(userId: string, at: number = Date.now()): CheckInResult {
   const user = getUser(userId)
-  if (!user) return null
+  if (!user) return { ok: false, error: 'We could not find you on the roll.' }
 
   const place = { id: VILLAGE_PLACE.id, name: VILLAGE_PLACE.name, kind: 'village' as PresenceKind }
   const { ref: partyRef, memberIds } = partyRefFor(userId)
@@ -376,6 +463,7 @@ export function checkInAtGate(userId: string, at: number = Date.now()): CheckInO
   if (own) cloudSync.pushPresence(own)
 
   return {
+    ok: true,
     placeName: place.name,
     kind: place.kind,
     carried: records.filter((r) => r.userId !== user.id).map((r) => r.guestName),
@@ -422,6 +510,29 @@ export function syncParty(selfId: string): void {
   if (latest.kind === 'station' && !isStart) {
     const orgId = creditOrgFor(latest.stationId, self.orgId)
     if (orgId) earned = creditStation(selfId, latest.stationId, orgId)
+  }
+
+  // The mate who tapped presented one passage. If it reached far enough to
+  // cover this guest, their phone records that their episode is paid for, so
+  // the chief never asks them twice for the same walk. If it did not, nothing
+  // is recorded and they will be asked for their own.
+  if (isStart && latest.passCode && latest.passCovers?.includes(selfId) && self.orgId) {
+    const episode = currentEpisode(selfId, self.orgId)
+    if (episode) {
+      recordCover(
+        selfId,
+        {
+          code: latest.passCode,
+          passName: latest.passName ?? 'Passage',
+          orgId: self.orgId,
+          episodeId: episode.id,
+          at: latest.at,
+          guests: latest.partyMemberNames?.length ?? party.memberIds.length,
+          covers: latest.partyMemberNames?.length ?? party.memberIds.length,
+        },
+        latest.byUserId ?? latest.userId
+      )
+    }
   }
 
   const record = buildRecord(
@@ -494,6 +605,8 @@ export function occupants(now: number = Date.now()): Occupant[] {
       stationsTotal: latest.stationsTotal,
       nextStationId: latest.nextStationId,
       nextStationName: latest.nextStationName,
+      passCode: latest.passCode,
+      passName: latest.passName,
     })
   })
 
