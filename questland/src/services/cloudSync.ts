@@ -1156,17 +1156,25 @@ export async function fireDueSchedules(): Promise<void> {
 }
 
 /**
- * Clears the demo world's cloud docs. Every query here is one the presenter's
+ * Clears the demo world's cloud docs. Every read here is one the presenter's
  * own (guest) account is allowed to run: their own calls and inbox, plus the
  * demo- guest shells. Scheduled sends belong to staff and are left alone — the
  * console clears its own.
  *
- * Each collection is isolated so a denial on one cannot abandon the rest.
+ * WHY THE CAST'S DOCS ARE DELETED BY ID rather than found by a `demo == true`
+ * query: where a rule gates reads on the document's own fields (sos and legs
+ * both do — `demoExisting()` reads `resource.data.userId`), a QUERY is refused
+ * outright, because that filter alone does not prove every match belongs to a
+ * demo- id. A delete addressed at one document IS checked against that
+ * document, so it passes. The local mirrors already hold exactly those ids.
+ * (`guests` reads open to any signed-in client, so its query is fine.)
+ *
+ * Each step is isolated so a denial on one cannot abandon the rest.
  */
 export async function deleteDemoCommDocs(currentUserId: string): Promise<void> {
   const fb = await ensureFirebase()
   if (!fb) return
-  const { collection, query, where, getDocs, writeBatch } = await import('firebase/firestore')
+  const { collection, doc, query, where, getDocs, writeBatch } = await import('firebase/firestore')
   const refs: DocumentReference[] = []
 
   const gather = async (run: () => Promise<void>) => {
@@ -1177,30 +1185,22 @@ export async function deleteDemoCommDocs(currentUserId: string): Promise<void> {
     }
   }
 
-  for (const col of ['sos', 'notifications']) {
+  for (const col of ['sos', 'notifications', 'legs']) {
     await gather(async () => {
       const own = await getDocs(query(collection(fb.db, col), where('userId', '==', currentUserId)))
       own.forEach((d) => refs.push(d.ref))
     })
   }
-  // The staged cast's calls for aid — reachable under the demo- exception.
-  await gather(async () => {
-    const demoSos = await getDocs(query(collection(fb.db, 'sos'), where('demo', '==', true)))
-    demoSos.forEach((d) => refs.push(d.ref))
-  })
+  // The staged cast's calls for aid and station records, addressed by id.
+  for (const r of load<SosRequest[]>(SOS_KEY, [])) {
+    if (r.userId?.startsWith('demo-')) refs.push(doc(fb.db, 'sos', r.id))
+  }
+  for (const l of load<QuestLeg[]>(LOG_KEY, [])) {
+    if (l.userId?.startsWith('demo-')) refs.push(doc(fb.db, 'legs', l.id))
+  }
   await gather(async () => {
     const guests = await getDocs(query(collection(fb.db, 'guests'), where('demo', '==', true)))
     guests.forEach((d) => refs.push(d.ref))
-  })
-  // The staged station records. Both queries are ones a guest may run: their
-  // own legs, and the demo cast's.
-  await gather(async () => {
-    const own = await getDocs(query(collection(fb.db, 'legs'), where('userId', '==', currentUserId)))
-    own.forEach((d) => refs.push(d.ref))
-  })
-  await gather(async () => {
-    const staged = await getDocs(query(collection(fb.db, 'legs'), where('demo', '==', true)))
-    staged.forEach((d) => refs.push(d.ref))
   })
   // Take the cast off the stations board. Presence rows are keyed by user id,
   // so the staged ones are exactly the demo- documents.
