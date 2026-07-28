@@ -3,7 +3,7 @@ import { useAppTick } from '../hooks/useAppTick'
 import { currentUser } from '../services/authService'
 import { completedCount, currentEpisode, rankFor } from '../services/progressService'
 import { ORGS } from '../content/orgs'
-import { activeQuest } from '../services/presenceService'
+import { questTaken } from '../services/presenceService'
 import ProgressBar from '../components/ProgressBar'
 import { Badge, Card, Icon, Tag } from '../ui'
 import { ORG_ICON } from './questIcons'
@@ -12,9 +12,6 @@ export default function QuestsScreen() {
   useAppTick()
   const user = currentUser()
   if (!user) return null
-
-  // The questline they are out walking right now, if any.
-  const active = activeQuest(user.id)
 
   // User's chosen order first (if set) — the other two questlines stay open below it.
   const orgs = user.orgId
@@ -62,7 +59,9 @@ export default function QuestsScreen() {
                     <p className="muted" style={{ fontSize: 12 }}>
                       {count} / 10 episodes
                     </p>
-                    {active?.orgId === org.id ? (
+                    {/* Taken and not yet sealed. Per questline, since a Hero
+                        Pass can have all three open at the same time. */}
+                    {questTaken(user.id, org.id) ? (
                       <Badge tone="gold" icon="footprints">
                         Active
                       </Badge>

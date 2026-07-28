@@ -8,7 +8,7 @@ import {
   validateQrText,
   validateStaffCode,
 } from '../services/progressService'
-import { activeQuest, checkIn, presenceFor, statusOf, windowLeft } from '../services/presenceService'
+import { checkIn, presenceFor, questTaken, statusOf, windowLeft } from '../services/presenceService'
 import { getOrg } from '../content/orgs'
 import { QUEST_START } from '../content/stationMap'
 import { stationsFor } from '../content/stations'
@@ -144,7 +144,7 @@ export default function CheckInScreen() {
   // The rotation is walked in order and the road ahead is dark: a station you
   // have not reached yet keeps its name hidden, so the episode is discovered on
   // foot rather than read off a list. Only the next one can be checked into.
-  const walking = activeQuest(user.id)?.orgId === org.id
+  const walking = questTaken(user.id, org.id)
   const nextId = walking ? stations.find((st) => !done.includes(st.id))?.id : undefined
 
   return (

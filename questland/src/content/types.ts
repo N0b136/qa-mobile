@@ -73,12 +73,19 @@ export type PassPeriod = 'day' | 'week' | 'month'
  * pass is good only on its booked date; a membership runs a month from its
  * start date and refreshes its allowance on whatever period the tier states
  * ("one visit per week, 1 Quest Experience per visit").
+ *
+ * The allowance belongs to the PASSAGE, not to each head on it. An Adventurer
+ * Pass booked for five walks five guests through the chief's door on one quest
+ * — it does not hand the booker five quests to spend.
  */
 export interface PassRule {
   /** How long the passage is good for, counted from the booked date. */
   validFor: PassPeriod
-  /** Quest Experiences each covered guest gets per `per`. null = unlimited. */
-  questsPerGuest: number | null
+  /**
+   * Quest Experiences the passage carries per `per`, however many guests it
+   * covers. null = unlimited.
+   */
+  quests: number | null
   /** The period the quest allowance refreshes on. */
   per: PassPeriod
 }
