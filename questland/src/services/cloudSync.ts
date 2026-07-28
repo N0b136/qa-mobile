@@ -20,6 +20,7 @@ import type {
   Party,
   Presence,
   ProgressMap,
+  QuestLeg,
   SosRequest,
   SosStatus,
   StationMap,
@@ -85,6 +86,9 @@ const SCHEDULED_KEY = 'ql:scheduled'
 const USERS_KEY = 'ql:users'
 const PARTIES_KEY = 'ql:parties'
 const PRESENCE_KEY = 'ql:presence'
+const LOG_KEY = 'ql:questLog'
+/** Matches questLogService's cap — the mirror is a working window, not an archive. */
+const LOG_CAP = 2000
 const notifKey = (userId: string) => `ql:notifications:${userId}`
 const progressKey = (userId: string) => `ql:progress:${userId}`
 const stationKey = (userId: string) => `ql:stations:${userId}`
@@ -501,6 +505,30 @@ function mergePresenceSnapshot(snap: QuerySnapshot<DocumentData>, selfId: string
   }
 }
 
+/**
+ * The station records. A leg is written once and never revised, so the merge is
+ * a plain union by id — there is no conflict a log entry can have with itself.
+ */
+function mergeLegsSnapshot(snap: QuerySnapshot<DocumentData>): void {
+  const local = load<QuestLeg[]>(LOG_KEY, [])
+  const byId = new Map(local.map((l) => [l.id, l] as const))
+
+  snap.docChanges().forEach((c) => {
+    if (c.type === 'removed') byId.delete(c.doc.id)
+  })
+
+  snap.forEach((d) => {
+    const leg = d.data() as QuestLeg
+    if (!leg?.id || typeof leg.at !== 'number') return
+    byId.set(leg.id, leg)
+  })
+
+  const merged = Array.from(byId.values())
+    .sort((a, b) => b.at - a.at)
+    .slice(0, LOG_CAP)
+  if (!deepEqual(merged, local)) save(LOG_KEY, merged)
+}
+
 function bookingStamp(b: Booking | undefined): number {
   if (!b) return -1
   return b.updatedAt ?? b.createdAt
@@ -689,7 +717,7 @@ export function startGuestSync(userId: string): () => void {
 }
 
 export function startConsoleSync(): () => void {
-  return subscribeWhenAuthed((fb, { collection, onSnapshot }) => {
+  return subscribeWhenAuthed((fb, { collection, limit, onSnapshot, orderBy, query }) => {
     const unsubs: Array<() => void> = []
 
     unsubs.push(
@@ -723,6 +751,16 @@ export function startConsoleSync(): () => void {
       onSnapshot(
         collection(fb.db, 'presence'),
         (snap) => mergePresenceSnapshot(snap, null),
+        () => setCloudState('offline')
+      )
+    )
+    // The station records. Bounded to the most recent legs rather than the whole
+    // history: the console is a working board, and a day is exported and then
+    // read in a spreadsheet, not scrolled here forever.
+    unsubs.push(
+      onSnapshot(
+        query(collection(fb.db, 'legs'), orderBy('at', 'desc'), limit(LOG_CAP)),
+        (snap) => mergeLegsSnapshot(snap),
         () => setCloudState('offline')
       )
     )
@@ -798,6 +836,23 @@ export function pushPresence(p: Presence): void {
     try {
       const { doc, setDoc } = await import('firebase/firestore')
       await setDoc(doc(fb.db, 'presence', p.userId), clean({ ...p }))
+    } catch {
+      // swallow
+    }
+  })
+}
+
+/**
+ * Appends one leg to the station records. Written once, never updated — the id
+ * is derived from the check-in itself, so a retry lands on the same document
+ * instead of doubling the row.
+ */
+export function pushLeg(leg: QuestLeg): void {
+  void ensureFirebase().then(async (fb) => {
+    if (!fb) return
+    try {
+      const { doc, setDoc } = await import('firebase/firestore')
+      await setDoc(doc(fb.db, 'legs', leg.id), clean({ ...leg }))
     } catch {
       // swallow
     }
@@ -1136,6 +1191,16 @@ export async function deleteDemoCommDocs(currentUserId: string): Promise<void> {
   await gather(async () => {
     const guests = await getDocs(query(collection(fb.db, 'guests'), where('demo', '==', true)))
     guests.forEach((d) => refs.push(d.ref))
+  })
+  // The staged station records. Both queries are ones a guest may run: their
+  // own legs, and the demo cast's.
+  await gather(async () => {
+    const own = await getDocs(query(collection(fb.db, 'legs'), where('userId', '==', currentUserId)))
+    own.forEach((d) => refs.push(d.ref))
+  })
+  await gather(async () => {
+    const staged = await getDocs(query(collection(fb.db, 'legs'), where('demo', '==', true)))
+    staged.forEach((d) => refs.push(d.ref))
   })
   // Take the cast off the stations board. Presence rows are keyed by user id,
   // so the staged ones are exactly the demo- documents.

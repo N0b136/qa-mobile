@@ -2,7 +2,7 @@
 // All seeded cast users and parties use the `demo-` id prefix so reset can
 // target them precisely without touching real accounts.
 
-import type { Party, ProgressMap, User } from '../types'
+import type { Party, ProgressMap, QuestLeg, User } from '../types'
 import { save } from './store'
 import { getUser, listUsers, updateProfile } from './authService'
 import { getUserParty, leaveParty, listParties } from './partyService'
@@ -14,6 +14,8 @@ import { QUEST_START, VILLAGE_PLACE } from '../content/stationMap'
 import { createSos } from './sosService'
 import { clearPresenceFor, seedPresence } from './presenceService'
 import { clearUsesFor } from './passService'
+import { clearLegsFor, runIdFor, seedLegs } from './questLogService'
+import { stationsFor } from '../content/stations'
 import * as cloudSync from './cloudSync'
 
 const USERS_KEY = 'ql:users'
@@ -53,6 +55,118 @@ const CAST_PROGRESS: Record<string, ProgressMap> = {
   'demo-sable': { rangers: episodeIds('rg', 10), elm: episodeIds('el', 10) },
   'demo-thorn': { rangers: episodeIds('rg', 3) },
   'demo-quill': { alehiim: episodeIds('ah', 2) },
+}
+
+// ── Staged station records ────────────────────────────────────────────────────
+//
+// The log the console's records panel reads. Presence says where the cast is
+// standing right now; this is how they got there — the same world told as the
+// day's walks, so the panel opens with real gaps between legs rather than an
+// empty table.
+
+interface DemoGroup {
+  id: string
+  kind: 'party' | 'solo'
+  name: string
+  memberNames: string[]
+  /** The member who tapped — every leg of the group is raised by their device. */
+  userId: string
+  byName: string
+}
+
+interface DemoQuest {
+  orgId: string
+  orgName: string
+  episodeId: string
+  episodeNumber: number
+  passCode: string
+  passName: string
+}
+
+const MIN = 60 * 1000
+
+function groupFields(group: DemoGroup) {
+  return {
+    userId: group.userId,
+    byName: group.byName,
+    groupId: group.id,
+    groupKind: group.kind,
+    groupName: group.name,
+    partySize: group.memberNames.length,
+    memberNames: group.memberNames,
+    demo: true as const,
+  }
+}
+
+/** The gate check-in a visit opens with. */
+function arrivalLeg(group: DemoGroup, at: number, quest?: DemoQuest): QuestLeg {
+  const leg: QuestLeg = {
+    id: `${group.id}:${VILLAGE_PLACE.id}:${at}`,
+    at,
+    kind: 'village',
+    placeId: VILLAGE_PLACE.id,
+    placeName: VILLAGE_PLACE.name,
+    ...groupFields(group),
+  }
+  if (quest) {
+    leg.orgId = quest.orgId
+    leg.orgName = quest.orgName
+  }
+  return leg
+}
+
+/**
+ * A walk: the quest taken at the chief's house, then one leg per station on the
+ * episode's canon rotation. `gaps` is the minutes each station took from the
+ * leg before it, so the record reads like a real party moving at real speed.
+ */
+function walkLegs(group: DemoGroup, quest: DemoQuest, startedAt: number, gaps: number[]): QuestLeg[] {
+  const rotation = stationsFor(quest.episodeId)
+  const title = getEpisode(quest.episodeId)?.title
+  const shared = {
+    ...groupFields(group),
+    orgId: quest.orgId,
+    orgName: quest.orgName,
+    episodeId: quest.episodeId,
+    episodeNumber: quest.episodeNumber,
+    stationsTotal: rotation.length,
+    passCode: quest.passCode,
+    passName: quest.passName,
+    runId: runIdFor(group.id, quest.orgId, quest.episodeId),
+  }
+
+  const start: QuestLeg = {
+    id: `${group.id}:${QUEST_START.id}:${startedAt}`,
+    at: startedAt,
+    kind: 'start',
+    placeId: QUEST_START.id,
+    placeName: QUEST_START.name,
+    legNumber: 0,
+    ...shared,
+  }
+  if (title) start.episodeTitle = title
+
+  const legs = [start]
+  let at = startedAt
+  gaps.forEach((mins, i) => {
+    const station = rotation[i]
+    if (!station) return
+    at += mins * MIN
+    const leg: QuestLeg = {
+      id: `${group.id}:${station.id}:${at}`,
+      at,
+      kind: 'station',
+      placeId: station.id,
+      placeName: station.name,
+      legNumber: i + 1,
+      ...shared,
+    }
+    if (title) leg.episodeTitle = title
+    if (i + 1 === rotation.length) leg.sealed = true
+    legs.push(leg)
+  })
+
+  return legs
 }
 
 export async function seedDemoWorld(currentUserId: string): Promise<void> {
@@ -157,8 +271,8 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
       userId: 'demo-sable',
       guestName: 'Sable Ashworth',
       kind: 'station',
-      stationId: 'st-06',
-      placeName: "Brigand's Hideout",
+      stationId: 'st-08',
+      placeName: 'Songhollow Cave',
       at: now - 4 * 60 * 1000,
       orgId: 'elm',
       orgName: 'Order of the Elm',
@@ -167,16 +281,16 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
       episodeTitle: getEpisode('el-04')?.title,
       stationsDone: 3,
       stationsTotal: 7,
-      nextStationId: 'st-12',
-      nextStationName: 'Shadetree Hollow',
+      nextStationId: 'st-21',
+      nextStationName: 'ElmRoot',
     },
     {
       ...lantern,
       userId: 'demo-thorn',
       guestName: 'Thorn Vale',
       kind: 'station',
-      stationId: 'st-06',
-      placeName: "Brigand's Hideout",
+      stationId: 'st-08',
+      placeName: 'Songhollow Cave',
       at: now - 4 * 60 * 1000,
       orgId: 'elm',
       orgName: 'Order of the Elm',
@@ -185,8 +299,8 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
       episodeTitle: getEpisode('el-04')?.title,
       stationsDone: 3,
       stationsTotal: 7,
-      nextStationId: 'st-12',
-      nextStationName: 'Shadetree Hollow',
+      nextStationId: 'st-21',
+      nextStationName: 'ElmRoot',
     },
     {
       userId: 'demo-bracken',
@@ -258,6 +372,59 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
     },
   ])
 
+  // The day's log behind all of that. Lantern Circle came through the gate three
+  // hours ago and is on their second episode; the Vanguard arrived half an hour
+  // ago and has just taken its quest; Quill has only walked through the gate.
+  // The station places and order come off the canon rotations, so the records
+  // and the park board agree with each other.
+  const lanternGroup: DemoGroup = {
+    id: LANTERN_PARTY_ID,
+    kind: 'party',
+    name: 'Lantern Circle',
+    memberNames: ['Sable Ashworth', 'Thorn Vale'],
+    userId: 'demo-sable',
+    byName: 'Sable Ashworth',
+  }
+  const vanguardGroup: DemoGroup = {
+    id: VANGUARD_PARTY_ID,
+    kind: 'party',
+    name: 'Ashen Vanguard',
+    memberNames: [getUser(currentUserId)?.name ?? 'You', 'Bracken Hale', 'Wren Calder'],
+    userId: 'demo-bracken',
+    byName: 'Bracken Hale',
+  }
+  const quillGroup: DemoGroup = {
+    id: 'demo-quill',
+    kind: 'solo',
+    name: 'Quill Amberly',
+    memberNames: ['Quill Amberly'],
+    userId: 'demo-quill',
+    byName: 'Quill Amberly',
+  }
+  const elmQuest = { orgId: 'elm', orgName: 'Order of the Elm', passCode: 'QST-4KDR2M', passName: 'Group Hero Pass' }
+  const rangersQuest = { orgId: 'rangers', orgName: 'Rangers of Questia', passCode: 'QST-9TLW71', passName: 'Hero Pass' }
+
+  seedLegs([
+    arrivalLeg(lanternGroup, now - 195 * MIN, { ...elmQuest, episodeId: 'el-03', episodeNumber: 3 }),
+    // Sealed earlier in the day — a whole episode, end to end.
+    ...walkLegs(
+      lanternGroup,
+      { ...elmQuest, episodeId: 'el-03', episodeNumber: 3 },
+      now - 190 * MIN,
+      [9, 11, 8, 14, 10, 12, 9]
+    ),
+    // And three stations into the next one, which is where the board has them.
+    ...walkLegs(
+      lanternGroup,
+      { ...elmQuest, episodeId: 'el-04', episodeNumber: 4 },
+      now - 64 * MIN,
+      [18, 22, 20]
+    ),
+    arrivalLeg(vanguardGroup, now - 32 * MIN, { ...rangersQuest, episodeId: 'rg-07', episodeNumber: 7 }),
+    ...walkLegs(vanguardGroup, { ...rangersQuest, episodeId: 'rg-07', episodeNumber: 7 }, now - 20 * MIN, []),
+    arrivalLeg(quillGroup, now - 6 * MIN),
+  ])
+
   // Publish the cast to the console's guest roster. save(USERS_KEY, ...) never
   // triggers a guest push, so without this the roster would never see them.
   // Runs last so pushGuestProfile derives the right level (progress saved above)
@@ -290,6 +457,7 @@ export function resetDemoData(currentUserId: string): void {
   // start with quests already paid for.
   clearPresenceFor([...CAST_USERS.map((u) => u.id), currentUserId])
   clearUsesFor([...CAST_USERS.map((u) => u.id), currentUserId])
+  clearLegsFor([...CAST_USERS.map((u) => u.id), currentUserId])
 
   const user = getUser(currentUserId)
   save(PARTIES_KEY, listParties().filter((p) => !p.id.startsWith('demo-')))

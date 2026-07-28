@@ -37,10 +37,14 @@ body.console-mode #root {
   justify-content: flex-end;
 }
 
-/* ── Working grid: Calls | Send Word | Guests(320) ──────────────────────── */
+/* ── Working grid: Send Word | Calls | Guests(320) ───────────────────────
+   Send Word is the panel a Guide types into, so it takes the left column and
+   the wider track; the calls board sits beside it, where a raised hand is in
+   view without being in the way. The park chart and the records span the row
+   above and below (grid-column: 1 / -1, set on those cards). */
 .console-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) 320px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) 320px;
   gap: var(--space-lg);
   align-items: start;
   padding: var(--space-lg);
