@@ -1,14 +1,22 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useAppTick } from '../hooks/useAppTick'
 import { currentUser, getUser } from '../services/authService'
 import { seedDemoWorld, resetDemoData } from '../services/demoService'
 import * as notificationService from '../services/notificationService'
 import { listSos, acknowledgeSos, resolveSos } from '../services/sosService'
+import { listFlags } from '../services/flagService'
+import * as hubLink from '../services/hubLink'
+import { hubSim, installHubSim } from '../services/hubSim'
+import { broadcastTable, startTapPipeline } from '../services/tapService'
+import { STATIONS } from '../content/stations'
+import { QUEST_START, VILLAGE_PLACE } from '../content/stationMap'
+import { stationNoForPlace } from '../services/hubProtocol'
 import { getZone } from '../content/zones'
 import type { NotificationType, SosRequest } from '../types'
 import { useToast } from '../components/Toast'
-import { Badge, Button, Card, Dialog, Icon } from '../ui'
+import type { SelectOption } from '../ui'
+import { Badge, Button, Card, Dialog, Icon, Select } from '../ui'
 
 const capsHeadingStyle: CSSProperties = {
   textTransform: 'uppercase',
@@ -53,17 +61,72 @@ const NOTIFY_ACTIONS: Array<{ type: NotificationType; icon: string; label: strin
   },
 ]
 
+/** Every addressable place a reader could sit on, in wire-address order. */
+const TAP_PLACES: SelectOption[] = [
+  ...STATIONS.map((s) => ({ id: s.id, name: s.name })),
+  { id: QUEST_START.id, name: QUEST_START.name },
+  { id: VILLAGE_PLACE.id, name: `${VILLAGE_PLACE.name} (the gate)` },
+]
+  .map((p) => {
+    const no = stationNoForPlace(p.id)
+    return no === null ? null : { value: String(no), label: `${no}. ${p.name}` }
+  })
+  .filter((o): o is SelectOption => o !== null)
+
 export default function DemoConsoleScreen() {
   useAppTick()
   const toast = useToast()
   const [, setTick] = useState(0)
   const refresh = () => setTick((t) => t + 1)
   const [confirmingReset, setConfirmingReset] = useState(false)
+  const [tapUid, setTapUid] = useState('')
+  const [tapStation, setTapStation] = useState(TAP_PLACES[0]?.value ?? '1')
+
+  // The presenter cannot carry a flagpole into a boardroom, so this screen runs
+  // the whole chain locally: a simulated hub on the same `HubTransport` seam a
+  // real one will use, and the same tap pipeline the console runs. Frames go out
+  // through `encodeLine` and come back through `decodeLine`, so what is being
+  // demonstrated is the real codec and the real dedupe, not a shortcut.
+  //
+  // Note this device is signed in as a GUEST. Everything lands locally and
+  // lights up every screen; the cloud write-throughs for other people's rows are
+  // refused by the rules and swallowed, which is correct — /demo is a presenter's
+  // remote, not a second console.
+  useEffect(() => {
+    const stop = startTapPipeline()
+    void hubLink.connect(installHubSim()).then(() => broadcastTable())
+    return () => {
+      stop()
+      hubLink.disconnect()
+    }
+  }, [])
 
   const user = currentUser()
   if (!user) return null
 
   const calls = listSos().filter((s) => s.status !== 'resolved')
+  const flags = listFlags()
+  const flagOptions: SelectOption[] = flags.map((f) => ({
+    value: f.uid,
+    label: `${f.label} — ${f.groupName ?? 'on the rack'}`,
+  }))
+  const chosenUid = tapUid || flagOptions[0]?.value || ''
+
+  function handleTapStandard() {
+    const sim = hubSim()
+    if (!sim || !chosenUid) {
+      toast.show({ title: 'No standard to tap', body: 'Seed the demo world first.', icon: 'flag-off' })
+      return
+    }
+    // Straight onto the wire. Whether the tap is accepted, deduped, rate-limited
+    // or refused as impossible travel is decided by tapService, exactly as it
+    // would be for a plinth in the woods — including when the answer is no.
+    sim.tap(Number(tapStation), chosenUid)
+    refresh()
+    const label = flags.find((f) => f.uid === chosenUid)?.label ?? 'A standard'
+    const place = TAP_PLACES.find((p) => p.value === tapStation)?.label ?? 'a station'
+    toast.show({ title: `${label} tapped`, body: place, icon: 'radio-tower' })
+  }
 
   async function handleSeed() {
     await seedDemoWorld(user!.id)
@@ -145,6 +208,41 @@ export default function DemoConsoleScreen() {
                 {action.label}
               </Button>
             ))}
+          </div>
+        </Card>
+
+        <Card eyebrow="In the woods" title="Tap a standard">
+          <div className="stack" style={{ gap: 12 }}>
+            <p className="muted">
+              A party presses their flagpole against a station&apos;s reader. This sends the same
+              frame a real hub would, through the same parser.
+            </p>
+            {flagOptions.length === 0 ? (
+              <p className="muted">No standards on the rack. Seed the demo world first.</p>
+            ) : (
+              <>
+                <Select
+                  label="Standard"
+                  value={chosenUid}
+                  options={flagOptions}
+                  onChange={(e) => setTapUid(e.target.value)}
+                />
+                <Select
+                  label="Station"
+                  value={tapStation}
+                  options={TAP_PLACES}
+                  onChange={(e) => setTapStation(e.target.value)}
+                />
+                <Button icon="radio-tower" onClick={handleTapStandard}>
+                  Send tap
+                </Button>
+                <p className="muted" style={{ fontSize: 12 }}>
+                  A standard cannot be tapped twice inside twenty seconds, and the same tag cannot
+                  appear on two sides of the park at once. Both refusals are recorded rather than
+                  dropped.
+                </p>
+              </>
+            )}
           </div>
         </Card>
 

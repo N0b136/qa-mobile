@@ -2,7 +2,7 @@
 // All seeded cast users and parties use the `demo-` id prefix so reset can
 // target them precisely without touching real accounts.
 
-import type { Announcement, Party, ProgressMap, QuestLeg, User } from '../types'
+import type { Announcement, Flag, Party, ProgressMap, QuestLeg, User } from '../types'
 import { save } from './store'
 import { getUser, listUsers, updateProfile } from './authService'
 import { getUserParty, leaveParty, listParties } from './partyService'
@@ -15,6 +15,9 @@ import { createSos } from './sosService'
 import { clearPresenceFor, seedPresence } from './presenceService'
 import { clearUsesFor } from './passService'
 import { clearLegsFor, runIdFor, seedLegs } from './questLogService'
+import { clearDemoFlags, seedFlags } from './flagService'
+import { clearTapMemory } from './tapService'
+import { simUid } from './hubSim'
 import { clearAnnouncementsBy, seedAnnouncements } from './announcementService'
 import { stationsFor } from '../content/stations'
 import * as cloudSync from './cloudSync'
@@ -131,6 +134,104 @@ const CAST_PROGRESS: Record<string, ProgressMap> = {
   'demo-quill': { alehiim: episodeIds('ah', 2) },
 }
 
+// ── The rack ──────────────────────────────────────────────────────────────────
+//
+// Twelve poles, three of them out with the parties the rest of this file stages.
+// Everything else is racked, so the booth panel opens on a believable counter
+// rather than an empty one.
+//
+// The uids are shaped like the real thing — a 7-byte NTAG213 number opening with
+// NXP's `04` manufacturer byte, which is what the tags in the BOM carry. That
+// matters: the uid allowlist is pure hex (`/^[0-9A-F]{8,20}$/`, rejected not
+// repaired), so a memorable-looking 'SIM0000001' is not a uid at all and the
+// codec is right to refuse it. `simUid` is the one place that shape is written
+// down, and the demo rack and the simulator must not drift apart.
+
+const FLAG_COUNT = 12
+
+/** FLAG-01 · FLAG-02 · FLAG-03 — the poles the seeded parties are carrying. */
+const LANTERN_FLAG = simUid(1)
+const VANGUARD_FLAG = simUid(2)
+const QUILL_FLAG = simUid(3)
+
+function flagLabelFor(n: number): string {
+  return `FLAG-${String(n).padStart(2, '0')}`
+}
+
+/** The whole rack, with three bindings that match the staged walks exactly. */
+function demoFlags(now: number, hostId: string): Flag[] {
+  const flags: Flag[] = []
+  for (let n = 1; n <= FLAG_COUNT; n++) {
+    flags.push({
+      uid: simUid(n),
+      label: flagLabelFor(n),
+      status: 'racked',
+      updatedAt: now,
+      tableAt: now,
+      demo: true,
+    })
+  }
+
+  const bind = (
+    uid: string,
+    binding: Omit<Flag, 'uid' | 'label' | 'status' | 'updatedAt' | 'tableAt' | 'demo'>
+  ) => {
+    const idx = flags.findIndex((f) => f.uid === uid)
+    if (idx === -1) return
+    flags[idx] = { ...flags[idx], status: 'bound', ...binding }
+  }
+
+  // Lantern Circle: three stations into their second episode of the day.
+  bind(LANTERN_FLAG, {
+    groupId: LANTERN_PARTY_ID,
+    groupName: 'Lantern Circle',
+    holderId: 'demo-sable',
+    memberIds: ['demo-sable', 'demo-thorn'],
+    orgId: 'elm',
+    episodeId: 'el-04',
+    episodeNumber: 4,
+    headcount: 2,
+    passCode: 'QST-4KDR2M',
+    boundAt: now - 200 * MIN,
+    lastSeenAt: now - 4 * MIN,
+    lastPlaceId: 'st-08',
+  })
+
+  // Ashen Vanguard: the host's own party, quest taken, not yet at a station.
+  bind(VANGUARD_FLAG, {
+    groupId: VANGUARD_PARTY_ID,
+    groupName: 'Ashen Vanguard',
+    holderId: 'demo-bracken',
+    memberIds: [hostId, 'demo-bracken', 'demo-wren'],
+    orgId: 'rangers',
+    episodeId: 'rg-07',
+    episodeNumber: 7,
+    headcount: 3,
+    passCode: 'QST-9TLW71',
+    boundAt: now - 34 * MIN,
+    lastSeenAt: now - 20 * MIN,
+    lastPlaceId: QUEST_START.id,
+  })
+
+  // Quill walks alone — a party of one, bound at the counter minutes ago and
+  // still standing in the village.
+  bind(QUILL_FLAG, {
+    groupId: 'solo:demo-quill',
+    groupName: 'Quill Amberly',
+    holderId: 'demo-quill',
+    memberIds: ['demo-quill'],
+    orgId: 'alehiim',
+    episodeId: 'ah-03',
+    episodeNumber: 3,
+    headcount: 1,
+    boundAt: now - 7 * MIN,
+    lastSeenAt: now - 6 * MIN,
+    lastPlaceId: VILLAGE_PLACE.id,
+  })
+
+  return flags
+}
+
 // ── Staged station records ────────────────────────────────────────────────────
 //
 // The log the console's records panel reads. Presence says where the cast is
@@ -146,6 +247,8 @@ interface DemoGroup {
   /** The member who tapped — every leg of the group is raised by their device. */
   userId: string
   byName: string
+  /** The standard they are carrying. Every seeded leg came off a reader. */
+  flagLabel: string
 }
 
 interface DemoQuest {
@@ -168,6 +271,7 @@ function groupFields(group: DemoGroup) {
     groupName: group.name,
     partySize: group.memberNames.length,
     memberNames: group.memberNames,
+    flagLabel: group.flagLabel,
     demo: true as const,
   }
 }
@@ -325,6 +429,10 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
   // in motion: Lantern Circle standing at a station, and a lone Ranger who
   // checked in twenty minutes ago and so reads as en route.
   const now = Date.now()
+
+  // The rack. LOCAL ONLY, deliberately — `flags` is a staff-write collection and
+  // /demo runs as the presenting GUEST, so a push would only ever be refused.
+  seedFlags(demoFlags(now, currentUserId))
   const lantern = {
     partyId: LANTERN_PARTY_ID,
     partyName: 'Lantern Circle',
@@ -335,6 +443,10 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
     // walked the whole circle in.
     passCode: 'QST-4KDR2M',
     passName: 'Group Hero Pass',
+    // Every one of these check-ins came off a reader in the woods, so each row
+    // names the standard it came in on — which is also what tells the console
+    // it was the writer of record rather than somebody's phone.
+    flagLabel: flagLabelFor(1),
   }
   // Lantern Circle is standing at a station mid-episode; Ashen Vanguard took
   // their quest at the chief's house twenty minutes ago, so they read as en
@@ -399,6 +511,7 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
       byName: 'Bracken Hale',
       passCode: 'QST-9TLW71',
       passName: 'Hero Pass',
+      flagLabel: flagLabelFor(2),
     },
     {
       userId: 'demo-wren',
@@ -423,6 +536,7 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
       byName: 'Bracken Hale',
       passCode: 'QST-9TLW71',
       passName: 'Hero Pass',
+      flagLabel: flagLabelFor(2),
     },
     // A lone traveller who has only just come through the gate: still in the
     // village, no quest taken yet.
@@ -443,6 +557,7 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
       nextStationName: 'The Chief’s House',
       byUserId: 'demo-quill',
       byName: 'Quill Amberly',
+      flagLabel: flagLabelFor(3),
     },
   ])
 
@@ -458,6 +573,7 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
     memberNames: ['Sable Ashworth', 'Thorn Vale'],
     userId: 'demo-sable',
     byName: 'Sable Ashworth',
+    flagLabel: flagLabelFor(1),
   }
   const vanguardGroup: DemoGroup = {
     id: VANGUARD_PARTY_ID,
@@ -466,6 +582,7 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
     memberNames: [getUser(currentUserId)?.name ?? 'You', 'Bracken Hale', 'Wren Calder'],
     userId: 'demo-bracken',
     byName: 'Bracken Hale',
+    flagLabel: flagLabelFor(2),
   }
   const quillGroup: DemoGroup = {
     id: 'demo-quill',
@@ -474,6 +591,7 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
     memberNames: ['Quill Amberly'],
     userId: 'demo-quill',
     byName: 'Quill Amberly',
+    flagLabel: flagLabelFor(3),
   }
   const elmQuest = { orgId: 'elm', orgName: 'Order of the Elm', passCode: 'QST-4KDR2M', passName: 'Group Hero Pass' }
   const rangersQuest = { orgId: 'rangers', orgName: 'Rangers of Questia', passCode: 'QST-9TLW71', passName: 'Hero Pass' }
@@ -539,6 +657,14 @@ export function resetDemoData(currentUserId: string): void {
   clearLegsFor([...CAST_USERS.map((u) => u.id), currentUserId])
   // Staged notices only — a real one posted from the console stays up.
   clearAnnouncementsBy('demo-notice-')
+
+  // The rack, and the tap ring behind it. LOCAL ONLY: `flags` is staff-write and
+  // this runs as the presenting guest, so there is nothing in the cloud for it
+  // to clear — a push would only be refused. The ring goes too, because a reseed
+  // reuses both the uids and the stations' sequence counters, and a stale ring
+  // would make the first replayed tap of the next demo look like a duplicate.
+  clearDemoFlags()
+  clearTapMemory()
 
   const user = getUser(currentUserId)
   save(PARTIES_KEY, listParties().filter((p) => !p.id.startsWith('demo-')))

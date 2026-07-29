@@ -78,7 +78,8 @@ export function ensureFirebase(): Promise<FirebaseHandle | null> {
     try {
       const { initializeApp } = await import('firebase/app')
       const { getAuth, onAuthStateChanged } = await import('firebase/auth')
-      const { getFirestore } = await import('firebase/firestore')
+      const { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } =
+        await import('firebase/firestore')
 
       const app = initializeApp(FIREBASE_CONFIG)
       const auth = getAuth(app)
@@ -100,7 +101,15 @@ export function ensureFirebase(): Promise<FirebaseHandle | null> {
         )
       })
 
-      const db = getFirestore(app)
+      // Persistent cache, not the default in-memory one: a check-in made in a
+      // dead spot is queued in IndexedDB and survives the tab being closed —
+      // with the memory cache it died with the page and the walk was simply
+      // lost. The multi-tab manager is not optional either, because the guest
+      // app and the console are two documents on one origin and single-tab
+      // persistence would leave whichever opened second without a cache.
+      const db = initializeFirestore(app, {
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      })
       return { db, auth }
     } catch {
       setCloudState('offline')

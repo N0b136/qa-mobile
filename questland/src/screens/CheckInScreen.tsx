@@ -10,13 +10,11 @@ import {
 } from '../services/progressService'
 import { checkIn, presenceFor, questTaken, statusOf, windowLeft } from '../services/presenceService'
 import { getOrg } from '../content/orgs'
-import { QUEST_START } from '../content/stationMap'
 import { stationsFor } from '../content/stations'
 import type { Station } from '../content/types'
-import { getUserParty } from '../services/partyService'
 import { useToast } from '../components/Toast'
 import { QrScanner } from '../components/QrScanner'
-import PassagePicker from '../components/PassagePicker'
+import GateArrival from '../components/GateArrival'
 import { Badge, Button, Card, Icon, IconButton, Input, Ornament, Tag } from '../ui'
 import { romanNumeral, STATION_ICON } from './questIcons'
 
@@ -37,8 +35,7 @@ export default function CheckInScreen() {
   const [codeError, setCodeError] = useState<string | undefined>(undefined)
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | undefined>(undefined)
-  const [passOpen, setPassOpen] = useState(false)
-  const [passError, setPassError] = useState<string | undefined>(undefined)
+  const [gateOpen, setGateOpen] = useState(false)
 
   if (!user) return null
   const org = orgId ? getOrg(orgId) : undefined
@@ -76,31 +73,6 @@ export default function CheckInScreen() {
     } else if (credit?.repeat) {
       show({ title: 'Already sealed here', icon: 'stamp' })
     }
-  }
-
-  /**
-   * Same as the questline screen: the chief hands out the quest, which starts
-   * the walk — and asks for the passage that pays for it.
-   */
-  function handleTakeQuest(passBookingId?: string) {
-    const result = checkIn(user!.id, QUEST_START.id, { orgId: org!.id, passBookingId })
-    if (!result.ok) {
-      if (result.needPass) {
-        setPassError(passBookingId ? result.error : undefined)
-        setPassOpen(true)
-        return
-      }
-      show({ title: result.error, icon: 'triangle-alert' })
-      return
-    }
-    setPassOpen(false)
-    show({
-      title: `Checked in — ${result.placeName}`,
-      body: result.carried.length
-        ? `${result.partyName} checked in with you.`
-        : 'The quest is yours. The first station is open.',
-      icon: 'stamp',
-    })
   }
 
   function handleStaffCode() {
@@ -260,23 +232,23 @@ export default function CheckInScreen() {
       <p style={{ marginTop: 10, font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
         {walking
           ? 'Check in at each station as you reach it — on this list or on the chart. The road ahead stays dark until you walk it. A party checks in together.'
-          : 'Call on the Village Chief to take this quest — he will ask to see your passage. The trail opens one station at a time.'}
+          : 'Take this quest up at the gate — a passage buys one Quest Experience, and one Quest Experience is one episode. The Chief gives the brief; the trail opens one station at a time.'}
       </p>
 
       {!walking ? (
         <Button
           fullWidth
           size="lg"
-          icon="house"
+          icon="door-open"
           style={{
             marginTop: 14,
             padding: '0 var(--space-md)',
             font: '700 var(--text-sm)/1 var(--font-ui)',
             letterSpacing: '0.05em',
           }}
-          onClick={() => handleTakeQuest()}
+          onClick={() => setGateOpen(true)}
         >
-          Check in with Village Chief
+          Take up a quest at the gate
         </Button>
       ) : null}
 
@@ -330,18 +302,8 @@ export default function CheckInScreen() {
         ) : null}
       </div>
 
-      {passOpen ? (
-        <PassagePicker
-          userId={user.id}
-          guests={getUserParty(user.id)?.memberIds.length ?? 1}
-          subtitle={`${org.name} — Episode ${ep.number}, ${ep.title}.`}
-          error={passError}
-          onPick={(bookingId) => handleTakeQuest(bookingId)}
-          onClose={() => {
-            setPassOpen(false)
-            setPassError(undefined)
-          }}
-        />
+      {gateOpen ? (
+        <GateArrival userId={user.id} orgId={org.id} onClose={() => setGateOpen(false)} />
       ) : null}
     </div>
   )

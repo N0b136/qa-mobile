@@ -16,6 +16,7 @@ import MoreScreen from './screens/MoreScreen'
 import QuestsScreen from './screens/QuestsScreen'
 import QuestlineScreen from './screens/QuestlineScreen'
 import CheckInScreen from './screens/CheckInScreen'
+import GateScreen from './screens/GateScreen'
 import BookScreen from './screens/BookScreen'
 import BookingsScreen from './screens/BookingsScreen'
 import PartyScreen from './screens/PartyScreen'
@@ -80,6 +81,9 @@ export default function App() {
           <Route path="quests" element={<QuestsScreen />} />
           <Route path="quests/:orgId" element={<QuestlineScreen />} />
           <Route path="quests/:orgId/check-in" element={<CheckInScreen />} />
+          {/* The Gate absorbed the Book tab. /book and /bookings are still their
+              own routes — they are simply reached from inside the Gate now. */}
+          <Route path="gate" element={<GateScreen />} />
           <Route path="book" element={<BookScreen />} />
           <Route path="party" element={<PartyScreen />} />
           <Route path="leaderboard" element={<LeaderboardScreen />} />

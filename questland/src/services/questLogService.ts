@@ -7,9 +7,9 @@
 // where a questline stalls — so it is written once and never revised.
 //
 // The unit is a RUN: one party (or one lone guest, a party of one) walking one
-// episode. Its legs are the gate arrival, the quest taken at the chief's house,
-// and each station sealed after that. Runs are derived here rather than stored,
-// so a leg that syncs in late still lands in the right walk.
+// episode. Its legs are the gate arrival, the quest taken up at the gate, the
+// chief's house, and each station sealed after that. Runs are derived here
+// rather than stored, so a leg that syncs in late still lands in the right walk.
 //
 // One leg per check-in EVENT, written by the device that tapped — a party moves
 // as one and is one row, not one row per member. Party-mates' phones adopt the
@@ -17,6 +17,7 @@
 // log it again.
 
 import type { PresenceKind, QuestLeg } from '../types'
+import { VILLAGE_PLACE } from '../content/stationMap'
 import { load, save } from './store'
 import * as cloudSync from './cloudSync'
 
@@ -97,6 +98,10 @@ export interface LegInput {
   legNumber?: number
   stationsTotal?: number
   sealed?: boolean
+  /** The standard the party walked in on — 'FLAG-07'. Unset on an app check-in. */
+  flagLabel?: string
+  /** The place earned nothing: it is not on this episode's rotation. */
+  offRotation?: true
   passCode?: string
   passName?: string
 }
@@ -113,7 +118,10 @@ function isDuplicate(legs: QuestLeg[], leg: QuestLeg): boolean {
   return legs.some((l) => {
     if (l.groupId !== leg.groupId || l.placeId !== leg.placeId) return false
     if (leg.runId) return l.runId === leg.runId
-    return Math.abs(l.at - leg.at) < ARRIVAL_DEDUPE_MS
+    // Only another ARRIVAL can be the same arrival. Taking a quest up is filed
+    // at the village too, so without the kind a party who paid in the car park
+    // would have their walk through the gate swallowed minutes later.
+    return l.kind === leg.kind && Math.abs(l.at - leg.at) < ARRIVAL_DEDUPE_MS
   })
 }
 
@@ -142,6 +150,8 @@ export function recordLeg(input: LegInput): QuestLeg | null {
   if (input.legNumber !== undefined) leg.legNumber = input.legNumber
   if (input.stationsTotal !== undefined) leg.stationsTotal = input.stationsTotal
   if (input.sealed) leg.sealed = true
+  if (input.flagLabel) leg.flagLabel = input.flagLabel
+  if (input.offRotation) leg.offRotation = true
   if (input.passCode) leg.passCode = input.passCode
   if (input.passName) leg.passName = input.passName
   // A gate arrival belongs to the visit, not to any one quest — it is joined to
@@ -271,10 +281,16 @@ export function runLegs(run: QuestRun): QuestLeg[] {
   return run.arrival ? [run.arrival, ...run.legs] : run.legs
 }
 
-/** "Arrived" · "Quest taken" · "Station 3" — what this leg was. */
+/** "Arrived" · "Quest taken" · "Called on the Chief" · "Station 3". */
 export function legLabel(leg: QuestLeg): string {
   if (leg.kind === 'village') return 'Arrived'
-  if (leg.kind === 'start') return 'Quest taken'
+  // Two legs of a walk open it: the quest bought at the gate and the chief's
+  // house it starts from. Both are kind 'start', so the place is what tells them
+  // apart — and the export is pivoted on this column, where one label covering
+  // both would count every walk's quest twice.
+  if (leg.kind === 'start') {
+    return leg.placeId === VILLAGE_PLACE.id ? 'Quest taken' : 'Called on the Chief'
+  }
   return leg.legNumber ? `Station ${leg.legNumber}` : 'Station'
 }
 
@@ -311,10 +327,29 @@ const COLUMNS = [
   'checked_in_by',
   'run_id',
   'timestamp_iso',
+  // APPENDED AT THE END, on purpose. The export is long-format so it accumulates
+  // onto a master sheet day after day; inserting a column anywhere else would
+  // shift every index in a spreadsheet somebody has already built pivots on.
+  // New columns go here, always, and never get reordered.
+  'flag',
+  'off_rotation',
 ]
 
+/**
+ * Excel evaluates a cell whose text opens with a formula character, and it does so
+ * even when the CSV quoted the field — the quotes are stripped at parse time, so
+ * they are structure, not protection. Party names and display names are chosen by
+ * guests and land in this file, which is opened in a spreadsheet by design.
+ *
+ * The leading apostrophe is what makes the value text. It stays visible in the
+ * imported cell, so a party genuinely named "-Vanguard" shows one; that is the
+ * accepted cost, and it touches the export only, never the app.
+ */
+const FORMULA_LEAD = /^[=+\-@\t\r]/
+
 function cell(value: string | number | undefined): string {
-  const s = value === undefined || value === null ? '' : String(value)
+  const raw = value === undefined || value === null ? '' : String(value)
+  const s = FORMULA_LEAD.test(raw) ? `'${raw}` : raw
   return `"${s.replace(/"/g, '""')}"`
 }
 
@@ -353,6 +388,8 @@ export function toCsv(runs: QuestRun[]): string {
           cell(leg.byName),
           cell(run.id),
           cell(new Date(leg.at).toISOString()),
+          cell(leg.flagLabel),
+          cell(leg.offRotation ? 'yes' : 'no'),
         ].join(',')
       )
     })

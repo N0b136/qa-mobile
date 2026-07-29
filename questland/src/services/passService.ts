@@ -1,10 +1,10 @@
 // Passages, and what they buy you.
 //
 // A booking is a receipt; a PASSAGE is the right it carries into the park. That
-// right is spent in exactly one place: taking a quest at the Village Chief's
-// house. Walking the seven stations of an episode afterwards costs nothing —
-// the ticket sells "Quest Experiences", and one Quest Experience is one
-// episode.
+// right is spent in exactly one place: taking up a quest at the gate. Calling on
+// the Village Chief and walking the seven stations of the episode afterwards
+// costs nothing — the ticket sells "Quest Experiences", and one Quest Experience
+// is one episode.
 //
 // The rules come off the tickets themselves (`content/bookingTiers.ts`, in turn
 // from content-intake/ticketing.json), so nothing here hard-codes a tier:
@@ -17,7 +17,7 @@
 //   Birthday packages     1 Quest Experience, on the day of the party
 //
 // An allowance belongs to the passage, not to each head on it: a passage booked
-// for five walks five guests through the chief's door on ONE Quest Experience.
+// for five walks five guests through the gate on ONE Quest Experience.
 // Headcount buys a bigger party, never more quests — so an Adventurer Pass is
 // spent the moment it is presented, whoever it came in with, while a Hero Pass
 // stays good for the rest of the day.
@@ -28,15 +28,19 @@
 // passage paid for this guest's walk — a party moves as one and only the guest
 // who taps is charged. A cover counts against nothing.
 //
-// Local-first, like the rest of the service layer: the ledger lives beside the
-// bookings it draws on and is not synced, so a passage is spent on the device
-// that presented it. Bookings themselves already sync.
+// The ledger stopped being device-local when the gate became the place a
+// Passage is spent: the ticket booth spends on behalf of a guest whose phone is
+// in their pocket, and that guest's app has to know about it. So every write
+// here pushes to passUses/{userId}, and the merge on the way back is a union by
+// use id — a use is written once and never revised, which means neither the
+// phone nor the booth can erase the other's spend.
 
 import type { BookingTier } from '../content/types'
 import type { Booking } from '../types'
 import { load, save } from './store'
 import { uid } from './ids'
 import { getTier, listBookings } from './bookingService'
+import * as cloudSync from './cloudSync'
 
 function key(userId: string): string {
   return `ql:passUses:${userId}`
@@ -152,9 +156,9 @@ function setUses(userId: string, uses: PassUse[]): void {
 /**
  * The passage already presented for this episode, if any.
  *
- * One episode is one Quest Experience, so calling on the chief a second time
- * mid-walk — or checking in again after the five minutes lapse — is the same
- * quest and costs nothing more.
+ * One episode is one Quest Experience, so taking the same quest up a second
+ * time — a guest tapping the gate again mid-walk, or a Guide re-reading the
+ * binding at the booth — is the same quest and costs nothing more.
  */
 export function useForEpisode(userId: string, orgId: string, episodeId: string): PassUse | null {
   return (
@@ -185,14 +189,36 @@ function noteFor(state: Omit<PassState, 'note'>, at: number): string {
         ? 'This week’s quest is claimed. The next one opens in a few days.'
         : 'Every Quest Experience on this passage is claimed.'
     default: {
-      // The headcount is the part a guest at the chief's door needs to hear —
-      // it is what the passage carries in, now that it is not what it buys.
+      // The headcount is the part a guest at the gate needs to hear — it is
+      // what the passage carries in, now that it is not what it buys.
       const covers = guests > 1 ? ` Walks in ${guests} guests.` : ''
       if (remaining === null) {
         return `Unlimited Quest Experiences ${tier.pass.validFor === 'month' ? 'this month' : 'today'}.${covers}`
       }
       return `${remaining} Quest Experience${remaining === 1 ? '' : 's'} left.${covers}`
     }
+  }
+}
+
+/**
+ * The short mark a passage carries on a list, in the guild's words.
+ *
+ * The status enum is an internal identifier and must never reach a guest's eye
+ * verbatim — "upcoming" is a developer's word for a passage that is simply not
+ * yours to present yet.
+ */
+export function passStatusLabel(status: PassStatus): string {
+  switch (status) {
+    case 'valid':
+      return 'Good today'
+    case 'upcoming':
+      return 'Not yet'
+    case 'expired':
+      return 'Expired'
+    case 'spent':
+      return 'Spent'
+    case 'cancelled':
+      return 'Cancelled'
   }
 }
 
@@ -203,8 +229,8 @@ export function passStateFor(userId: string, booking: Booking, at: number = Date
 
   const guests = guestsOf(booking)
   // The allowance is the PASSAGE's, not each head's. A passage booked for five
-  // walks all five through the chief's door on one Quest Experience — booking
-  // for a crowd buys a bigger party, never a longer season.
+  // walks all five through the gate on one Quest Experience — booking for a
+  // crowd buys a bigger party, never a longer season.
   const allowance = tier.pass.quests
 
   const validity = validityOf(booking, tier)
@@ -251,7 +277,7 @@ export interface RedeemInput {
   bookingId?: string
   orgId: string
   episodeId: string
-  /** Guests walking in on this passage — the party at the chief's house. */
+  /** Guests walking in on this passage — the party standing at the gate. */
   guests?: number
   at?: number
 }
@@ -264,7 +290,7 @@ export type RedeemResult =
  * Spends one Quest Experience so a quest can be taken.
  *
  * Returns the existing record untouched when this episode was already paid for
- * — the chief hands out one quest, however many times you call on him.
+ * — one episode is one quest, however many times it is asked for.
  */
 export function redeem(userId: string, input: RedeemInput): RedeemResult {
   const at = input.at ?? Date.now()
@@ -301,6 +327,7 @@ export function redeem(userId: string, input: RedeemInput): RedeemResult {
     covers: state.guests,
   }
   setUses(userId, [...listUses(userId), use])
+  cloudSync.pushPassUses(userId)
 
   return { ok: true, use, charged: true }
 }
@@ -320,6 +347,7 @@ export function recordCover(
   if (useForEpisode(userId, source.orgId, source.episodeId)) return null
   const use: PassUse = { id: uid(), ...source, coveredBy }
   setUses(userId, [...listUses(userId), use])
+  cloudSync.pushPassUses(userId)
   return use
 }
 

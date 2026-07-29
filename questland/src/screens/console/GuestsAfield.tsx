@@ -106,6 +106,16 @@ export default function GuestsAfield({ onSend }: Props) {
                       </div>
                     ) : null}
 
+                    {/* The standard they are carrying. Staff copy names it as
+                        the pole is printed — the guest's app calls it "your
+                        standard", but a Warden on the radio says FLAG-07. */}
+                    {o.flagLabel ? (
+                      <div className="row muted" style={{ gap: 6, marginTop: 3, fontSize: 12 }}>
+                        <Icon name="flag" size={12} />
+                        {o.flagLabel}
+                      </div>
+                    ) : null}
+
                     {/* The passage that paid for this walk — what a Warden asks
                         to see when a party is where it should not be. */}
                     {o.passCode ? (

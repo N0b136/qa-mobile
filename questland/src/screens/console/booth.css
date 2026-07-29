@@ -1,0 +1,321 @@
+/* The ticket booth.
+   Full width beneath the park chart — see ConsoleScreen for why it sits there
+   and not above it (MapCanvas re-clamps its pan on every ancestor resize, and
+   this panel changes height on every scan). */
+
+.booth {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .booth {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── The stage banner ─────────────────────────────────────────────────────
+   An employee does this fifty times a day, and binding a standard and taking
+   one back are the same gesture at opposite ends of a walk. So the two stages
+   are never allowed to look alike: different rule colour, different glyph,
+   different verb. Ember is the reserved live/now colour and a check-out IS a
+   now-state; gold stays on the primary action alone. */
+.booth__stage {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--border-hairline);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  margin-bottom: var(--space-md);
+}
+
+.booth__stage--bind {
+  border-left-color: var(--gold-700);
+}
+
+.booth__stage--complete {
+  border-left-color: var(--ember-700);
+}
+
+.booth__stage--idle {
+  border-left-color: var(--stone-600);
+  border-style: dashed;
+  border-left-style: solid;
+}
+
+.booth__stage-title {
+  font: 600 var(--text-md) / 1.1 var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-display);
+  color: var(--text-heading);
+}
+
+.booth__stage-note {
+  margin-left: auto;
+  font: 400 var(--text-xs) / 1.3 var(--font-ui);
+  color: var(--text-muted);
+  text-align: right;
+}
+
+/* ── Form scaffolding ─────────────────────────────────────────────────────── */
+.booth__section {
+  margin-top: var(--space-md);
+}
+
+.booth__label {
+  display: block;
+  font: var(--label-ui);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--text-gold);
+  margin-bottom: var(--space-xs);
+}
+
+.booth__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+/* Order chips. Unselected is a plain hairline; selected takes the questline's
+   own track colour — track colours name a questline and nothing else. */
+.booth__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: 600 var(--text-xs) / 1 var(--font-ui);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: var(--transition-control);
+}
+
+.booth__chip:hover:not(:disabled) {
+  color: var(--text-body);
+  border-color: var(--stone-500);
+}
+
+.booth__chip:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.booth__chip[aria-pressed='true'] {
+  color: var(--chip-track, var(--text-heading));
+  border-color: var(--chip-track, var(--gold-700));
+  background: var(--surface-inset);
+}
+
+.booth__chip:disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+  color: var(--status-locked);
+}
+
+.booth__chip:focus-visible {
+  outline: 2px solid var(--gold-500);
+  outline-offset: 2px;
+}
+
+/* ── Read-back ────────────────────────────────────────────────────────────
+   The line the employee says out loud before committing. Deliberately the
+   largest text in the panel. */
+.booth__readback {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--gold-700);
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  box-shadow: var(--shadow-carve-in);
+}
+
+.booth__readback--complete {
+  border-color: var(--ember-700);
+}
+
+.booth__readback p {
+  margin: 0;
+  font: 400 var(--text-md) / 1.5 var(--font-body);
+  color: var(--text-body);
+}
+
+.booth__readback strong {
+  color: var(--text-heading);
+}
+
+/* ── The rack ─────────────────────────────────────────────────────────────── */
+.booth__rack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.booth__pole {
+  width: 96px;
+  min-height: 78px;
+  padding: var(--space-xs);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: center;
+  transition: var(--transition-control);
+}
+
+.booth__pole:hover {
+  border-color: var(--gold-700);
+  color: var(--text-body);
+}
+
+.booth__pole:active {
+  transform: translateY(1px);
+  background: var(--stone-900);
+}
+
+.booth__pole:focus-visible {
+  outline: 2px solid var(--gold-500);
+  outline-offset: 2px;
+}
+
+/* Out with a party — the pole is doing its job. */
+.booth__pole--out {
+  border-color: var(--gold-700);
+  color: var(--text-gold);
+}
+
+/* Sealed: the walk is finished and the pole is due back. A now-state, so ember. */
+.booth__pole--sealed {
+  border-color: var(--ember-700);
+  color: var(--ember-300);
+}
+
+/* Overdue and lost both need an eye on them. */
+.booth__pole--flagged {
+  border-color: var(--status-danger);
+  color: var(--status-danger);
+}
+
+/* Retired keeps its shape and takes the DS locked treatment — a dashed
+   hairline, never a faded-out one. */
+.booth__pole--retired {
+  border-style: dashed;
+  color: var(--status-locked);
+}
+
+.booth__pole-label {
+  font: 700 var(--text-xs) / 1 var(--font-ui);
+  letter-spacing: var(--tracking-label);
+}
+
+.booth__pole-note {
+  font: 400 10px / 1.2 var(--font-ui);
+  color: var(--text-muted);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* ── Guest search results ─────────────────────────────────────────────────── */
+.booth__results {
+  max-height: 168px;
+  overflow-y: auto;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  margin-top: var(--space-xs);
+}
+
+.booth__result {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: 8px var(--space-sm);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-hairline);
+  color: var(--text-body);
+  font: var(--body-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.booth__result:last-child {
+  border-bottom: 0;
+}
+
+.booth__result:hover {
+  background: var(--surface-inset);
+}
+
+.booth__result:focus-visible {
+  outline: 2px solid var(--gold-500);
+  outline-offset: -2px;
+}
+
+/* ── Passages ─────────────────────────────────────────────────────────────── */
+.booth__pass {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: 10px var(--space-sm);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-body);
+  text-align: left;
+  cursor: pointer;
+  transition: var(--transition-control);
+}
+
+.booth__pass + .booth__pass {
+  margin-top: 6px;
+}
+
+.booth__pass[aria-pressed='true'] {
+  border-color: var(--gold-500);
+  background: var(--surface-inset);
+}
+
+.booth__pass:disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+  color: var(--status-locked);
+}
+
+.booth__pass:focus-visible {
+  outline: 2px solid var(--gold-500);
+  outline-offset: 2px;
+}
+
+.booth__pass-name {
+  font: 600 var(--text-sm) / 1.2 var(--font-ui);
+  color: var(--text-heading);
+}
+
+.booth__pass:disabled .booth__pass-name {
+  color: var(--status-locked);
+}
+
+.booth__pass-note {
+  font: 400 var(--text-xs) / 1.4 var(--font-ui);
+  color: var(--text-muted);
+}

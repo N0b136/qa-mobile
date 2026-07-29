@@ -17,6 +17,7 @@ import type {
   Announcement,
   AppNotification,
   Booking,
+  Flag,
   NotificationType,
   Party,
   Presence,
@@ -29,6 +30,7 @@ import type {
 } from '../types'
 import { load, save } from './store'
 import { uid } from './ids'
+import type { PassUse } from './passService'
 import type { FirebaseHandle } from './firebase'
 import { ensureFirebase, ensureFirebaseWithin, setCloudState } from './firebase'
 import { totalXp, levelFor } from './progressService'
@@ -87,6 +89,10 @@ const SCHEDULED_KEY = 'ql:scheduled'
 const USERS_KEY = 'ql:users'
 const PARTIES_KEY = 'ql:parties'
 const PRESENCE_KEY = 'ql:presence'
+const FLAGS_KEY = 'ql:flags'
+
+/** The tag-uid allowlist, mirrored from `flagService.normalizeUid`. See mergeFlagsSnapshot. */
+const FLAG_UID_RE = /^[0-9A-F]{8,20}$/
 const ANNOUNCE_KEY = 'ql:announcements'
 /** Matches announcementService's BOARD_CAP — heroes ride inside the documents. */
 const ANNOUNCE_CAP = 40
@@ -97,6 +103,7 @@ const notifKey = (userId: string) => `ql:notifications:${userId}`
 const progressKey = (userId: string) => `ql:progress:${userId}`
 const stationKey = (userId: string) => `ql:stations:${userId}`
 const bookingsKey = (userId: string) => `ql:bookings:${userId}`
+const passUsesKey = (userId: string) => `ql:passUses:${userId}`
 
 function normalizePartyCode(code: string): string {
   return code.trim().toUpperCase().replace(/\s+/g, '')
@@ -408,7 +415,11 @@ function announceNewMembers(selfId: string, before: Party[], after: Party[]): vo
   })()
 }
 
-function mergePartiesSnapshot(snap: QuerySnapshot<DocumentData>, selfId: string, primed: boolean): void {
+function mergePartiesSnapshot(
+  snap: QuerySnapshot<DocumentData>,
+  selfId: string | null,
+  primed: boolean
+): void {
   const local = load<Party[]>(PARTIES_KEY, [])
   const byId = new Map(local.map((p) => [p.id, p] as const))
 
@@ -434,14 +445,10 @@ function mergePartiesSnapshot(snap: QuerySnapshot<DocumentData>, selfId: string,
   if (deepEqual(merged, local)) return
   save(PARTIES_KEY, merged)
   // The first snapshot is just the mirror catching up — everyone would look new.
-  if (primed) announceNewMembers(selfId, local, merged)
+  // No self id means the console, which belongs to nobody's party.
+  if (primed && selfId) announceNewMembers(selfId, local, merged)
 }
 
-/**
- * Progress is monotonic — an episode is only ever added — so your own doc merges
- * as a UNION and a stale snapshot can never erase a completion you just earned.
- * Other guests' docs are taken as-is; this device never writes them.
- */
 function unionLists<T extends Record<string, string[]>>(local: T, incoming: T): T {
   const next = { ...local } as T
   for (const k of Object.keys(incoming)) {
@@ -452,27 +459,32 @@ function unionLists<T extends Record<string, string[]>>(local: T, incoming: T): 
   return next
 }
 
-function mergeProgressSnapshot(snap: QuerySnapshot<DocumentData>, selfId: string): void {
-  snap.forEach((d) => {
-    const data = d.data() as { id?: string; map?: ProgressMap; stations?: StationMap }
-    const id = data.id ?? d.id
-    const incoming = data.map ?? {}
-    const localMap = load<ProgressMap>(progressKey(id), {})
+/**
+ * Progress is monotonic — an episode, and a station within an episode, is only
+ * ever added — so EVERY doc merges as a union and no snapshot can erase work.
+ *
+ * Other guests' docs used to be taken as-is, on the grounds that this device
+ * never writes them. That is no longer true on either side: the console credits
+ * a guest whose phone never saw the tap, and a guest's own device credits their
+ * party-mates as it carries them along. A clobber there would drop whichever
+ * writer was a snapshot behind.
+ */
+function mergeProgressSnapshot(snap: QuerySnapshot<DocumentData>): void {
+  snap.docChanges().forEach((c) => {
+    // A deleted progress doc cannot un-walk an episode, so a removal is left to
+    // fall off the cloud copy alone rather than mirrored into the local one.
+    if (c.type === 'removed') return
 
-    let next: ProgressMap
-    if (id === selfId) {
-      next = unionLists(localMap, incoming)
-    } else {
-      next = incoming
-    }
+    const data = c.doc.data() as { id?: string; map?: ProgressMap; stations?: StationMap }
+    const id = data.id ?? c.doc.id
+
+    const localMap = load<ProgressMap>(progressKey(id), {})
+    const next = unionLists(localMap, data.map ?? {})
     if (!deepEqual(next, localMap)) save(progressKey(id), next)
 
-    // Station check-ins ride in the same doc and merge the same way: within an
-    // episode a station is only ever added, so a union can never lose one.
-    const incomingStations = data.stations ?? {}
+    // Station check-ins ride in the same doc and merge the same way.
     const localStations = load<StationMap>(stationKey(id), {})
-    const nextStations =
-      id === selfId ? unionLists(localStations, incomingStations) : incomingStations
+    const nextStations = unionLists(localStations, data.stations ?? {})
     if (!deepEqual(nextStations, localStations)) save(stationKey(id), nextStations)
   })
 }
@@ -507,6 +519,55 @@ function mergePresenceSnapshot(snap: QuerySnapshot<DocumentData>, selfId: string
       .then((m) => m.syncParty(selfId))
       .catch(() => {})
   }
+}
+
+/**
+ * The rack.
+ *
+ * Last-write-wins on `updatedAt`, which is exactly right for a flag: a binding
+ * is decided at one counter at one moment, and a later write is a later fact.
+ * (The write that MATTERS — claiming a pole for a party — is a compare-and-set
+ * transaction in flagService, so this merge never has to adjudicate a conflict;
+ * it only has to not lose the answer.)
+ *
+ * This function TERMINATES IN store.save() and calls nothing back into a
+ * service. That is what makes an echo loop structurally impossible: a merge can
+ * only ever write the local mirror, never push, so a snapshot cannot provoke the
+ * write that provokes the next snapshot.
+ */
+function mergeFlagsSnapshot(snap: QuerySnapshot<DocumentData>): void {
+  const local = load<Flag[]>(FLAGS_KEY, [])
+  const byUid = new Map(local.map((f) => [f.uid, f] as const))
+
+  // A retired pole struck from the rack must leave every console's mirror too,
+  // or it goes on being offered at the counter.
+  snap.docChanges().forEach((c) => {
+    if (c.type === 'removed') byUid.delete(c.doc.id)
+  })
+
+  snap.forEach((d) => {
+    const incoming = d.data() as Flag
+    if (!incoming || typeof incoming.updatedAt !== 'number') return
+    // Reject, do not repair — at this boundary too. The uid becomes a document
+    // id on the very next write (`doc(db,'flags', flag.uid)`), so a document
+    // whose `uid` field disagrees with its own id, or carries a '/', would
+    // re-target a different collection path. The rule is the same one
+    // `flagService.normalizeUid` enforces on the air; it is spelled out again
+    // here rather than imported, because flagService imports this module and a
+    // static import back would close a cycle.
+    if (incoming.uid !== d.id || !FLAG_UID_RE.test(d.id)) return
+    // A row with no label cannot be shown on the rack, and it used to take the
+    // whole listener down: `localeCompare` on undefined throws inside the
+    // snapshot callback, which kills every merge after it.
+    if (typeof incoming.label !== 'string' || incoming.label === '') return
+    const existing = byUid.get(incoming.uid)
+    if (!existing || incoming.updatedAt >= existing.updatedAt) byUid.set(incoming.uid, incoming)
+  })
+
+  const merged = Array.from(byUid.values()).sort((a, b) =>
+    (a.label ?? '').localeCompare(b.label ?? '', undefined, { numeric: true })
+  )
+  if (!deepEqual(merged, local)) save(FLAGS_KEY, merged)
 }
 
 /**
@@ -567,22 +628,83 @@ function bookingStamp(b: Booking | undefined): number {
   return b.updatedAt ?? b.createdAt
 }
 
-function mergeBookingsSnapshot(userId: string, snap: QuerySnapshot<DocumentData>): void {
+function applyBookings(userId: string, incoming: Booking[], removedIds: Set<string>): void {
   const local = load<Booking[]>(bookingsKey(userId), [])
   const byId = new Map(local.map((b) => [b.id, b] as const))
 
-  snap.docChanges().forEach((c) => {
-    if (c.type === 'removed') byId.delete(c.doc.id)
-  })
-
-  snap.forEach((d) => {
-    const incoming = d.data() as Booking
-    const existing = byId.get(incoming.id)
-    if (bookingStamp(incoming) >= bookingStamp(existing)) byId.set(incoming.id, incoming)
+  removedIds.forEach((id) => byId.delete(id))
+  incoming.forEach((b) => {
+    if (bookingStamp(b) >= bookingStamp(byId.get(b.id))) byId.set(b.id, b)
   })
 
   const merged = Array.from(byId.values()).sort((a, b) => a.createdAt - b.createdAt)
   if (!deepEqual(merged, local)) save(bookingsKey(userId), merged)
+}
+
+function mergeBookingsSnapshot(userId: string, snap: QuerySnapshot<DocumentData>): void {
+  const removed = new Set<string>()
+  snap.docChanges().forEach((c) => {
+    if (c.type === 'removed') removed.add(c.doc.id)
+  })
+  const incoming: Booking[] = []
+  snap.forEach((d) => incoming.push(d.data() as Booking))
+  applyBookings(userId, incoming, removed)
+}
+
+/**
+ * The booth's view of every passage sold. It spends against a passage bought in
+ * the app, so it has to be able to read one. Bookings are filed per guest
+ * locally, so the whole-collection snapshot is bucketed by owner and each bucket
+ * gets the same merge a phone's own list gets.
+ */
+function mergeAllBookingsSnapshot(snap: QuerySnapshot<DocumentData>): void {
+  const incoming = new Map<string, Booking[]>()
+  const removed = new Map<string, Set<string>>()
+
+  snap.docChanges().forEach((c) => {
+    if (c.type !== 'removed') return
+    const owner = (c.doc.data() as Booking).userId
+    if (!owner) return
+    const ids = removed.get(owner) ?? new Set<string>()
+    ids.add(c.doc.id)
+    removed.set(owner, ids)
+  })
+
+  snap.forEach((d) => {
+    const b = d.data() as Booking
+    if (!b?.userId) return
+    const bucket = incoming.get(b.userId)
+    if (bucket) bucket.push(b)
+    else incoming.set(b.userId, [b])
+  })
+
+  new Set([...incoming.keys(), ...removed.keys()]).forEach((userId) => {
+    applyBookings(userId, incoming.get(userId) ?? [], removed.get(userId) ?? new Set())
+  })
+}
+
+/**
+ * The passage ledger. A use is written once and never revised, so the merge is a
+ * union by id: the booth spends a Quest Experience on behalf of a guest whose
+ * phone never saw it, that phone spends one the booth never saw, and a union is
+ * the only resolution under which neither loses.
+ */
+function unionUses(local: PassUse[], incoming: PassUse[]): PassUse[] {
+  const byId = new Map(local.map((u) => [u.id, u] as const))
+  incoming.forEach((u) => {
+    if (u?.id && !byId.has(u.id)) byId.set(u.id, u)
+  })
+  return Array.from(byId.values()).sort((a, b) => a.at - b.at)
+}
+
+function applyPassUses(userId: string, incoming: PassUse[]): void {
+  const local = load<PassUse[]>(passUsesKey(userId), [])
+  const merged = unionUses(local, incoming)
+  if (!deepEqual(merged, local)) save(passUsesKey(userId), merged)
+}
+
+function usesOf(data: DocumentData | undefined): PassUse[] {
+  return (data as { uses?: PassUse[] } | undefined)?.uses ?? []
 }
 
 function mergeScheduledSnapshot(snap: QuerySnapshot<DocumentData>): void {
@@ -656,7 +778,7 @@ function subscribeWhenAuthed(
 }
 
 export function startGuestSync(userId: string): () => void {
-  return subscribeWhenAuthed((fb, { collection, query, where, onSnapshot }) => {
+  return subscribeWhenAuthed((fb, { collection, doc, query, where, onSnapshot }) => {
     const unsubs: Array<() => void> = []
 
     const sosUnsub = onSnapshot(
@@ -696,11 +818,20 @@ export function startGuestSync(userId: string): () => void {
     )
     unsubs.push(notifUnsub)
 
-    // Your own passages, wherever they were booked.
+    // Your own passages, wherever they were booked, and what has been spent off
+    // them — the booth spends a Quest Experience at the gate, on this guest's
+    // behalf, while their phone is in a pocket.
     unsubs.push(
       onSnapshot(
         query(collection(fb.db, 'bookings'), where('userId', '==', userId)),
         (snap) => mergeBookingsSnapshot(userId, snap),
+        () => setCloudState('offline')
+      )
+    )
+    unsubs.push(
+      onSnapshot(
+        doc(fb.db, 'passUses', userId),
+        (snap) => applyPassUses(userId, usesOf(snap.data())),
         () => setCloudState('offline')
       )
     )
@@ -730,7 +861,7 @@ export function startGuestSync(userId: string): () => void {
     unsubs.push(
       onSnapshot(
         collection(fb.db, 'progress'),
-        (snap) => mergeProgressSnapshot(snap, userId),
+        (snap) => mergeProgressSnapshot(snap),
         () => setCloudState('offline')
       )
     )
@@ -788,12 +919,65 @@ export function startConsoleSync(): () => void {
         () => setCloudState('offline')
       )
     )
+    // The rosters. Without them the console reads every party-mate as a lone
+    // traveller, because occupants() groups on a party it has never heard of.
+    // Self id is null both because the console belongs to no party and because
+    // that is what keeps announceNewMembers from ever firing here.
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'parties'),
+        (snap) => mergePartiesSnapshot(snap, null, false),
+        () => setCloudState('offline')
+      )
+    )
+    // Everyone's progress. Without it every guest reads as episode one forever —
+    // the console would name the wrong quest on the board and, once it starts
+    // crediting check-ins itself, credit the wrong episode.
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'progress'),
+        (snap) => mergeProgressSnapshot(snap),
+        () => setCloudState('offline')
+      )
+    )
+    // What every guest bought, and what they have spent off it. The booth reads
+    // both to say "Hero Pass, 3 adults, unlimited today" before it spends one.
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'bookings'),
+        (snap) => mergeAllBookingsSnapshot(snap),
+        () => setCloudState('offline')
+      )
+    )
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'passUses'),
+        (snap) =>
+          snap.docChanges().forEach((c) => {
+            // A removal cannot un-spend a Quest Experience, so it is left alone
+            // rather than mirrored — the same reasoning as progress above.
+            if (c.type === 'removed') return
+            const data = c.doc.data()
+            applyPassUses((data.id as string | undefined) ?? c.doc.id, usesOf(data))
+          }),
+        () => setCloudState('offline')
+      )
+    )
     // The stations board. The console watches only — it never carries anybody
     // along, so it passes no self id.
     unsubs.push(
       onSnapshot(
         collection(fb.db, 'presence'),
         (snap) => mergePresenceSnapshot(snap, null),
+        () => setCloudState('offline')
+      )
+    )
+    // The rack. Every pole the park owns, so the booth panel opens with the
+    // whole of it and a bind made at the other counter shows up here.
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'flags'),
+        (snap) => mergeFlagsSnapshot(snap),
         () => setCloudState('offline')
       )
     )
@@ -911,6 +1095,28 @@ export function pushLeg(leg: QuestLeg): void {
 }
 
 /**
+ * Writes a flag document WHOLE — `setDoc` with no `merge`.
+ *
+ * flagService is the complete and only writer of this document, so the object it
+ * hands over is the entire truth about that pole. A merge would leave fields
+ * from a previous binding stranded on the record: rack a pole and the party name
+ * would still be sitting there, because a merge has no way to express "this
+ * field is gone now". That is the pushGuestProfile scar, and this is the shape
+ * that avoids it.
+ */
+export function pushFlag(flag: Flag): void {
+  void ensureFirebase().then(async (fb) => {
+    if (!fb) return
+    try {
+      const { doc, setDoc } = await import('firebase/firestore')
+      await setDoc(doc(fb.db, 'flags', flag.uid), clean({ ...flag }))
+    } catch {
+      // swallow — the local mirror is already correct
+    }
+  })
+}
+
+/**
  * Posts (or revises) a notice. Staff-only by the rules — a guest device calling
  * this is refused, which is exactly what should happen, and the local board it
  * already saved is left alone.
@@ -973,12 +1179,47 @@ export function pushProgress(userId: string): void {
         return { merged, stations }
       })
 
-      if (!deepEqual(union.merged, load<ProgressMap>(progressKey(userId), {}))) {
-        save(progressKey(userId), union.merged)
-      }
-      if (!deepEqual(union.stations, load<StationMap>(stationKey(userId), {}))) {
-        save(stationKey(userId), union.stations)
-      }
+      // Unioned again on the way back, not saved verbatim: the transaction's
+      // answer was computed from a read taken before it committed, and anything
+      // walked on this device while it was in flight is only in the local copy.
+      const localMap = load<ProgressMap>(progressKey(userId), {})
+      const map = unionLists(localMap, union.merged)
+      if (!deepEqual(map, localMap)) save(progressKey(userId), map)
+
+      const localStations = load<StationMap>(stationKey(userId), {})
+      const stations = unionLists(localStations, union.stations)
+      if (!deepEqual(stations, localStations)) save(stationKey(userId), stations)
+    } catch {
+      // swallow
+    }
+  })
+}
+
+/**
+ * Unions the local pass ledger into passUses/{userId} inside a transaction and
+ * writes the result back to both sides — pushProgress's shape, for the same
+ * reason: two writers (this phone and the ticket booth) spend against the same
+ * ledger, and a use is immutable once written, so a union can never lose one.
+ */
+export function pushPassUses(userId: string): void {
+  void ensureFirebase().then(async (fb) => {
+    if (!fb) return
+    try {
+      const { doc, runTransaction } = await import('firebase/firestore')
+      const ref = doc(fb.db, 'passUses', userId)
+
+      const uses = await runTransaction(fb.db, async (tx) => {
+        const snap = await tx.get(ref)
+        const merged = unionUses(usesOf(snap.data()), load<PassUse[]>(passUsesKey(userId), []))
+        tx.set(ref, { id: userId, uses: merged, updatedAt: Date.now() })
+        return merged
+      })
+
+      // Unioned against the ledger as it stands NOW rather than saved verbatim:
+      // a second quest taken while this push was in flight is only in the local
+      // copy, and writing the transaction's answer over it would spend that
+      // guest's allowance twice.
+      applyPassUses(userId, uses)
     } catch {
       // swallow
     }
