@@ -217,6 +217,12 @@ export function creditStation(
   // stays correct whichever of the two paths sealed it.
   const completion = sealed && !repeat ? completeEpisode(userId, episode.id, opts) : null
 
+  // Stations one through six of every episode used to stay on the phone: only
+  // sealing pushed. A sealing completeEpisode has already pushed this write,
+  // but it returns before its push on both of its refusal branches, so the
+  // condition is "did a push actually happen", not "did we seal".
+  if (!repeat && !completion?.ok) cloudSync.pushProgress(userId)
+
   return {
     station,
     orgId,
