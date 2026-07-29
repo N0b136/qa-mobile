@@ -9,6 +9,14 @@ export interface CardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 't
   image?: string;
   imageAlt?: string;
   imageHeight?: number;
+  /**
+   * Feathers the hero's four edges away to nothing instead of cutting them
+   * square, so whatever is dropped in bleeds into the card rather than sitting
+   * on it. Built for parchment — a photograph pasted flat onto vellum reads as
+   * a photograph, a feathered one reads as part of the sheet. Suppresses the
+   * stone card's bottom scrim, which has nothing left to sit against.
+   */
+  imageFeather?: boolean;
   /** Small gold uppercase label above the title. */
   eyebrow?: React.ReactNode;
   /** Cinzel caps title. */
@@ -70,6 +78,24 @@ function ensureTearFilters() {
   document.body.appendChild(svg);
 }
 
+/* Two gradients intersected: the vertical one softens top and bottom, the
+   horizontal one the sides, and `intersect` keeps only what both allow — so the
+   corners fall away first, the way a wetted edge would. Kept asymmetric top to
+   bottom because a hero's bottom edge runs into the title and wants the longer
+   fade. -webkit- twin is for Safari, which still names the operator source-in. */
+const FEATHER_MASK = [
+  'linear-gradient(to bottom, transparent 0%, #000 10%, #000 82%, transparent 100%)',
+  'linear-gradient(to right, transparent 0%, #000 8%, #000 92%, transparent 100%)',
+].join(',');
+
+const featherStyle: React.CSSProperties = {
+  maskImage: FEATHER_MASK,
+  WebkitMaskImage: FEATHER_MASK,
+  maskComposite: 'intersect',
+  WebkitMaskComposite: 'source-in',
+  maskMode: 'alpha',
+};
+
 const GRAIN = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='1.4' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.29 0 0 0 0 0.21 0 0 0 0 0.11 0.42 0.42 0.42 0 -0.53'/></filter><rect width='100%' height='100%' filter='url(%23g)'/></svg>\")";
 
 /* The hide: follicle grain, mottled thick/thin patches, edge scorch, base skin tone. */
@@ -86,7 +112,7 @@ function vellumBackground(): string {
 
 /* The stone slab, or — with tone="parchment" — hand-torn animal-skin vellum. */
 export function Card({
-  children, image, imageAlt = '', imageHeight = 200, eyebrow, title, meta,
+  children, image, imageAlt = '', imageHeight = 200, imageFeather = false, eyebrow, title, meta,
   interactive = false, tone = 'stone', ceremonial = false,
   tear = 'rough', hue = 36, light = 80, pad, style, ...rest
 }: CardProps) {
@@ -99,8 +125,21 @@ export function Card({
   // cast once here rather than sprinkling `as` through every style object below.
   const skinVars = { '--p-hue': hue, '--p-light': light } as React.CSSProperties;
 
+  const padValue = pad || 'var(--space-lg)';
+
   if (parchment && !ceremonial) {
     const tearId = 'qa-tear-' + tear;
+    // A feathered hero bleeds out through the padding so the fade begins at the
+    // sheet edge; a square one stays inside it, where a hard edge belongs.
+    const heroBleed: React.CSSProperties = imageFeather
+      ? {
+          marginTop: `calc(${padValue} * -1)`,
+          marginLeft: `calc(${padValue} * -1)`,
+          marginRight: `calc(${padValue} * -1)`,
+          width: `calc(100% + ${padValue} * 2)`,
+          ...featherStyle,
+        }
+      : {};
     const layer: React.CSSProperties = {
       content: '""', position: 'absolute', inset: -7, zIndex: 0,
       borderRadius: 4, pointerEvents: 'none',
@@ -110,7 +149,7 @@ export function Card({
         onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
         style={{
           position: 'relative', isolation: 'isolate', margin: 14,
-          padding: pad || 'var(--space-lg)',
+          padding: padValue,
           color: 'var(--text-on-vellum)',
           ...skinVars,
           font: 'var(--body-base)',
@@ -133,7 +172,7 @@ export function Card({
         }} />
         <div style={{ position: 'relative', zIndex: 1 }}>
           {image ? (
-            <img src={image} alt={imageAlt} style={{ width: '100%', height: imageHeight, objectFit: 'cover', display: 'block', marginBottom: 'var(--space-md)' }} />
+            <img src={image} alt={imageAlt} style={{ width: '100%', height: imageHeight, objectFit: 'cover', display: 'block', marginBottom: 'var(--space-md)', ...heroBleed }} />
           ) : null}
           {eyebrow ? (
             <div style={{
@@ -193,12 +232,12 @@ export function Card({
       <div style={inner || undefined}>
         {image ? (
           <div style={{ position: 'relative', height: imageHeight }}>
-            <img src={image} alt={imageAlt} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-            <div style={{ position: 'absolute', inset: 0, background: 'var(--scrim-bottom)' }} />
+            <img src={image} alt={imageAlt} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', ...(imageFeather ? featherStyle : null) }} />
+            {imageFeather ? null : <div style={{ position: 'absolute', inset: 0, background: 'var(--scrim-bottom)' }} />}
           </div>
         ) : null}
         {(eyebrow || title || meta || children) ? (
-          <div style={{ padding: pad || 'var(--space-lg)' }}>
+          <div style={{ padding: padValue }}>
             {eyebrow ? <div className="qa-label" style={{ marginBottom: 'var(--space-xs)' }}>{eyebrow}</div> : null}
             {title ? (
               <h3 style={{

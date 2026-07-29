@@ -83,3 +83,57 @@ body.console-mode #root {
 .console-x-scroll {
   overflow-x: auto;
 }
+
+/* ── Notice Board: write on the left, the guest's own card on the right ──── */
+.notice-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: var(--space-xl);
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .notice-board {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The hero dropzone. Dashed hairline is the design system's "not filled yet"
+   treatment — the same one a locked episode wears. */
+.notice-drop {
+  display: grid;
+  place-items: center;
+  min-height: 148px;
+  padding: var(--space-md);
+  text-align: center;
+  cursor: pointer;
+  background: var(--surface-inset);
+  border: 1px dashed var(--border-hairline);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-carve-in);
+  transition: var(--transition-control);
+}
+
+.notice-drop:hover,
+.notice-drop:focus-visible,
+.notice-drop--over {
+  border-color: var(--gold-500);
+  border-style: solid;
+}
+
+.notice-drop__shot {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: var(--radius-xs);
+}
+
+/* The preview stands on the guest app's stone ground, at the phone's width, so
+   the parchment is judged against what it will actually sit on. */
+.notice-preview {
+  width: 100%;
+  max-width: 380px;
+  padding: var(--space-sm) 0;
+  background: var(--surface-page, transparent);
+}

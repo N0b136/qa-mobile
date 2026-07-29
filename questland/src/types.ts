@@ -203,6 +203,46 @@ export interface SosRequest {
   updatedAt: number
 }
 
+/**
+ * A notice pinned to the board — what the guest reads under "Happenings".
+ *
+ * Written by the Back Office console and read by every phone, so it is a
+ * staff-authored document rather than something a guest owns. The card shows
+ * the hero, the title and the `blurb`; `body` is the whole post, and only opens
+ * when the guest taps "…see more".
+ *
+ * `image` is a plain <img> src. The console stores a downscaled data URL there
+ * so a notice needs no file host and survives offline in the local mirror; a
+ * seeded notice can point at a bundled asset path instead. Either works.
+ */
+export interface Announcement {
+  id: string
+  /** Small gold label above the title — 'Festival', 'Notice', a date. */
+  eyebrow?: string
+  title: string
+  /** The teaser on the card. Kept short; the card truncates past ~3 lines. */
+  blurb: string
+  /** The whole post, shown in the dialog. Blank lines separate paragraphs. */
+  body: string
+  image?: string
+  imageAlt?: string
+  /** Torn-edge variant, so a column of notices doesn't look stamped. */
+  tear?: 'a' | 'b' | 'c' | 'rough'
+  status: 'published' | 'draft'
+  /** ms — when it goes up on the board. A future stamp holds it back. */
+  publishAt: number
+  /** ms — when it comes down. Unset means it stays. */
+  expiresAt?: number
+  /** Rides above the rest of the board. */
+  pinned?: boolean
+  createdAt: number
+  updatedAt: number
+  /** The staff member who posted it. */
+  createdBy?: string
+  /** Staged by the presenter's demo remote, so a reset can find it. */
+  demo?: true
+}
+
 export interface ChatMessage {
   id: string
   from: 'guest' | 'staff'
