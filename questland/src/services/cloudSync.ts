@@ -14,6 +14,7 @@ import type {
   DocumentReference,
 } from 'firebase/firestore'
 import type {
+  Announcement,
   AppNotification,
   Booking,
   Flag,
@@ -92,6 +93,9 @@ const FLAGS_KEY = 'ql:flags'
 
 /** The tag-uid allowlist, mirrored from `flagService.normalizeUid`. See mergeFlagsSnapshot. */
 const FLAG_UID_RE = /^[0-9A-F]{8,20}$/
+const ANNOUNCE_KEY = 'ql:announcements'
+/** Matches announcementService's BOARD_CAP — heroes ride inside the documents. */
+const ANNOUNCE_CAP = 40
 const LOG_KEY = 'ql:questLog'
 /** Matches questLogService's cap — the mirror is a working window, not an archive. */
 const LOG_CAP = 2000
@@ -590,6 +594,35 @@ function mergeLegsSnapshot(snap: QuerySnapshot<DocumentData>): void {
   if (!deepEqual(merged, local)) save(LOG_KEY, merged)
 }
 
+/**
+ * The notice board. One staff console writes a notice and every phone reads it,
+ * so there is no local edit to protect — last write on `updatedAt` wins, and a
+ * struck notice leaves by the `removed` change like any other.
+ */
+function mergeAnnouncementsSnapshot(snap: QuerySnapshot<DocumentData>): void {
+  const local = load<Announcement[]>(ANNOUNCE_KEY, [])
+  const byId = new Map(local.map((a) => [a.id, a] as const))
+
+  snap.docChanges().forEach((c) => {
+    if (c.type === 'removed') byId.delete(c.doc.id)
+  })
+
+  snap.forEach((d) => {
+    const incoming = d.data() as Announcement
+    if (!incoming?.id || typeof incoming.updatedAt !== 'number') return
+    const existing = byId.get(incoming.id)
+    if (!existing || incoming.updatedAt >= existing.updatedAt) byId.set(incoming.id, incoming)
+  })
+
+  const merged = Array.from(byId.values())
+    .sort((a, b) => {
+      if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1
+      return b.publishAt - a.publishAt
+    })
+    .slice(0, ANNOUNCE_CAP)
+  if (!deepEqual(merged, local)) save(ANNOUNCE_KEY, merged)
+}
+
 function bookingStamp(b: Booking | undefined): number {
   if (!b) return -1
   return b.updatedAt ?? b.createdAt
@@ -843,6 +876,16 @@ export function startGuestSync(userId: string): () => void {
       )
     )
 
+    // The notice board — the same notices for everybody, which is why this one
+    // is read whole rather than scoped to the guest.
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'announcements'),
+        (snap) => mergeAnnouncementsSnapshot(snap),
+        () => setCloudState('offline')
+      )
+    )
+
     return unsubs
   })
 }
@@ -935,6 +978,14 @@ export function startConsoleSync(): () => void {
       onSnapshot(
         collection(fb.db, 'flags'),
         (snap) => mergeFlagsSnapshot(snap),
+        () => setCloudState('offline')
+      )
+    )
+    // The notice board the console posts to.
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'announcements'),
+        (snap) => mergeAnnouncementsSnapshot(snap),
         () => setCloudState('offline')
       )
     )
@@ -1061,6 +1112,35 @@ export function pushFlag(flag: Flag): void {
       await setDoc(doc(fb.db, 'flags', flag.uid), clean({ ...flag }))
     } catch {
       // swallow — the local mirror is already correct
+    }
+  })
+}
+
+/**
+ * Posts (or revises) a notice. Staff-only by the rules — a guest device calling
+ * this is refused, which is exactly what should happen, and the local board it
+ * already saved is left alone.
+ */
+export function pushAnnouncement(a: Announcement): void {
+  void ensureFirebase().then(async (fb) => {
+    if (!fb) return
+    try {
+      const { doc, setDoc } = await import('firebase/firestore')
+      await setDoc(doc(fb.db, 'announcements', a.id), clean({ ...a }))
+    } catch {
+      // swallow
+    }
+  })
+}
+
+export function deleteAnnouncementDoc(id: string): void {
+  void ensureFirebase().then(async (fb) => {
+    if (!fb) return
+    try {
+      const { doc, deleteDoc } = await import('firebase/firestore')
+      await deleteDoc(doc(fb.db, 'announcements', id))
+    } catch {
+      // swallow
     }
   })
 }

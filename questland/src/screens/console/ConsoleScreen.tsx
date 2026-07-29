@@ -21,6 +21,7 @@ import GuestsAfield from './GuestsAfield'
 import StationsBoard from './StationsBoard'
 import StationRecords from './StationRecords'
 import BoothPanel from './BoothPanel'
+import NoticeBoard from './NoticeBoard'
 import './console.css'
 
 // The desktop Back Office console. It lives OUTSIDE the guest Shell (no TopBar /
@@ -103,6 +104,7 @@ export default function ConsoleScreen() {
         <SendWord persona={persona} prefillAudience={prefillAudience} />
         <CallsBoard persona={persona} />
         <GuestsAfield onSend={setPrefillAudience} />
+        <NoticeBoard persona={persona} />
         <StationRecords />
       </div>
     </div>

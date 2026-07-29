@@ -248,6 +248,15 @@ service cloud.firestore {
       allow read, write: if isStaff();
     }
 
+    // The notice board. The same proclamations for the whole park, so every
+    // signed-in client reads them; only the Back Office nails one up. This is
+    // the one comm lane that is deliberately public on the read side — a notice
+    // in the village square is not addressed to anybody in particular.
+    match /announcements/{id} {
+      allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
     // Anything not named above is closed.
     match /{document=**} {
       allow read, write: if false;
