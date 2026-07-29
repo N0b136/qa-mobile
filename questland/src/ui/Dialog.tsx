@@ -25,7 +25,14 @@ export function Dialog({ open = true, title, eyebrow, children, footer, onClose,
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, zIndex: 60, display: 'grid', placeItems: 'center',
+        // `safe center` and a scrollable overlay, because a centred grid item
+        // taller than its container overflows BOTH edges and the start edge is
+        // unreachable — no amount of scrolling gets you there. `safe` falls back
+        // to start alignment exactly when that would happen. A guest holding
+        // four passages made this dialog 937px in an 812px viewport, and its
+        // footer simply did not exist.
+        position: 'fixed', inset: 0, zIndex: 60, display: 'grid', placeItems: 'safe center',
+        overflowY: 'auto',
         padding: 'var(--space-lg)', background: 'var(--surface-overlay)',
         backdropFilter: 'var(--blur-veil)', WebkitBackdropFilter: 'var(--blur-veil)',
         animation: 'qa-fade var(--dur-base) var(--ease-standard)',

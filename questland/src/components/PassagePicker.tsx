@@ -10,7 +10,7 @@
 // Experience is spent. The rules behind each line live in passService.
 
 import { useNavigate } from 'react-router-dom'
-import { passStates } from '../services/passService'
+import { passStates, passStatusLabel } from '../services/passService'
 import type { PassState } from '../services/passService'
 import { Badge, Button, Dialog, Icon, Tag } from '../ui'
 
@@ -119,7 +119,7 @@ export default function PassagePicker({ userId, guests = 1, subtitle, error, onP
                         : ''}
                     </div>
                   </div>
-                  {good ? allowanceBadge(state) : <Tag icon="lock">{state.status}</Tag>}
+                  {good ? allowanceBadge(state) : <Tag icon="lock">{passStatusLabel(state.status)}</Tag>}
                 </>
               )
 
@@ -148,7 +148,14 @@ export default function PassagePicker({ userId, guests = 1, subtitle, error, onP
                   {row}
                 </button>
               ) : (
-                <div key={state.booking.id} style={{ ...frame, opacity: 0.65 }}>
+                // Dashed hairline at full opacity, not a dimmed row: the DS
+                // renders unavailable things by changing the border and keeping
+                // the shape, so the reason a passage cannot be used stays as
+                // legible as the passage itself.
+                <div
+                  key={state.booking.id}
+                  style={{ ...frame, borderTop: 'none', borderBottom: '1px dashed var(--border-hairline)' }}
+                >
                   {row}
                 </div>
               )
