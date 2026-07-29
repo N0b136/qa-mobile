@@ -313,8 +313,21 @@ const COLUMNS = [
   'timestamp_iso',
 ]
 
+/**
+ * Excel evaluates a cell whose text opens with a formula character, and it does so
+ * even when the CSV quoted the field — the quotes are stripped at parse time, so
+ * they are structure, not protection. Party names and display names are chosen by
+ * guests and land in this file, which is opened in a spreadsheet by design.
+ *
+ * The leading apostrophe is what makes the value text. It stays visible in the
+ * imported cell, so a party genuinely named "-Vanguard" shows one; that is the
+ * accepted cost, and it touches the export only, never the app.
+ */
+const FORMULA_LEAD = /^[=+\-@\t\r]/
+
 function cell(value: string | number | undefined): string {
-  const s = value === undefined || value === null ? '' : String(value)
+  const raw = value === undefined || value === null ? '' : String(value)
+  const s = FORMULA_LEAD.test(raw) ? `'${raw}` : raw
   return `"${s.replace(/"/g, '""')}"`
 }
 
