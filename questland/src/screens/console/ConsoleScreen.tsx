@@ -10,6 +10,9 @@ import {
   fireDueSchedules,
 } from '../../services/consoleService'
 import { personaFromStaff } from '../../content/staff'
+import * as hubLink from '../../services/hubLink'
+import { installHubSim, isSimRequested } from '../../services/hubSim'
+import { broadcastTable, startTapPipeline } from '../../services/tapService'
 import ConsoleHeader from './ConsoleHeader'
 import StaffGate from './StaffGate'
 import CallsBoard from './CallsBoard'
@@ -17,6 +20,7 @@ import SendWord from './SendWord'
 import GuestsAfield from './GuestsAfield'
 import StationsBoard from './StationsBoard'
 import StationRecords from './StationRecords'
+import BoothPanel from './BoothPanel'
 import './console.css'
 
 // The desktop Back Office console. It lives OUTSIDE the guest Shell (no TopBar /
@@ -47,8 +51,32 @@ export default function ConsoleScreen() {
     const interval = window.setInterval(() => {
       void fireDueSchedules()
     }, 15000)
+
+    // The hub lives on this effect too, for the same reason the listeners do:
+    // a tap becomes a staff-authenticated Firestore write, so the port must not
+    // be open one moment longer than the staff session behind it. Signing out
+    // closes the cable with the listeners.
+    //
+    // `hubLink.connect()` is a reference-counted module singleton, not effect
+    // state — under StrictMode this effect mounts, tears down and mounts again,
+    // and a per-effect connection would open the same port twice and report its
+    // own second failure as 'held'.
+    const stopTaps = startTapPipeline()
+    // Only the SIMULATOR attaches itself. A real serial port needs a user
+    // gesture to open (Slice 7), so it can never be connected from an effect.
+    const simulated = isSimRequested()
+    if (simulated) {
+      void hubLink.connect(installHubSim()).then(() => {
+        // Hand the simulated park the rack as it stands, so a tag tapped
+        // straight after opening resolves locally instead of querying.
+        broadcastTable()
+      })
+    }
+
     return () => {
       stopSync()
+      stopTaps()
+      if (simulated) hubLink.disconnect()
       window.clearInterval(interval)
     }
   }, [staff?.uid])
@@ -69,6 +97,9 @@ export default function ConsoleScreen() {
       />
       <div className="console-grid">
         <StationsBoard />
+        {/* BELOW the chart, never above it: MapCanvas re-clamps its pan on every
+            ancestor resize, and the booth stage changes height on every scan. */}
+        <BoothPanel staffUid={staff.uid} />
         <SendWord persona={persona} prefillAudience={prefillAudience} />
         <CallsBoard persona={persona} />
         <GuestsAfield onSend={setPrefillAudience} />

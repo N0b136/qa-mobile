@@ -98,6 +98,10 @@ export interface LegInput {
   legNumber?: number
   stationsTotal?: number
   sealed?: boolean
+  /** The standard the party walked in on — 'FLAG-07'. Unset on an app check-in. */
+  flagLabel?: string
+  /** The place earned nothing: it is not on this episode's rotation. */
+  offRotation?: true
   passCode?: string
   passName?: string
 }
@@ -146,6 +150,8 @@ export function recordLeg(input: LegInput): QuestLeg | null {
   if (input.legNumber !== undefined) leg.legNumber = input.legNumber
   if (input.stationsTotal !== undefined) leg.stationsTotal = input.stationsTotal
   if (input.sealed) leg.sealed = true
+  if (input.flagLabel) leg.flagLabel = input.flagLabel
+  if (input.offRotation) leg.offRotation = true
   if (input.passCode) leg.passCode = input.passCode
   if (input.passName) leg.passName = input.passName
   // A gate arrival belongs to the visit, not to any one quest — it is joined to
@@ -321,6 +327,12 @@ const COLUMNS = [
   'checked_in_by',
   'run_id',
   'timestamp_iso',
+  // APPENDED AT THE END, on purpose. The export is long-format so it accumulates
+  // onto a master sheet day after day; inserting a column anywhere else would
+  // shift every index in a spreadsheet somebody has already built pivots on.
+  // New columns go here, always, and never get reordered.
+  'flag',
+  'off_rotation',
 ]
 
 /**
@@ -376,6 +388,8 @@ export function toCsv(runs: QuestRun[]): string {
           cell(leg.byName),
           cell(run.id),
           cell(new Date(leg.at).toISOString()),
+          cell(leg.flagLabel),
+          cell(leg.offRotation ? 'yes' : 'no'),
         ].join(',')
       )
     })

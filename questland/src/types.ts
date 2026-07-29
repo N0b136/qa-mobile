@@ -99,6 +99,14 @@ export interface Presence {
   /** The party member who actually tapped in — the rest are carried along. */
   byUserId?: string
   byName?: string
+  /**
+   * The standard this check-in came in on — 'FLAG-07'.
+   *
+   * Set only when a party tapped a flagpole against a station's reader. Under
+   * the canopy no phone saw that tap, so the console is the writer of record for
+   * it, and this is what says so on the row.
+   */
+  flagLabel?: string
 }
 
 /**
@@ -134,11 +142,22 @@ export interface QuestLeg {
   episodeId?: string
   episodeNumber?: number
   episodeTitle?: string
-  /** 0 at the chief's house, then the station's ordinal in the episode. */
+  /**
+   * 0 at the chief's house, then the station's ordinal in the episode.
+   *
+   * DELIBERATELY UNSET on a leg that earned nothing: a station off the episode's
+   * rotation is a real visit but not the Nth station of anything, and giving it
+   * the previous number would put two rows in the export both claiming
+   * "Station 4". `offRotation` is the column that explains the gap.
+   */
   legNumber?: number
   stationsTotal?: number
   /** True when this leg sealed the episode. */
   sealed?: boolean
+  /** The standard the party walked in on — 'FLAG-07'. Unset on an app check-in. */
+  flagLabel?: string
+  /** True when the place was not on this episode's rotation, so nothing was credited. */
+  offRotation?: true
   passCode?: string
   passName?: string
   /** group + order + episode — the walk this leg belongs to. Unset at the gate. */
@@ -188,6 +207,61 @@ export interface Party {
   updatedAt?: number
 }
 
+export type FlagStatus = 'racked' | 'bound' | 'sealed' | 'lost' | 'retired'
+
+/**
+ * A flagpole — the standard a party carries through the park.
+ *
+ * The tag potted in its tip carries nothing but a factory uid, so THIS record is
+ * the whole binding between a pole, a party and one episode, and holding a bound
+ * pole is the proof the Passage was paid. Every station in the woods runs on a
+ * cached copy of it, which is why the write that changes the broadcast is
+ * distinguished from every other write: `updatedAt` moves on any change,
+ * `tableAt` moves only on one the stations must hear about. A tap bumps
+ * `updatedAt` and never `tableAt` — otherwise every tap would mark all 21
+ * stations stale.
+ */
+export interface Flag {
+  /** Doc id: RFID factory uid, uppercase hex, no separators. */
+  uid: string
+  /** Printed on the pole. 'FLAG-07'. */
+  label: string
+  status: FlagStatus
+  /** Party id, or `solo:${userId}` — the key occupants() groups on. */
+  groupId?: string
+  groupName?: string
+  /** The guest checkIn() is called as. Always one of `memberIds`. */
+  holderId?: string
+  memberIds?: string[]
+  orgId?: string
+  episodeId?: string
+  episodeNumber?: number
+  /** Walk-ups: bodies under one flag, when that is more than the roster. */
+  headcount?: number
+  /** The Passage spent to bind it — the receipt. */
+  passCode?: string
+  /** Staff uid only — deliberately never a staff NAME. */
+  boundBy?: string
+  boundAt?: number
+  /**
+   * An administrative undo: the binding was wrong and was taken back. A walk
+   * that ended properly stamps `checkedOutAt` instead, and the two must never
+   * be merged — one says "mis-scan", the other says "they went home".
+   */
+  releasedAt?: number
+  /** The pole was handed back at the booth. This is what closes a walk. */
+  checkedOutAt?: number
+  /** Last tap. Bumps `updatedAt`, NEVER `tableAt`. */
+  lastSeenAt?: number
+  lastPlaceId?: string
+  /** Any write. Drives merge last-write-wins. */
+  updatedAt: number
+  /** The last write that changed what the stations broadcast. */
+  tableAt: number
+  /** Staged by the presenter's demo remote, so a reset can find it. */
+  demo?: true
+}
+
 export type SosKind = 'emergency' | 'quest-help'
 export type SosStatus = 'open' | 'acknowledged' | 'resolved'
 
@@ -209,3 +283,167 @@ export interface ChatMessage {
   text: string
   at: number
 }
+
+// ── Hub wire types ──────────────────────────────────────────────────────────
+//
+// A station in the woods talks to the hub over LoRa. The hub sits on the
+// console PC's USB port and relays the whole park as newline-delimited JSON —
+// one object per line, nothing else on the line. These are the frames AS THEY
+// APPEAR ON THAT WIRE, and they are the only shape `hubProtocol` will hand out
+// or accept.
+//
+// WIRE INVARIANT (from the plan, and the reason this surface is safe): nothing
+// on the air is free text. Every field below is a hex uid, a small enum letter,
+// or a bounded integer — no names, no messages, no free-form strings. The first
+// person who wants a station to greet a party by name will propose putting a
+// party name in the flag table; that is the change this invariant exists to
+// stop. A frame carrying an unescaped delimiter or an out-of-range index is
+// dropped by `decodeLine`, never repaired.
+//
+// Field names are short because they cross a 115200-baud link and, in the
+// firmware, a 255-byte LoRa payload. Key ORDER here is canonical — `encodeLine`
+// emits keys in exactly this order so a simulated hub and a real one produce
+// byte-identical lines.
+
+/** LoRa `T` TAP result: resolved Locally · Queried the hub · Unresolved. */
+export type HubTapResult = 'L' | 'Q' | 'U'
+
+/** LoRa `C`/`K` CMD verbs. No REBOOT/WIPEQ in v1 — deliberately. */
+export type HubCommand = 'VOL' | 'QVOL' | 'PLAY' | 'SYNC' | 'PING'
+
+/** A flag as the hub and each station cache it. NO group identity on the air. */
+export interface HubTableRow {
+  /** RFID factory uid, uppercase hex, no separators. */
+  uid: string
+  /** Audio folder: 0 unknown · 1 Rangers · 2 Alehiim · 3 Elm · 4 RAID. */
+  org: number
+  /** Audio track = episode number. 0 when unknown. */
+  ep: number
+  /** 0 assigned · 1 sealed · 2 returned. */
+  state: number
+  partySize: number
+}
+
+/** A guest tapped a standard on a station's reader. */
+export interface HubTapFrame {
+  t: 'tap'
+  /** 1..21 stations · 22 chief · 23 gate. RANGE-CHECKED before it indexes anything. */
+  st: number
+  uid: string
+  /** Station's NVS sequence counter — the L1 dedupe key is `${st}:${seq}`. */
+  seq: number
+  /** Station clock, epoch seconds, taken from the beacon's EPOCH. */
+  ts: number
+  org: number
+  ep: number
+  res: HubTapResult
+}
+
+/** A tag read on the booth pad at the gate. Bind at one end of a walk, check out at the other. */
+export interface HubBoothFrame {
+  t: 'booth'
+  uid: string
+  ts: number
+}
+
+/** LoRa `H` HB, one per station per 120 s TDMA frame. */
+export interface HubHeartbeatFrame {
+  t: 'hb'
+  st: number
+  /** Uptime, seconds. */
+  ups: number
+  /** The flag-table version this station HOLDS. */
+  tblver: number
+  /** Seconds since this station last COMMITTED a table — the staleness window, made visible. */
+  tblage: number
+  /** Unsent taps in its NVS ring. */
+  qd: number
+  sd: 0 | 1
+  df: 0 | 1
+  /** Numeric error code, never free text. 0 = none. */
+  err: number
+  rssi: number
+  vol: number
+  fw: number
+}
+
+/** LoRa `Q` QUERY — a station holding no row for a tapped uid. It stays on ambience until answered. */
+export interface HubQueryFrame {
+  t: 'query'
+  st: number
+  uid: string
+  seq: number
+}
+
+/** LoRa `L` LOG — numeric level, numeric code, numeric args. Never free text. */
+export interface HubLogFrame {
+  t: 'log'
+  st: number
+  lvl: number
+  code: number
+  a1: number
+  a2: number
+}
+
+/** The hub introducing itself over USB, and on every table commit. */
+export interface HubStatusFrame {
+  t: 'hub'
+  fw: number
+  /** The table version the HUB holds — what it is broadcasting to the park. */
+  tblver: number
+  /** Stations it has heard from since boot. */
+  stations: number
+  up: number
+}
+
+/** Console → hub. One chunk of the flag table; mirrors the LoRa `U` CHUNK frame. */
+export interface HubTableFrame {
+  t: 'table'
+  ver: number
+  idx: number
+  of: number
+  rows: HubTableRow[]
+}
+
+/** Console → hub. A single binding changed — cheaper than a whole table. */
+export interface HubRowFrame {
+  t: 'row'
+  ver: number
+  row: HubTableRow
+}
+
+/** Console → hub → station. The answer to a `query`; mirrors the LoRa `R` RESOLVE frame. */
+export interface HubResolveFrame {
+  t: 'resolve'
+  st: number
+  uid: string
+  org: number
+  ep: number
+  state: number
+  /** Seconds this row may be cached. */
+  ttl: number
+}
+
+/** Console → hub → station. */
+export interface HubCmdFrame {
+  t: 'cmd'
+  st: number
+  cmd: HubCommand
+  arg: number
+}
+
+/** Hub → console. The only frames the console ever receives. */
+export type HubInboundFrame =
+  | HubTapFrame
+  | HubBoothFrame
+  | HubHeartbeatFrame
+  | HubQueryFrame
+  | HubLogFrame
+  | HubStatusFrame
+
+/** Console → hub. The only frames the console ever sends. */
+export type HubOutboundFrame = HubTableFrame | HubRowFrame | HubResolveFrame | HubCmdFrame
+
+export type HubFrame = HubInboundFrame | HubOutboundFrame
+
+export type HubFrameType = HubFrame['t']

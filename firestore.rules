@@ -46,8 +46,18 @@ service cloud.firestore {
 
     // Staff are an allowlist, not a claim the client can assert. exists() is a
     // server-side lookup, so it is not subject to the read rule below.
+    //
+    // isRealUser(), not signedIn(): isStaff() is now the most powerful predicate
+    // in this file — it writes other people's presence, progress and legs — so
+    // it must never be satisfiable by a session anybody can mint.
     function isStaff() {
-      return signedIn() && exists(/databases/$(database)/documents/staff/$(request.auth.uid));
+      return isRealUser() && exists(/databases/$(database)/documents/staff/$(request.auth.uid));
+    }
+
+    // The doc must be filed under the id it claims. Every push already writes
+    // this field, so a staff write cannot plant a row under the wrong guest.
+    function selfFiled(uid) {
+      return request.resource.data.userId == uid;
     }
 
     function ownsExisting() {
@@ -100,7 +110,12 @@ service cloud.firestore {
     // only you can advance your own questlines.
     match /progress/{uid} {
       allow read: if signedIn();
-      allow write: if isSelf(uid);
+      // The console is the writer of record for an RFID tap: under the canopy no
+      // phone saw it. pushProgress unions the SERVER copy with the local one
+      // inside a transaction, and episodes are only ever added, so neither
+      // writer can erase the other's work. Delete stays owner-only.
+      allow create, update: if (isSelf(uid) || isStaff()) && request.resource.data.id == uid;
+      allow delete: if isSelf(uid);
     }
 
     // Passages. Only the guest who bought one may change or cancel it — but the
@@ -132,9 +147,18 @@ service cloud.firestore {
     // WRITE IS OWN-ROW ONLY, which is what makes party check-in safe: nobody can
     // plant another guest at a station. When one member taps in, each other
     // member's device adopts that check-in and writes its OWN row.
+    // STAFF WRITE is the RFID path: a party taps a flagpole at a plinth in the
+    // woods and no phone is involved at all, so the console writes every
+    // member's row itself. `selfFiled` keeps that honest — the document must
+    // carry the uid it is filed under, so even staff cannot plant a guest under
+    // somebody else's name.
     match /presence/{uid} {
       allow read: if isRealUser();
-      allow write: if isSelf(uid) || (isRealUser() && uid.matches('demo-.*'));
+      allow create, update: if (isSelf(uid) || isStaff() || (isRealUser() && uid.matches('demo-.*')))
+                               && selfFiled(uid);
+      // request.resource does not exist on a delete, so selfFiled() cannot apply
+      // there. Racking a standard clears the whole party's rows.
+      allow delete: if isSelf(uid) || isStaff() || (isRealUser() && uid.matches('demo-.*'));
     }
 
     // The station records: an append-only log of every leg walked, kept after
@@ -144,9 +168,30 @@ service cloud.firestore {
     // never. A guest reaches only their own rows, which is all a demo reset
     // needs to clear up after itself.
     match /legs/{id} {
-      allow create: if ownsIncoming() || demoIncoming();
+      // Staff create, because a flag tap is recorded by the console rather than
+      // by anybody's phone. UPDATE STAYS SHUT TO EVERYBODY: the whole value of
+      // the export is that a leg still means what it meant when it was written.
+      allow create: if isStaff() || ownsIncoming() || demoIncoming();
       allow read, delete: if isStaff() || ownsExisting() || demoExisting();
       allow update: if false;
+    }
+
+    // The standards. A party takes a pole from the rack, a Guide binds it to
+    // their party, their quest and a spent Passage, and tapping a reader at a
+    // station IS the check-in. The record is the entire binding — the tag in the
+    // pole's tip carries a factory uid and nothing else.
+    //
+    // READ IS UNGATED ON THE DOCUMENT'S OWN FIELDS, ON PURPOSE. A phone
+    // subscribes with where('memberIds','array-contains', uid), and a rule that
+    // reads resource.data would refuse that QUERY outright — the filter alone
+    // does not prove every match satisfies the rule. Firestore never retries a
+    // listener it refused, so tightening this does not degrade the guest's view
+    // of their own standard, it kills it permanently. Do not "fix" it.
+    //
+    // Write is the booth's alone. Nobody binds their own standard.
+    match /flags/{tagUid} {
+      allow read:  if isRealUser();
+      allow write: if isStaff();
     }
 
     // ── Parties ─────────────────────────────────────────────────────────────

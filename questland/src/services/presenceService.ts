@@ -97,6 +97,8 @@ export interface Occupant extends Walk {
   status: PresenceStatus
   /** Who tapped in, when it was not everybody. */
   byName?: string
+  /** The standard the party is carrying — 'FLAG-07'. Unset on an app check-in. */
+  flagLabel?: string
 }
 
 export function listPresence(): Presence[] {
@@ -303,11 +305,12 @@ function buildRecord(
   by: { id: string; name: string },
   walk: Walk,
   party?: PartyRef,
-  final?: boolean
+  final?: boolean,
+  flagLabel?: string
 ): Presence | null {
   const user = getUser(userId)
   if (!user) return null
-  return {
+  const record: Presence = {
     userId,
     guestName: user.name,
     kind: place.kind,
@@ -322,6 +325,8 @@ function buildRecord(
     byName: by.name,
     ...walk,
   }
+  if (flagLabel) record.flagLabel = flagLabel
+  return record
 }
 
 function rosterOf(memberIds: string[]): string[] {
@@ -341,13 +346,45 @@ function partyRefFor(userId: string): { ref?: PartyRef; memberIds: string[] } {
 }
 
 /**
+ * Puts the check-in on the wire.
+ *
+ * A PHONE pushes only its own row, always: the rules let a guest write
+ * presence/{their own uid} and nothing else, and each party-mate's device adopts
+ * the check-in off the snapshot and writes its own.
+ *
+ * A FLAG TAP has no such device. It happened at a plinth in the woods where
+ * nobody's phone was involved, so the console — signed in as staff, which may
+ * write both collections — is the writer of record and pushes every member's
+ * presence AND progress at the same timestamp. Each mate's phone then hits
+ * `syncParty`'s `mine.at >= latest.at` guard and bails, which is the same
+ * volley-proof invariant extended to a third writer.
+ */
+function pushRecords(records: Presence[], selfId: string, byFlag: boolean): void {
+  if (!byFlag) {
+    const own = records.find((r) => r.userId === selfId)
+    if (own) cloudSync.pushPresence(own)
+    return
+  }
+  records.forEach((r) => {
+    cloudSync.pushPresence(r)
+    cloudSync.pushProgress(r.userId)
+  })
+}
+
+/**
  * The chief's house opens the walk at 0; a station's ordinal is how many are
  * sealed once it has been credited. A gate arrival is not a leg of any one
  * quest, so it is numbered not at all.
+ *
+ * A station that earned nothing — off this episode's rotation — is numbered not
+ * at all either. `walk.stationsDone` would still be holding the PREVIOUS
+ * station's count, and stamping that here would put two rows in the export both
+ * claiming to be Station 4.
  */
-function legNumberFor(kind: PresenceKind, walk: Walk): number | undefined {
+function legNumberFor(kind: PresenceKind, walk: Walk, credited: boolean): number | undefined {
   if (kind === 'village') return undefined
-  return kind === 'start' ? 0 : walk.stationsDone
+  if (kind === 'start') return 0
+  return credited ? walk.stationsDone : undefined
 }
 
 /**
@@ -362,6 +399,10 @@ function legNumberFor(kind: PresenceKind, walk: Walk): number | undefined {
  * standing. Taking a quest up leaves the party in the village, but the entry is
  * the head of the walk rather than another arrival — and only an entry that is
  * not an arrival carries the run id every later leg is grouped by.
+ *
+ * `credited` is what the leg number hangs on: a station that earned nothing is
+ * still a place the party stood, so it is recorded, but it is not the Nth
+ * station of the walk and must never be exported as one.
  */
 function logLeg(
   user: User,
@@ -370,8 +411,14 @@ function logLeg(
   walk: Walk,
   party: PartyRef | undefined,
   sealed: boolean,
-  leg?: { kind: PresenceKind; legNumber?: number }
+  opts: {
+    leg?: { kind: PresenceKind; legNumber?: number }
+    credited?: boolean
+    flagLabel?: string
+  } = {}
 ): void {
+  const { leg, credited = true, flagLabel } = opts
+  const offRotation = place.kind === 'station' && !credited
   recordLeg({
     at,
     userId: user.id,
@@ -387,9 +434,11 @@ function logLeg(
     episodeId: walk.episodeId,
     episodeNumber: walk.episodeNumber,
     episodeTitle: walk.episodeTitle,
-    legNumber: leg ? leg.legNumber : legNumberFor(place.kind, walk),
+    legNumber: leg ? leg.legNumber : legNumberFor(place.kind, walk, credited),
     stationsTotal: walk.stationsTotal,
     sealed,
+    flagLabel,
+    offRotation: offRotation ? true : undefined,
     passCode: walk.passCode,
     passName: walk.passName,
   })
@@ -403,6 +452,16 @@ export interface CheckInOptions {
    * A base station always overrules it and keeps its own order.
    */
   orgId?: string
+  /**
+   * The standard the party tapped against the reader — 'FLAG-07'.
+   *
+   * Its presence changes WHO WRITES. An app check-in pushes only the tapping
+   * phone's own row and lets each mate's device adopt the rest off the snapshot;
+   * a flag tap happened under the canopy where no phone saw it at all, so the
+   * console pushes every member's presence and progress itself. Staff may write
+   * both collections for exactly this reason.
+   */
+  flagLabel?: string
 }
 
 /**
@@ -442,21 +501,30 @@ export function checkIn(
     }
   }
 
+  // A standard names ONE questline for the whole group — the plinth plays that
+  // questline's clips to everybody standing at it — so under a pole the party is
+  // credited on it together. An app check-in is one guest tapping their own
+  // phone, and the mates carried along keep walking their own orders.
+  const byFlag = !!opts.flagLabel
+
   // Credit first: whether this station sealed a member's episode is what marks
   // their row final, and the walk package below must read the progress this
   // check-in just earned.
   let credit: StationCredit | null = null
   const sealed = new Set<string>()
+  const credited = new Set<string>()
   const walks = new Map<string, Walk>()
   for (const id of memberIds) {
     const member = getUser(id)
     if (!member) continue
     const self = id === user.id
-    // Everyone else is walking their own questline; only the guest who tapped
-    // can be somewhere other than their own order.
-    const orgId = creditOrgFor(stationId, self ? (opts.orgId ?? member.orgId) : member.orgId)
+    // Everyone else is walking their own questline; only the guest who tapped —
+    // or, under a standard, the whole party it is bound to — can be somewhere
+    // other than their own order.
+    const orgId = creditOrgFor(stationId, self || byFlag ? (opts.orgId ?? member.orgId) : member.orgId)
     if (orgId && !isStart) {
       const earned = creditStation(id, stationId, orgId, { notify: self })
+      if (earned) credited.add(id)
       if (earned?.completion) sealed.add(id)
       if (self) credit = earned
     }
@@ -465,19 +533,29 @@ export function checkIn(
 
   const records = memberIds
     .map((id) =>
-      buildRecord(id, place, at, by, walks.get(id) ?? {}, partyRef, sealed.has(id))
+      buildRecord(id, place, at, by, walks.get(id) ?? {}, partyRef, sealed.has(id), opts.flagLabel)
     )
     .filter((r): r is Presence => r !== null)
   upsert(records)
-
-  // Only ever our own doc: the rules let a guest write their own presence and
-  // nobody else's, and every other member's phone writes its own off the
-  // snapshot. On a single device the local records above already read right.
-  const own = records.find((r) => r.userId === user.id)
-  if (own) cloudSync.pushPresence(own)
+  pushRecords(records, user.id, !!opts.flagLabel)
 
   const walk = walks.get(user.id) ?? {}
-  logLeg(user, place, at, walk, partyRef, sealed.has(user.id))
+  // A station is walked once per episode, so a REPEAT credit means the leg for it
+  // is already on the log — and possibly on a device this one cannot see. The two
+  // input paths do not share the log: the console records a flag tap and pushes
+  // it, but the guest app subscribes to `presence`, `progress` and `bookings`,
+  // never to `legs`. So `recordLeg`'s dedupe cannot see the console's leg, and a
+  // party who tapped a station with their standard and then again in the app
+  // would put two rows in the export both claiming to be Station 4.
+  //
+  // Progress IS synced both ways, which makes "this station was already credited
+  // on this episode" the fact both devices hold. That is what the leg hangs on.
+  if (!credit?.repeat) {
+    logLeg(user, place, at, walk, partyRef, sealed.has(user.id), {
+      credited: isStart || credited.has(user.id),
+      flagLabel: opts.flagLabel,
+    })
+  }
 
   return {
     ok: true,
@@ -495,7 +573,11 @@ export function checkIn(
  * Queston, and stays there until they take a quest at the chief's house. This is
  * what puts a party on the Back Office's Guests Afield list in the first place.
  */
-export function checkInAtGate(userId: string, at: number = Date.now()): CheckInResult {
+export function checkInAtGate(
+  userId: string,
+  at: number = Date.now(),
+  opts: { flagLabel?: string; orgId?: string; questTaken?: boolean } = {}
+): CheckInResult {
   const user = getUser(userId)
   if (!user) return { ok: false, error: 'We could not find you on the roll.' }
 
@@ -503,19 +585,52 @@ export function checkInAtGate(userId: string, at: number = Date.now()): CheckInR
   const { ref: partyRef, memberIds } = partyRefFor(userId)
   const by = { id: user.id, name: user.name }
 
+  // The booth knows which questline it just bound the party to, and that beats a
+  // guess: `openOrgFor` answers with the FIRST order the guest has a quest open
+  // on, so a Hero party rebound at the counter from rangers to elm would go up on
+  // the board under the quest they are no longer walking, and a Warden reading
+  // Guests Afield would be told the wrong story.
+  const questOrg = (id: string): string | undefined => opts.orgId ?? openOrgFor(id, at)
+
   const records = memberIds
     .map((id) => {
       const member = getUser(id)
-      return member ? buildRecord(id, place, at, by, walkFor(id, openOrgFor(id, at)), partyRef) : null
+      return member
+        ? buildRecord(
+            id,
+            place,
+            at,
+            by,
+            walkFor(id, questOrg(id)),
+            partyRef,
+            undefined,
+            opts.flagLabel
+          )
+        : null
     })
     .filter((r): r is Presence => r !== null)
   upsert(records)
+  pushRecords(records, user.id, !!opts.flagLabel)
 
-  const own = records.find((r) => r.userId === user.id)
-  if (own) cloudSync.pushPresence(own)
+  const walk = walkFor(user.id, questOrg(user.id))
+  logLeg(user, place, at, walk, partyRef, false, { flagLabel: opts.flagLabel })
 
-  const walk = walkFor(user.id, openOrgFor(user.id, at))
-  logLeg(user, place, at, walk, partyRef, false)
+  // At the counter, arriving and taking the quest are ONE gesture: the party
+  // walks up, presents a passage, and leaves holding a standard. In the app they
+  // are two — you may stand in the village all day for free — so `takeUpQuest`
+  // logs the quest-taken leg itself and the booth has to log its own, or the
+  // record shows a party walking stations with no moment they took a quest.
+  //
+  // Two legs at one instant in one place is not a duplicate: `recordLeg` keys an
+  // un-run leg on its KIND, and only this one carries a runId, so it is the leg
+  // that opens the walk. It is also what fills Station Records' "Quest taken"
+  // column and its CSV counterpart — the arrival alone never could.
+  if (opts.questTaken) {
+    logLeg(user, place, at, walk, partyRef, false, {
+      leg: { kind: 'start' },
+      flagLabel: opts.flagLabel,
+    })
+  }
 
   return {
     ok: true,
@@ -638,7 +753,7 @@ export function takeUpQuest(
   if (own) cloudSync.pushPresence(own)
 
   const walk = walks.get(user.id) ?? {}
-  logLeg(user, place, at, walk, partyRef, false, { kind: 'start' })
+  logLeg(user, place, at, walk, partyRef, false, { leg: { kind: 'start' } })
 
   return {
     ok: true,
@@ -684,10 +799,15 @@ export function syncParty(selfId: string): void {
   if (!isTracked(latest, now)) return
   if (mine && mine.at >= latest.at) return
 
+  // Under a standard the whole party walks the questline the pole names, and the
+  // record carries it; on an app check-in every member keeps their own order.
+  const walkOrg = latest.flagLabel ? (latest.orgId ?? self.orgId) : self.orgId
+
   let earned: StationCredit | null = null
+  let creditedOrg: string | null = null
   if (latest.kind === 'station') {
-    const orgId = creditOrgFor(latest.stationId, self.orgId)
-    if (orgId) earned = creditStation(selfId, latest.stationId, orgId)
+    creditedOrg = creditOrgFor(latest.stationId, walkOrg)
+    if (creditedOrg) earned = creditStation(selfId, latest.stationId, creditedOrg)
   }
 
   // The mate who took the quest up presented one passage. If it reached far
@@ -695,15 +815,15 @@ export function syncParty(selfId: string): void {
   // for, so the gate never asks them twice for the same walk. If it did not,
   // nothing is recorded and they will be asked for their own. `passCovers` is
   // written by takeUpQuest alone, which is why no check on the place is needed.
-  if (latest.passCode && latest.passCovers?.includes(selfId) && self.orgId) {
-    const episode = currentEpisode(selfId, self.orgId)
+  if (latest.passCode && latest.passCovers?.includes(selfId) && walkOrg) {
+    const episode = currentEpisode(selfId, walkOrg)
     if (episode) {
       recordCover(
         selfId,
         {
           code: latest.passCode,
           passName: latest.passName ?? 'Passage',
-          orgId: self.orgId,
+          orgId: walkOrg,
           episodeId: episode.id,
           at: latest.at,
           guests: latest.partyMemberNames?.length ?? party.memberIds.length,
@@ -719,7 +839,7 @@ export function syncParty(selfId: string): void {
     { id: latest.stationId, name: placeNameFor(latest), kind: latest.kind },
     latest.at,
     { id: latest.byUserId ?? latest.userId, name: latest.byName ?? latest.guestName },
-    walkFor(selfId, self.orgId),
+    walkFor(selfId, creditedOrg ?? walkOrg),
     { id: party.id, name: party.name, memberNames: rosterOf(party.memberIds) },
     !!earned?.completion
   )
@@ -780,6 +900,7 @@ export function occupants(now: number = Date.now()): Occupant[] {
       since: latest.at,
       status: statusOf(latest, now),
       byName: latest.byName,
+      flagLabel: latest.flagLabel,
       orgId: latest.orgId,
       orgName: latest.orgName,
       episodeId: latest.episodeId,
@@ -810,6 +931,35 @@ export function occupantsByPlace(now: number = Date.now()): Record<string, Occup
 
 export function enRoute(now: number = Date.now()): Occupant[] {
   return occupants(now).filter((o) => o.status === 'en-route')
+}
+
+/**
+ * Takes a released standard off a party's rows WITHOUT taking the party off the
+ * board.
+ *
+ * A binding taken back at the counter is an administrative undo, not the end of a
+ * day: the guests may still be halfway round the park, and a safety board must
+ * never lose somebody who is out there. What must not survive is the label — the
+ * pole is back on the rack and may already be bound to another party, so a row
+ * still naming it would send a Warden after the wrong group, and Guests Afield
+ * would go on showing a standard nobody is carrying until the row aged out four
+ * hours later.
+ */
+export function detachFlag(userIds: string[]): void {
+  const drop = new Set(userIds)
+  const changed: Presence[] = []
+  const next = listPresence().map((p) => {
+    if (!drop.has(p.userId) || !p.flagLabel) return p
+    const rest = { ...p }
+    delete rest.flagLabel
+    changed.push(rest)
+    return rest
+  })
+  if (changed.length === 0) return
+  setPresence(next)
+  // Staff may write presence, and the guests' own phones honour the change off
+  // the snapshot, so the label leaves every screen and not just this console's.
+  changed.forEach((r) => cloudSync.pushPresence(r))
 }
 
 // ── Demo helpers ──────────────────────────────────────────────────────────────

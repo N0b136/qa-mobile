@@ -16,6 +16,7 @@ import type {
 import type {
   AppNotification,
   Booking,
+  Flag,
   NotificationType,
   Party,
   Presence,
@@ -87,6 +88,10 @@ const SCHEDULED_KEY = 'ql:scheduled'
 const USERS_KEY = 'ql:users'
 const PARTIES_KEY = 'ql:parties'
 const PRESENCE_KEY = 'ql:presence'
+const FLAGS_KEY = 'ql:flags'
+
+/** The tag-uid allowlist, mirrored from `flagService.normalizeUid`. See mergeFlagsSnapshot. */
+const FLAG_UID_RE = /^[0-9A-F]{8,20}$/
 const LOG_KEY = 'ql:questLog'
 /** Matches questLogService's cap — the mirror is a working window, not an archive. */
 const LOG_CAP = 2000
@@ -513,6 +518,55 @@ function mergePresenceSnapshot(snap: QuerySnapshot<DocumentData>, selfId: string
 }
 
 /**
+ * The rack.
+ *
+ * Last-write-wins on `updatedAt`, which is exactly right for a flag: a binding
+ * is decided at one counter at one moment, and a later write is a later fact.
+ * (The write that MATTERS — claiming a pole for a party — is a compare-and-set
+ * transaction in flagService, so this merge never has to adjudicate a conflict;
+ * it only has to not lose the answer.)
+ *
+ * This function TERMINATES IN store.save() and calls nothing back into a
+ * service. That is what makes an echo loop structurally impossible: a merge can
+ * only ever write the local mirror, never push, so a snapshot cannot provoke the
+ * write that provokes the next snapshot.
+ */
+function mergeFlagsSnapshot(snap: QuerySnapshot<DocumentData>): void {
+  const local = load<Flag[]>(FLAGS_KEY, [])
+  const byUid = new Map(local.map((f) => [f.uid, f] as const))
+
+  // A retired pole struck from the rack must leave every console's mirror too,
+  // or it goes on being offered at the counter.
+  snap.docChanges().forEach((c) => {
+    if (c.type === 'removed') byUid.delete(c.doc.id)
+  })
+
+  snap.forEach((d) => {
+    const incoming = d.data() as Flag
+    if (!incoming || typeof incoming.updatedAt !== 'number') return
+    // Reject, do not repair — at this boundary too. The uid becomes a document
+    // id on the very next write (`doc(db,'flags', flag.uid)`), so a document
+    // whose `uid` field disagrees with its own id, or carries a '/', would
+    // re-target a different collection path. The rule is the same one
+    // `flagService.normalizeUid` enforces on the air; it is spelled out again
+    // here rather than imported, because flagService imports this module and a
+    // static import back would close a cycle.
+    if (incoming.uid !== d.id || !FLAG_UID_RE.test(d.id)) return
+    // A row with no label cannot be shown on the rack, and it used to take the
+    // whole listener down: `localeCompare` on undefined throws inside the
+    // snapshot callback, which kills every merge after it.
+    if (typeof incoming.label !== 'string' || incoming.label === '') return
+    const existing = byUid.get(incoming.uid)
+    if (!existing || incoming.updatedAt >= existing.updatedAt) byUid.set(incoming.uid, incoming)
+  })
+
+  const merged = Array.from(byUid.values()).sort((a, b) =>
+    (a.label ?? '').localeCompare(b.label ?? '', undefined, { numeric: true })
+  )
+  if (!deepEqual(merged, local)) save(FLAGS_KEY, merged)
+}
+
+/**
  * The station records. A leg is written once and never revised, so the merge is
  * a plain union by id — there is no conflict a log entry can have with itself.
  */
@@ -875,6 +929,15 @@ export function startConsoleSync(): () => void {
         () => setCloudState('offline')
       )
     )
+    // The rack. Every pole the park owns, so the booth panel opens with the
+    // whole of it and a bind made at the other counter shows up here.
+    unsubs.push(
+      onSnapshot(
+        collection(fb.db, 'flags'),
+        (snap) => mergeFlagsSnapshot(snap),
+        () => setCloudState('offline')
+      )
+    )
     // The station records. Bounded to the most recent legs rather than the whole
     // history: the console is a working board, and a day is exported and then
     // read in a spreadsheet, not scrolled here forever.
@@ -976,6 +1039,28 @@ export function pushLeg(leg: QuestLeg): void {
       await setDoc(doc(fb.db, 'legs', leg.id), clean({ ...leg }))
     } catch {
       // swallow
+    }
+  })
+}
+
+/**
+ * Writes a flag document WHOLE — `setDoc` with no `merge`.
+ *
+ * flagService is the complete and only writer of this document, so the object it
+ * hands over is the entire truth about that pole. A merge would leave fields
+ * from a previous binding stranded on the record: rack a pole and the party name
+ * would still be sitting there, because a merge has no way to express "this
+ * field is gone now". That is the pushGuestProfile scar, and this is the shape
+ * that avoids it.
+ */
+export function pushFlag(flag: Flag): void {
+  void ensureFirebase().then(async (fb) => {
+    if (!fb) return
+    try {
+      const { doc, setDoc } = await import('firebase/firestore')
+      await setDoc(doc(fb.db, 'flags', flag.uid), clean({ ...flag }))
+    } catch {
+      // swallow — the local mirror is already correct
     }
   })
 }
