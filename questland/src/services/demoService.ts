@@ -2,7 +2,7 @@
 // All seeded cast users and parties use the `demo-` id prefix so reset can
 // target them precisely without touching real accounts.
 
-import type { Party, ProgressMap, QuestLeg, User } from '../types'
+import type { Announcement, Party, ProgressMap, QuestLeg, User } from '../types'
 import { save } from './store'
 import { getUser, listUsers, updateProfile } from './authService'
 import { getUserParty, leaveParty, listParties } from './partyService'
@@ -15,6 +15,7 @@ import { createSos } from './sosService'
 import { clearPresenceFor, seedPresence } from './presenceService'
 import { clearUsesFor } from './passService'
 import { clearLegsFor, runIdFor, seedLegs } from './questLogService'
+import { clearAnnouncementsBy, seedAnnouncements } from './announcementService'
 import { stationsFor } from '../content/stations'
 import * as cloudSync from './cloudSync'
 
@@ -39,6 +40,79 @@ function plusDays(days: number): string {
   d.setDate(d.getDate() + days)
   return d.toISOString().slice(0, 10)
 }
+
+const HOUR = 60 * 60 * 1000
+
+/** Station art doubles as notice heroes — see the note at the seed call site. */
+function stationArt(n: number): string {
+  return `${import.meta.env.BASE_URL}assets/stations/st-${String(n).padStart(2, '0')}.webp`
+}
+
+const DEMO_NOTICES = (now: number): Announcement[] => [
+  {
+    id: 'demo-notice-lantern',
+    eyebrow: 'Festival',
+    title: 'The Lantern Rite returns',
+    blurb:
+      'Lake Lumen is being made ready. Bring a wish, take a lantern, and stay until the water goes dark.',
+    body: [
+      'On the last evening of the season the Hearers carry lanterns down to Lake Lumen, and anyone in the park may carry one with them. Wardens hand them out at the Adventurer\'s Hall from six, one to a guest, until they run out.',
+      'The procession leaves the Village of Queston at half past eight and walks the west shore path. Stand anywhere along it — the far bank is quieter, and the reflection is better from there.',
+      'Lanterns are floated at nine. They burn for about an hour. The Forest Tavern keeps its kitchen open until the last one goes out.',
+    ].join('\n\n'),
+    image: stationArt(12),
+    imageAlt: 'Lanterns on the water at dusk',
+    tear: 'rough',
+    status: 'published',
+    publishAt: now - 3 * HOUR,
+    pinned: true,
+    createdAt: now - 3 * HOUR,
+    updatedAt: now - 3 * HOUR,
+    createdBy: 'Warden Aldous',
+    demo: true,
+  },
+  {
+    id: 'demo-notice-maker',
+    eyebrow: 'Notice',
+    title: "Maker's Cave reopens",
+    blurb:
+      'The crafting benches are back in service after a week of repairs. The forge relights on Saturday.',
+    body: [
+      'The cave has been closed while the roof timbers were replaced. It opens again at first light on Saturday with all eight benches in service.',
+      'The forge itself relights the same morning. Guides will be on hand through the weekend for anyone attempting a craft station for the first time.',
+    ].join('\n\n'),
+    image: stationArt(15),
+    imageAlt: 'The mouth of a stone workshop cave',
+    tear: 'a',
+    status: 'published',
+    publishAt: now - 26 * HOUR,
+    createdAt: now - 26 * HOUR,
+    updatedAt: now - 26 * HOUR,
+    createdBy: 'Guide Wren',
+    demo: true,
+  },
+  {
+    id: 'demo-notice-raid',
+    eyebrow: 'Season finale',
+    title: "Brigand's Return — choose your side",
+    blurb:
+      'All three orders stand as one for the finale. Pick where you fight, and be at the Proving Ground by ten.',
+    body: [
+      'Nordad\'s army marches on the park at the season\'s end, and every order is called. The day runs in three phases: preparation through the morning, the battle itself at midday, and the victory feast after.',
+      'Rangers dig the line and drill for battle. Hearers set traps and train as combat medics. The Order of the Elm goes quietly for the siege tower and Devorah\'s hidden allies.',
+      'Choose your side on the day — the Wardens will take your name at the Proving Ground from ten. Come as you are; everything you need is provided.',
+    ].join('\n\n'),
+    image: stationArt(19),
+    imageAlt: 'A muster ground beneath the ramparts',
+    tear: 'b',
+    status: 'published',
+    publishAt: now - 3 * 24 * HOUR,
+    createdAt: now - 3 * 24 * HOUR,
+    updatedAt: now - 3 * 24 * HOUR,
+    createdBy: 'Warden Aldous',
+    demo: true,
+  },
+]
 
 const CAST_USERS: User[] = [
   { id: 'demo-bracken', email: 'demo-bracken@questia.test', passHash: 'x', name: 'Bracken Hale', avatar: 'compass', createdAt: Date.now(), orgId: 'rangers' },
@@ -433,6 +507,11 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
     cloudSync.pushGuestProfile(u)
   }
 
+  // Three notices on the board, so Happenings has something to read during the
+  // pitch. Heroes point at bundled station art rather than a data URL — a seed
+  // has no file to drop, and the field is just an <img> src either way.
+  seedAnnouncements(DEMO_NOTICES(now))
+
   // NOTE: this used to seed a sample scheduled send. Scheduling is a staff
   // power now and /demo runs as the presenting GUEST, so the write would be
   // refused. Queue one from the console's Compose > Later tab instead.
@@ -458,6 +537,8 @@ export function resetDemoData(currentUserId: string): void {
   clearPresenceFor([...CAST_USERS.map((u) => u.id), currentUserId])
   clearUsesFor([...CAST_USERS.map((u) => u.id), currentUserId])
   clearLegsFor([...CAST_USERS.map((u) => u.id), currentUserId])
+  // Staged notices only — a real one posted from the console stays up.
+  clearAnnouncementsBy('demo-notice-')
 
   const user = getUser(currentUserId)
   save(PARTIES_KEY, listParties().filter((p) => !p.id.startsWith('demo-')))

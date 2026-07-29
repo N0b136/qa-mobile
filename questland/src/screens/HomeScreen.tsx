@@ -8,8 +8,10 @@ import { partyStandings } from '../services/leaderboardService'
 import { ORGS, getOrg } from '../content/orgs'
 import { load } from '../services/store'
 import type { Booking } from '../types'
+import { visibleAnnouncements } from '../services/announcementService'
 import ProgressBar from '../components/ProgressBar'
 import EmptyState from '../components/EmptyState'
+import AnnouncementCard from '../components/AnnouncementCard'
 import { Card, Badge, Button, Icon, Ornament, Seal } from '../ui'
 
 // content/orgs.ts still carries an emoji `sigil` field (data-level purge is a
@@ -48,6 +50,8 @@ export default function HomeScreen() {
   const parties = partyStandings()
   const myParty = getUserParty(user.id)
   const myPartyStanding = myParty ? parties.find((p) => p.party.id === myParty.id) : undefined
+
+  const notices = visibleAnnouncements()
 
   const bookings = load<Booking[]>(`ql:bookings:${user.id}`, [])
   const today = new Date().toISOString().slice(0, 10)
@@ -230,7 +234,17 @@ export default function HomeScreen() {
         <Icon name="bell" size={18} />
         Happenings
       </h2>
-      <EmptyState icon="scroll-text" title="The heralds are painting the notice board…" />
+      {notices.length === 0 ? (
+        <EmptyState icon="scroll-text" title="The heralds are painting the notice board…" />
+      ) : (
+        // The parchment card carries its own 14px margin, so the notices space
+        // themselves — a wrapping stack would double the gap.
+        <div>
+          {notices.map((notice) => (
+            <AnnouncementCard key={notice.id} notice={notice} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
