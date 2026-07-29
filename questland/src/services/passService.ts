@@ -200,6 +200,28 @@ function noteFor(state: Omit<PassState, 'note'>, at: number): string {
   }
 }
 
+/**
+ * The short mark a passage carries on a list, in the guild's words.
+ *
+ * The status enum is an internal identifier and must never reach a guest's eye
+ * verbatim — "upcoming" is a developer's word for a passage that is simply not
+ * yours to present yet.
+ */
+export function passStatusLabel(status: PassStatus): string {
+  switch (status) {
+    case 'valid':
+      return 'Good today'
+    case 'upcoming':
+      return 'Not yet'
+    case 'expired':
+      return 'Expired'
+    case 'spent':
+      return 'Spent'
+    case 'cancelled':
+      return 'Cancelled'
+  }
+}
+
 /** Where one passage stands right now: good to present, or why not. */
 export function passStateFor(userId: string, booking: Booking, at: number = Date.now()): PassState | null {
   const tier = getTier(booking.tierId)
