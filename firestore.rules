@@ -103,10 +103,24 @@ service cloud.firestore {
       allow write: if isSelf(uid);
     }
 
-    // Passages are nobody else's business.
+    // Passages. Only the guest who bought one may change or cancel it — but the
+    // booth spends a Quest Experience off a passage bought in the app, so staff
+    // must be able to see what was bought before they spend against it.
     match /bookings/{bookingId} {
-      allow read, update, delete: if ownsExisting();
+      allow read: if isStaff() || ownsExisting();
+      allow update, delete: if ownsExisting();
       allow create: if ownsIncoming();
+    }
+
+    // The passage ledger. It stopped being device-local when the gate became the
+    // place a Passage is spent: the booth spends on behalf of a guest whose phone
+    // is in their pocket. Uses are IMMUTABLE once written and the merge is a union
+    // by id, so neither the phone nor the booth can erase the other's spend.
+    // Delete stays owner-only.
+    match /passUses/{uid} {
+      allow read: if isSelf(uid) || isStaff();
+      allow create, update: if (isSelf(uid) || isStaff()) && request.resource.data.id == uid;
+      allow delete: if isSelf(uid);
     }
 
     // Station check-ins. Readable by every VALIDATED client — a party member's

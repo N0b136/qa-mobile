@@ -7,9 +7,9 @@
 // where a questline stalls — so it is written once and never revised.
 //
 // The unit is a RUN: one party (or one lone guest, a party of one) walking one
-// episode. Its legs are the gate arrival, the quest taken at the chief's house,
-// and each station sealed after that. Runs are derived here rather than stored,
-// so a leg that syncs in late still lands in the right walk.
+// episode. Its legs are the gate arrival, the quest taken up at the gate, the
+// chief's house, and each station sealed after that. Runs are derived here
+// rather than stored, so a leg that syncs in late still lands in the right walk.
 //
 // One leg per check-in EVENT, written by the device that tapped — a party moves
 // as one and is one row, not one row per member. Party-mates' phones adopt the
@@ -17,6 +17,7 @@
 // log it again.
 
 import type { PresenceKind, QuestLeg } from '../types'
+import { VILLAGE_PLACE } from '../content/stationMap'
 import { load, save } from './store'
 import * as cloudSync from './cloudSync'
 
@@ -113,7 +114,10 @@ function isDuplicate(legs: QuestLeg[], leg: QuestLeg): boolean {
   return legs.some((l) => {
     if (l.groupId !== leg.groupId || l.placeId !== leg.placeId) return false
     if (leg.runId) return l.runId === leg.runId
-    return Math.abs(l.at - leg.at) < ARRIVAL_DEDUPE_MS
+    // Only another ARRIVAL can be the same arrival. Taking a quest up is filed
+    // at the village too, so without the kind a party who paid in the car park
+    // would have their walk through the gate swallowed minutes later.
+    return l.kind === leg.kind && Math.abs(l.at - leg.at) < ARRIVAL_DEDUPE_MS
   })
 }
 
@@ -271,10 +275,16 @@ export function runLegs(run: QuestRun): QuestLeg[] {
   return run.arrival ? [run.arrival, ...run.legs] : run.legs
 }
 
-/** "Arrived" · "Quest taken" · "Station 3" — what this leg was. */
+/** "Arrived" · "Quest taken" · "Called on the Chief" · "Station 3". */
 export function legLabel(leg: QuestLeg): string {
   if (leg.kind === 'village') return 'Arrived'
-  if (leg.kind === 'start') return 'Quest taken'
+  // Two legs of a walk open it: the quest bought at the gate and the chief's
+  // house it starts from. Both are kind 'start', so the place is what tells them
+  // apart — and the export is pivoted on this column, where one label covering
+  // both would count every walk's quest twice.
+  if (leg.kind === 'start') {
+    return leg.placeId === VILLAGE_PLACE.id ? 'Quest taken' : 'Called on the Chief'
+  }
   return leg.legNumber ? `Station ${leg.legNumber}` : 'Station'
 }
 

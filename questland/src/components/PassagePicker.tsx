@@ -1,6 +1,6 @@
 // "Show me your passage."
 //
-// The chief will not hand out a quest on a promise, so this is where the guest
+// No quest is handed out at the gate on a promise, so this is where the guest
 // presents one. Every passage they hold is listed — the ones good today are
 // tappable, the rest stay on the list with the reason they are not, because
 // "you have no passage" and "your passage is for Saturday" are different
@@ -16,7 +16,7 @@ import { Badge, Button, Dialog, Icon, Tag } from '../ui'
 
 interface Props {
   userId: string
-  /** Guests walking in on this passage — the party standing at the chief's door. */
+  /** Guests walking in on this passage — the party standing at the gate. */
   guests?: number
   /** What the passage is being presented for, e.g. "Episode IV — Aldric's Key". */
   subtitle?: string
@@ -43,7 +43,7 @@ export default function PassagePicker({ userId, guests = 1, subtitle, error, onP
 
   return (
     <Dialog
-      eyebrow="At the chief's door"
+      eyebrow="At the gate"
       title="Present a passage"
       onClose={onClose}
       footer={
@@ -73,8 +73,8 @@ export default function PassagePicker({ userId, guests = 1, subtitle, error, onP
 
       {states.length === 0 ? (
         <p style={{ marginTop: 12, font: 'var(--body-base)', color: 'var(--text-muted)' }}>
-          You hold no passage. A Quest Experience is bought at the gate — book one and the chief will
-          be glad to see you.
+          You hold no passage. One Quest Experience opens one episode — book one and the quest is
+          yours to take up at the gate.
         </p>
       ) : (
         <>
@@ -126,6 +126,10 @@ export default function PassagePicker({ userId, guests = 1, subtitle, error, onP
               const frame = {
                 display: 'flex',
                 width: '100%',
+                // A flex item will not shrink below its min-content unless told
+                // to; without this the row set the dialog's width instead of
+                // the other way round.
+                minWidth: 0,
                 gap: 'var(--space-sm)',
                 alignItems: 'flex-start',
                 textAlign: 'left' as const,

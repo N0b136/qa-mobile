@@ -2,11 +2,11 @@
 //
 // A guest is walked through checking in at the main gate when they arrive; from
 // then on they are in the park and the Back Office can see them. Their location
-// is the Village of Queston until they take a quest at the chief's house, which
-// holds them for five minutes and then puts them on the paths. Every station
-// after that holds them for fifteen. We never track precise locations, so "en
-// route" — somewhere between stations — is the honest answer and the only other
-// state there is.
+// is the Village of Queston — where they take up a quest, and where they stay
+// until they call on the chief, who holds them for five minutes and then puts
+// them on the paths. Every station after that holds them for fifteen. We never
+// track precise locations, so "en route" — somewhere between stations — is the
+// honest answer and the only other state there is.
 //
 // Every check-in captures the whole walk: order, episode, stations sealed, and
 // the station they are heading for next. That package rides in the presence
@@ -22,11 +22,13 @@
 // Every check-in is also written to the permanent log (questLogService), which
 // is what presence cannot be: a position is overwritten, a record is kept.
 //
-// Taking the quest is the one check-in that COSTS something. The chief hands
-// out one Quest Experience, and a Quest Experience is what a passage buys — so
-// a quest start must present a valid passage and spends one use of it (see
-// passService). Everything downstream of that is free: the seven stations of
-// the episode are the walk you already paid for.
+// TAKING UP A QUEST is the one act that COSTS something, and it happens at the
+// gate — which is where the ticket booth stands in the real park, and where a
+// Guide binds a party to a questline. A Quest Experience is what a passage
+// buys, so `takeUpQuest` must present a valid one and spends a use of it (see
+// passService). Everything downstream is free: standing in the village, calling
+// on the chief, and the seven stations of the episode are all the walk you
+// already paid for.
 
 import type { Presence, PresenceKind, User } from '../types'
 import { load, save } from './store'
@@ -49,7 +51,7 @@ const PRESENCE_KEY = 'ql:presence'
 /** How long a station check-in holds a guest before they read as en route. */
 export const STATION_WINDOW_MS = 15 * 60 * 1000
 
-/** The chief's house is a shorter stop — take the quest and go. */
+/** The chief's house is a shorter stop — hear the brief and go. */
 export const START_WINDOW_MS = 5 * 60 * 1000
 
 /**
@@ -198,13 +200,16 @@ export interface ActiveQuest extends Walk {
  * Whether the questline's CURRENT episode has been taken.
  *
  * The ledger is the truth: a quest starts by spending a Quest Experience at the
- * chief's house, so a redemption for this episode means it is paid for and
- * underway. Sealed stations count too, for progress that arrived by some other
- * path — a Guide's staff code, or a party-mate carrying the walk.
+ * gate, so a redemption for this episode means it is paid for and underway.
+ * Sealed stations count too, for progress that arrived by some other path — a
+ * Guide's staff code, or a party-mate carrying the walk.
+ *
+ * Reading the ledger rather than a position is exactly what let the choke point
+ * move to the gate without disturbing anything that asks this question.
  *
  * Note this reads the CURRENT episode. Sealing one moves the questline on to
  * the next, which nobody has taken yet — so finishing a quest ends it, and the
- * chief must be called on again for the one after.
+ * next one must be taken up at the gate.
  */
 export function questTaken(userId: string, orgId: string): boolean {
   const episode = currentEpisode(userId, orgId)
@@ -215,10 +220,9 @@ export function questTaken(userId: string, orgId: string): boolean {
 /**
  * The quest a guest is actually walking, or null if they are not on one.
  *
- * A quest becomes active when they take it at the chief's house — arriving at
- * the gate is not enough, since standing in the village is not yet walking
- * anything. It stays active until the episode is sealed, so leaving the board
- * (or an expired window) does not abandon a walk that is genuinely half done.
+ * A quest becomes active when it is taken up at the gate. It stays active until
+ * the episode is sealed, so leaving the board (or an expired window) does not
+ * abandon a walk that is genuinely half done.
  *
  * The numbers are recomputed rather than read off the record, so they are right
  * even if progress moved by some other path.
@@ -229,9 +233,11 @@ export function activeQuest(userId: string, now: number = Date.now()): ActiveQue
 
   // Where they were last seen decides WHICH questline, but only the ledger
   // decides whether one is open: a presence row outlives the quest that made it
-  // by up to its window, and a sealed episode is a finished quest.
+  // by up to its window, and a sealed episode is a finished quest. A village
+  // record counts here — taking a quest up at the gate leaves the party
+  // standing in Queston, and that record names the questline they paid for.
   const p = presenceFor(userId)
-  if (p && isTracked(p, now) && p.kind !== 'village' && p.orgId && questTaken(userId, p.orgId)) {
+  if (p && isTracked(p, now) && p.orgId && questTaken(userId, p.orgId)) {
     return {
       ...walkFor(userId, p.orgId),
       atStationId:
@@ -247,6 +253,18 @@ export function activeQuest(userId: string, now: number = Date.now()): ActiveQue
   return null
 }
 
+/**
+ * The questline to stamp a check-in with when nothing else names one.
+ *
+ * Not the order the guest was sworn into: all three questlines stay open to
+ * everybody, so a guest walking for the Order of the Elm must not read on the
+ * Back Office's board as standing at episode one of their own order — the walk
+ * package exists precisely so the console and the app never diverge.
+ */
+function openOrgFor(userId: string, now: number): string | undefined {
+  return activeQuest(userId, now)?.orgId ?? getUser(userId)?.orgId
+}
+
 // ── Checking in ───────────────────────────────────────────────────────────────
 
 export interface CheckInOutcome {
@@ -258,15 +276,15 @@ export interface CheckInOutcome {
   /** Progress earned by the guest who tapped, if the station was on their episode. */
   credit: StationCredit | null
   walk: Walk
-  /** The passage spent to take the quest, when this check-in was a quest start. */
+  /** The passage spent, when this was a quest taken up at the gate. */
   pass?: PassUse
 }
 
 /**
  * A check-in either happened or it was turned away.
  *
- * `needPass` is the one refusal a screen can act on: it means the guest must
- * present a passage before the chief will hand out the quest.
+ * `needPass` is the one refusal a screen can act on: it means a passage must be
+ * presented before the quest can be taken up.
  */
 export type CheckInResult =
   | ({ ok: true } & CheckInOutcome)
@@ -323,12 +341,27 @@ function partyRefFor(userId: string): { ref?: PartyRef; memberIds: string[] } {
 }
 
 /**
+ * The chief's house opens the walk at 0; a station's ordinal is how many are
+ * sealed once it has been credited. A gate arrival is not a leg of any one
+ * quest, so it is numbered not at all.
+ */
+function legNumberFor(kind: PresenceKind, walk: Walk): number | undefined {
+  if (kind === 'village') return undefined
+  return kind === 'start' ? 0 : walk.stationsDone
+}
+
+/**
  * Writes the check-in to the permanent log (questLogService).
  *
  * Presence is overwritten on the next check-in, so nothing above this line
  * survives the walk. One leg per check-in EVENT, raised by the device that
  * tapped and carrying the party it walked in with — a party is one row in the
  * records, not one per member, and `syncParty` deliberately does not log again.
+ *
+ * `leg` overrides what the entry IS when that differs from where the guest is
+ * standing. Taking a quest up leaves the party in the village, but the entry is
+ * the head of the walk rather than another arrival — and only an entry that is
+ * not an arrival carries the run id every later leg is grouped by.
  */
 function logLeg(
   user: User,
@@ -336,7 +369,8 @@ function logLeg(
   at: number,
   walk: Walk,
   party: PartyRef | undefined,
-  sealed: boolean
+  sealed: boolean,
+  leg?: { kind: PresenceKind; legNumber?: number }
 ): void {
   recordLeg({
     at,
@@ -345,7 +379,7 @@ function logLeg(
     group: party
       ? { kind: 'party', id: party.id, name: party.name, memberNames: party.memberNames }
       : { kind: 'solo', id: user.id, name: user.name, memberNames: [user.name] },
-    kind: place.kind,
+    kind: leg?.kind ?? place.kind,
     placeId: place.id,
     placeName: place.name,
     orgId: walk.orgId,
@@ -353,10 +387,7 @@ function logLeg(
     episodeId: walk.episodeId,
     episodeNumber: walk.episodeNumber,
     episodeTitle: walk.episodeTitle,
-    // The chief's house opens the walk at 0; a station's ordinal is how many are
-    // sealed once it has been credited. A gate arrival is not a leg of any one
-    // quest, so it is numbered not at all.
-    legNumber: place.kind === 'village' ? undefined : place.kind === 'start' ? 0 : walk.stationsDone,
+    legNumber: leg ? leg.legNumber : legNumberFor(place.kind, walk),
     stationsTotal: walk.stationsTotal,
     sealed,
     passCode: walk.passCode,
@@ -372,19 +403,15 @@ export interface CheckInOptions {
    * A base station always overrules it and keeps its own order.
    */
   orgId?: string
-  /**
-   * The passage presented at the chief's house. Required to take a quest,
-   * unless this episode has already been paid for.
-   */
-  passBookingId?: string
 }
 
 /**
  * Records `userId` (and their whole party) at `stationId` and credits the
  * station toward each member's current episode.
  *
- * Taking the quest at the chief's house spends a Quest Experience off a
- * passage, so that one check-in can be refused — see CheckInResult.
+ * Free, all of it. The Passage is spent at the gate (`takeUpQuest`), so the
+ * chief's house and the seven stations are the walk it already bought. The one
+ * refusal left at the chief's door is having no quest to hear about.
  */
 export function checkIn(
   userId: string,
@@ -406,24 +433,13 @@ export function checkIn(
   const { ref: partyRef, memberIds } = partyRefFor(userId)
   const by = { id: user.id, name: user.name }
 
-  // The gate the whole feature turns on: the chief will not hand out a quest
-  // without a passage, and handing one out spends a Quest Experience.
-  let pass: PassUse | undefined
+  // The chief's house costs nothing, but it is a stop on a WALK: there is no
+  // brief for him to give until a quest has been taken up at the gate.
   if (isStart) {
     const questOrgId = opts.orgId ?? user.orgId
-    const episode = questOrgId ? currentEpisode(userId, questOrgId) : null
-    if (!questOrgId || !episode) {
-      return { ok: false, error: 'There is no quest open for you to take.' }
+    if (!questOrgId || !questTaken(userId, questOrgId)) {
+      return { ok: false, error: 'Take up a quest at the gate first — then the chief will be expecting you.' }
     }
-    const spent = redeemPass(userId, {
-      bookingId: opts.passBookingId,
-      orgId: questOrgId,
-      episodeId: episode.id,
-      guests: memberIds.length,
-      at,
-    })
-    if (!spent.ok) return { ok: false, error: spent.error, needPass: spent.needPass }
-    pass = spent.use
   }
 
   // Credit first: whether this station sealed a member's episode is what marks
@@ -432,9 +448,6 @@ export function checkIn(
   let credit: StationCredit | null = null
   const sealed = new Set<string>()
   const walks = new Map<string, Walk>()
-  // Seats left on the presented passage after the guest who presented it.
-  let seatsLeft = pass ? Math.max(0, pass.covers - 1) : 0
-  const covered = pass ? [user.id] : []
   for (const id of memberIds) {
     const member = getUser(id)
     if (!member) continue
@@ -447,31 +460,6 @@ export function checkIn(
       if (earned?.completion) sealed.add(id)
       if (self) credit = earned
     }
-    // One passage walks the party in, as far as its headcount reaches. Each
-    // guest it covers records that theirs was paid for — on their own
-    // questline — so the chief never asks them twice for the same episode.
-    // Anyone past the count still walks along; they present their own passage
-    // when they call on the chief from their own phone.
-    if (isStart && pass && !self && orgId && seatsLeft > 0) {
-      const theirs = currentEpisode(id, orgId)
-      if (theirs) {
-        recordCover(
-          id,
-          {
-            code: pass.code,
-            passName: pass.passName,
-            orgId,
-            episodeId: theirs.id,
-            at,
-            guests: pass.guests,
-            covers: pass.covers,
-          },
-          user.id
-        )
-        seatsLeft--
-        covered.push(id)
-      }
-    }
     walks.set(id, walkFor(id, orgId ?? member.orgId))
   }
 
@@ -480,9 +468,6 @@ export function checkIn(
       buildRecord(id, place, at, by, walks.get(id) ?? {}, partyRef, sealed.has(id))
     )
     .filter((r): r is Presence => r !== null)
-    // Who the presented passage paid for rides in the record, so a party-mate's
-    // phone can tell whether it was carried in or still owes the chief one.
-    .map((r) => (pass ? { ...r, passCovers: covered } : r))
   upsert(records)
 
   // Only ever our own doc: the rules let a guest write their own presence and
@@ -502,7 +487,6 @@ export function checkIn(
     partyName: partyRef?.name,
     credit,
     walk,
-    pass,
   }
 }
 
@@ -522,7 +506,7 @@ export function checkInAtGate(userId: string, at: number = Date.now()): CheckInR
   const records = memberIds
     .map((id) => {
       const member = getUser(id)
-      return member ? buildRecord(id, place, at, by, walkFor(id, member.orgId), partyRef) : null
+      return member ? buildRecord(id, place, at, by, walkFor(id, openOrgFor(id, at)), partyRef) : null
     })
     .filter((r): r is Presence => r !== null)
   upsert(records)
@@ -530,7 +514,7 @@ export function checkInAtGate(userId: string, at: number = Date.now()): CheckInR
   const own = records.find((r) => r.userId === user.id)
   if (own) cloudSync.pushPresence(own)
 
-  const walk = walkFor(user.id, user.orgId)
+  const walk = walkFor(user.id, openOrgFor(user.id, at))
   logLeg(user, place, at, walk, partyRef, false)
 
   return {
@@ -541,6 +525,130 @@ export function checkInAtGate(userId: string, at: number = Date.now()): CheckInR
     partyName: partyRef?.name,
     credit: null,
     walk,
+  }
+}
+
+export interface TakeUpQuestOptions {
+  at?: number
+  /** The passage presented. Required unless this episode is already paid for. */
+  passBookingId?: string
+}
+
+/**
+ * Takes up a quest at the gate — the one act in the park that costs anything.
+ *
+ * This is the app's half of the ticket booth, and it is deliberately the same
+ * function a Guide will call when they bind a party to a questline: name the
+ * order, spend a Quest Experience off a passage, and the episode is theirs. The
+ * party is left standing in the Village of Queston, because paying for a quest
+ * is not yet walking one — the chief's house is the first leg of the walk, and
+ * it is free.
+ *
+ * One passage walks in as many guests as it was booked for. Whoever presents it
+ * is always covered; the rest of the party take the remaining seats in roster
+ * order, each on THEIR OWN questline. Anybody past the count is not turned away
+ * — they present a passage of their own from their own phone.
+ */
+export function takeUpQuest(
+  userId: string,
+  orgId: string,
+  opts: TakeUpQuestOptions = {}
+): CheckInResult {
+  const at = opts.at ?? Date.now()
+  const user = getUser(userId)
+  if (!user) return { ok: false, error: 'We could not find you on the roll.' }
+
+  const episode = currentEpisode(userId, orgId)
+  if (!episode) return { ok: false, error: 'There is no quest open for you to take.' }
+
+  const { ref: partyRef, memberIds } = partyRefFor(userId)
+  const by = { id: user.id, name: user.name }
+
+  const spent = redeemPass(userId, {
+    bookingId: opts.passBookingId,
+    orgId,
+    episodeId: episode.id,
+    guests: memberIds.length,
+    at,
+  })
+  if (!spent.ok) return { ok: false, error: spent.error, needPass: spent.needPass }
+  const pass = spent.use
+
+  // Nothing was charged because the quest is already in hand — so nothing should
+  // move either. A party four stations into the walk this passage paid for is
+  // standing at a station, and rewriting their position would put them back in
+  // the village on the board a Warden dispatches from. A party who have not left
+  // the village yet fall through and are simply recorded again.
+  const here = presenceFor(userId)
+  if (!spent.charged && here && here.kind !== 'village' && isTracked(here, at)) {
+    return {
+      ok: true,
+      placeName: placeNameFor(here),
+      kind: here.kind,
+      carried: [],
+      partyName: partyRef?.name,
+      credit: null,
+      walk: walkFor(userId, orgId),
+      pass,
+    }
+  }
+
+  // Seats left on the presented passage after the guest who presented it.
+  let seatsLeft = Math.max(0, pass.covers - 1)
+  const covered = [user.id]
+  const walks = new Map<string, Walk>()
+  for (const id of memberIds) {
+    const member = getUser(id)
+    if (!member) continue
+    const self = id === user.id
+    const memberOrgId = self ? orgId : member.orgId
+    if (!self && memberOrgId && seatsLeft > 0) {
+      const theirs = currentEpisode(id, memberOrgId)
+      if (theirs) {
+        recordCover(
+          id,
+          {
+            code: pass.code,
+            passName: pass.passName,
+            orgId: memberOrgId,
+            episodeId: theirs.id,
+            at,
+            guests: pass.guests,
+            covers: pass.covers,
+          },
+          user.id
+        )
+        seatsLeft--
+        covered.push(id)
+      }
+    }
+    walks.set(id, walkFor(id, memberOrgId))
+  }
+
+  const place = { id: VILLAGE_PLACE.id, name: VILLAGE_PLACE.name, kind: 'village' as PresenceKind }
+  const records = memberIds
+    .map((id) => buildRecord(id, place, at, by, walks.get(id) ?? {}, partyRef))
+    .filter((r): r is Presence => r !== null)
+    // Who the presented passage paid for rides in the record, so a party-mate's
+    // phone can tell whether it was carried in or still owes one of its own.
+    .map((r) => ({ ...r, passCovers: covered }))
+  upsert(records)
+
+  const own = records.find((r) => r.userId === user.id)
+  if (own) cloudSync.pushPresence(own)
+
+  const walk = walks.get(user.id) ?? {}
+  logLeg(user, place, at, walk, partyRef, false, { kind: 'start' })
+
+  return {
+    ok: true,
+    placeName: place.name,
+    kind: place.kind,
+    carried: records.filter((r) => r.userId !== user.id).map((r) => r.guestName),
+    partyName: partyRef?.name,
+    credit: null,
+    walk,
+    pass,
   }
 }
 
@@ -576,18 +684,18 @@ export function syncParty(selfId: string): void {
   if (!isTracked(latest, now)) return
   if (mine && mine.at >= latest.at) return
 
-  const isStart = latest.stationId === QUEST_START.id
   let earned: StationCredit | null = null
-  if (latest.kind === 'station' && !isStart) {
+  if (latest.kind === 'station') {
     const orgId = creditOrgFor(latest.stationId, self.orgId)
     if (orgId) earned = creditStation(selfId, latest.stationId, orgId)
   }
 
-  // The mate who tapped presented one passage. If it reached far enough to
-  // cover this guest, their phone records that their episode is paid for, so
-  // the chief never asks them twice for the same walk. If it did not, nothing
-  // is recorded and they will be asked for their own.
-  if (isStart && latest.passCode && latest.passCovers?.includes(selfId) && self.orgId) {
+  // The mate who took the quest up presented one passage. If it reached far
+  // enough to cover this guest, their phone records that their episode is paid
+  // for, so the gate never asks them twice for the same walk. If it did not,
+  // nothing is recorded and they will be asked for their own. `passCovers` is
+  // written by takeUpQuest alone, which is why no check on the place is needed.
+  if (latest.passCode && latest.passCovers?.includes(selfId) && self.orgId) {
     const episode = currentEpisode(selfId, self.orgId)
     if (episode) {
       recordCover(
@@ -616,8 +724,13 @@ export function syncParty(selfId: string): void {
     !!earned?.completion
   )
   if (!record) return
-  upsert([record])
-  cloudSync.pushPresence(record)
+  // The covered list rides on. A third member's phone may read THIS adopted row
+  // rather than the one the passage was presented on — two rows share a
+  // timestamp, and the guard above keeps whichever it saw first — so dropping it
+  // here would leave them owing a passage for a walk already paid for.
+  const adopted = latest.passCovers ? { ...record, passCovers: latest.passCovers } : record
+  upsert([adopted])
+  cloudSync.pushPresence(adopted)
 }
 
 // ── Reading the board ─────────────────────────────────────────────────────────

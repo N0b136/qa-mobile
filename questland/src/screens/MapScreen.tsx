@@ -18,13 +18,12 @@ import {
   windowLeft,
 } from '../services/presenceService'
 import type { CheckInResult } from '../services/presenceService'
-import { getUserParty } from '../services/partyService'
 import { DEFAULT_POSITION, MAP_LANDMARKS, QUEST_START, STATION_COORDS } from '../content/stationMap'
 import type { MapLandmark } from '../content/stationMap'
 import { useAppTick } from '../hooks/useAppTick'
 import { useToast } from '../components/Toast'
 import MapCanvas from '../components/MapCanvas'
-import PassagePicker from '../components/PassagePicker'
+import GateArrival from '../components/GateArrival'
 import { Button, Dialog, Icon, IconButton, Tag } from '../ui'
 import { STATION_ICON, STATION_NOTE } from './questIcons'
 
@@ -102,8 +101,7 @@ export default function MapScreen() {
 
   const [openLandmark, setOpenLandmark] = useState<MapLandmark | null>(null)
   const [startOpen, setStartOpen] = useState(false)
-  const [passOpen, setPassOpen] = useState(false)
-  const [passError, setPassError] = useState<string | undefined>(undefined)
+  const [gateOpen, setGateOpen] = useState(false)
 
   function announce(result: CheckInResult) {
     if (!result.ok) {
@@ -156,22 +154,15 @@ export default function MapScreen() {
   }
 
   /**
-   * Taking the quest. Tried without a passage first: an episode already paid
-   * for goes straight through, and anything else comes back asking for one —
-   * which is the picker's cue.
+   * Calling on the chief. Free, and only a stop on a walk already paid for at
+   * the gate — so it is told which questline the chart is lighting, the same
+   * way a station check-in is.
    */
-  function handleQuestStart(passBookingId?: string) {
+  function handleChiefCheckIn() {
     if (!user) return
-    const result = checkIn(user.id, QUEST_START.id, { passBookingId })
-    if (!result.ok && result.needPass) {
-      setPassError(passBookingId ? result.error : undefined)
-      setStartOpen(false)
-      setPassOpen(true)
-      return
-    }
+    const outcome = checkIn(user.id, QUEST_START.id, quest?.orgId ? { orgId: quest.orgId } : {})
     setStartOpen(false)
-    setPassOpen(false)
-    announce(result)
+    announce(outcome)
   }
 
   function handleGateCheckIn() {
@@ -256,13 +247,33 @@ export default function MapScreen() {
           title={openLandmark.label}
           onClose={() => setOpenLandmark(null)}
           footer={
-            <div style={{ display: 'flex', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>
-              <Button variant="ghost" onClick={() => setOpenLandmark(null)}>
-                Close
-              </Button>
-              {openLandmark.id === 'gate' ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>
+              {/* The gate has two things to offer once a party is on the roll:
+                  arriving again, and the ticket booth. The corner close stands
+                  in for the ghost button rather than crowding a third in. */}
+              {openLandmark.id === 'gate' && arrived ? (
+                <Button variant="ghost" icon="door-open" onClick={handleGateCheckIn}>
+                  Check in again
+                </Button>
+              ) : (
+                <Button variant="ghost" onClick={() => setOpenLandmark(null)}>
+                  Close
+                </Button>
+              )}
+              {openLandmark.id === 'gate' && !arrived ? (
                 <Button icon="door-open" onClick={handleGateCheckIn}>
-                  {arrived ? 'Check in again' : 'We have arrived'}
+                  We have arrived
+                </Button>
+              ) : null}
+              {(openLandmark.id === 'gate' && arrived) || openLandmark.id === 'village' ? (
+                <Button
+                  icon="scroll-text"
+                  onClick={() => {
+                    setOpenLandmark(null)
+                    setGateOpen(true)
+                  }}
+                >
+                  Take up a quest
                 </Button>
               ) : null}
             </div>
@@ -272,8 +283,14 @@ export default function MapScreen() {
           {openLandmark.id === 'gate' ? (
             <p style={{ marginTop: 8, font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
               {arrived
-                ? 'You are on the roll for today. The Wardens can see your party in the park.'
+                ? 'You are on the roll for today. Take up a quest here whenever you are ready — a passage buys one Quest Experience.'
                 : 'Check in as you pass the gate — a Guide will walk you through it. Your whole party is checked in with you.'}
+            </p>
+          ) : null}
+          {openLandmark.id === 'village' ? (
+            <p style={{ marginTop: 8, font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
+              Quests are given out here. One Quest Experience off your passage opens one episode,
+              for your whole party.
             </p>
           ) : null}
         </Dialog>
@@ -285,42 +302,48 @@ export default function MapScreen() {
           title={QUEST_START.name}
           onClose={() => setStartOpen(false)}
           footer={
-            <div style={{ display: 'flex', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>
               <Button variant="ghost" onClick={() => setStartOpen(false)}>
                 Close
               </Button>
-              <Button icon="scroll-text" onClick={() => handleQuestStart()}>
-                Take the quest
-              </Button>
+              {quest ? (
+                <Button icon="house" onClick={handleChiefCheckIn}>
+                  Call on the Chief
+                </Button>
+              ) : (
+                <Button
+                  icon="scroll-text"
+                  onClick={() => {
+                    setStartOpen(false)
+                    setGateOpen(true)
+                  }}
+                >
+                  Take up a quest
+                </Button>
+              )}
             </div>
           }
         >
-          <p style={{ font: 'var(--body-base)', color: 'var(--text-muted)' }}>{QUEST_START.blurb}</p>
-          {ep ? (
-            <p style={{ marginTop: 8, font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
-              {org?.name} — Episode {ep.number}, {ep.title}. First station:{' '}
-              {stationsFor(ep.id).find((s) => !sealedIds.has(s.id))?.name ?? '—'}.
-            </p>
-          ) : null}
-          <p className="row" style={{ gap: 6, marginTop: 8, font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
-            <Icon name="ticket" size={14} />
-            The chief will ask for your passage — one Quest Experience.
+          <p style={{ font: 'var(--body-base)', color: 'var(--text-muted)' }}>
+            The Chief gives the brief before you walk — what the day's quest asks of you, and where
+            it begins. Calling on him costs nothing.
           </p>
+          {quest ? (
+            <p style={{ marginTop: 8, font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
+              {quest.orgName} — Episode {quest.episodeNumber}, {quest.episodeTitle}. First station:{' '}
+              {quest.nextStationName ?? '—'}.
+            </p>
+          ) : (
+            <p className="row" style={{ gap: 6, marginTop: 8, font: 'var(--body-sm)', color: 'var(--text-muted)' }}>
+              <Icon name="ticket" size={14} />
+              Take a quest up at the gate first — one Quest Experience off your passage.
+            </p>
+          )}
         </Dialog>
       ) : null}
 
-      {passOpen && user ? (
-        <PassagePicker
-          userId={user.id}
-          guests={getUserParty(user.id)?.memberIds.length ?? 1}
-          subtitle={ep && org ? `${org.name} — Episode ${ep.number}, ${ep.title}.` : undefined}
-          error={passError}
-          onPick={(bookingId) => handleQuestStart(bookingId)}
-          onClose={() => {
-            setPassOpen(false)
-            setPassError(undefined)
-          }}
-        />
+      {gateOpen && user ? (
+        <GateArrival userId={user.id} onClose={() => setGateOpen(false)} />
       ) : null}
     </div>
   )
@@ -331,7 +354,7 @@ function QuestStartPin({ onOpen }: { onOpen: () => void }) {
   return (
     <button
       onClick={onOpen}
-      aria-label={`${QUEST_START.name} — take the quest`}
+      aria-label={`${QUEST_START.name} — the quest brief`}
       style={{
         position: 'absolute',
         left: `${QUEST_START.x * 100}%`,
@@ -490,7 +513,7 @@ function StationCard({
             >
               <Icon name="lock" size={14} />
               {!questStarted
-                ? 'Take the quest at the Chief’s House first — passage in hand.'
+                ? 'Take up a quest at the gate first — passage in hand.'
                 : nextName
                   ? `Not your next station — you are due at ${nextName}.`
                   : 'Not on your current episode.'}

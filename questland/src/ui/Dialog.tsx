@@ -33,7 +33,11 @@ export function Dialog({ open = true, title, eyebrow, children, footer, onClose,
       <div
         role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: width, position: 'relative',
+          // minWidth 0 is what makes `width: 100%` bind. The overlay is a grid
+          // and a grid item's automatic minimum size is its min-content, which
+          // outranks a percentage width — so a panel holding one unbreakable
+          // row grew past the viewport and clipped its own close button.
+          width: '100%', minWidth: 0, maxWidth: width, position: 'relative',
           background: ceremonial ? 'var(--gradient-gold)' : 'var(--surface-card)',
           border: ceremonial ? 'var(--border-frame) solid transparent' : '1px solid var(--border-strong)',
           borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
@@ -61,7 +65,10 @@ export function Dialog({ open = true, title, eyebrow, children, footer, onClose,
           {ceremonial ? <Ornament style={{ margin: 'var(--space-md) 0' }} /> : null}
           <div style={{ marginTop: ceremonial ? 0 : 'var(--space-md)', font: 'var(--body-lg)', color: 'var(--text-body)' }}>{children}</div>
           {footer ? (
-            <div style={{ marginTop: 'var(--space-xl)', display: 'flex', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>{footer}</div>
+            // Wraps because justify-content: flex-end sends any overflow out of
+            // the START edge — two buttons that do not fit a phone-width dialog
+            // pushed the ghost one off the left side of the panel entirely.
+            <div style={{ marginTop: 'var(--space-xl)', display: 'flex', flexWrap: 'wrap', gap: 'var(--space-sm)', justifyContent: 'flex-end' }}>{footer}</div>
           ) : null}
         </div>
       </div>
