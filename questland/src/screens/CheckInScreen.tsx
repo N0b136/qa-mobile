@@ -15,6 +15,7 @@ import type { Station } from '../content/types'
 import { useToast } from '../components/Toast'
 import { QrScanner } from '../components/QrScanner'
 import GateArrival from '../components/GateArrival'
+import FlagStandard from '../components/FlagStandard'
 import { Badge, Button, Card, Icon, IconButton, Input, Ornament, Tag } from '../ui'
 import { romanNumeral, STATION_ICON } from './questIcons'
 
@@ -149,6 +150,22 @@ export default function CheckInScreen() {
           <Badge tone={org.track} icon="map-pin" style={{ marginTop: 8 }}>
             Episode {ep.number} of 10
           </Badge>
+          {/* The standard, inline, because THIS is the screen a guest has open
+              while standing at a marker about to touch a pole to it. The label
+              settles "which one is ours" in the field, and the stale badge lands
+              at the only moment it can still save them a walk — before they set
+              off for the next station rather than after. It renders nothing when
+              there is no pole: the in-app check-in below is a first-class way
+              through an episode and must not be nagged at. This screen belongs to
+              ONE order and a Hero Pass keeps all three open, so it hands the
+              standard the order it is showing — a pole bound elsewhere has to say
+              so here, or the label reads as if it belonged to this quest. */}
+          <FlagStandard
+            userId={user.id}
+            variant="inline"
+            orgId={org.id}
+            style={{ marginTop: 10 }}
+          />
         </div>
       </div>
 

@@ -868,6 +868,29 @@ export function startGuestSync(userId: string): () => void {
       )
     )
 
+    // The standard this guest is carrying. Bound at a counter, on a machine this
+    // phone has no other contact with, so without this listener the guest never
+    // learns which pole is theirs or when it has gone stale.
+    //
+    // THE FILTER IS THE WHOLE REASON THIS QUERY IS LEGAL. `flags` is read by any
+    // real user and its read rule touches no field of the document — deliberately,
+    // and there is a long comment in firestore.rules saying why. A rule that read
+    // `resource.data` would refuse this QUERY outright rather than filter it, and
+    // Firestore never retries a listener it was refused: the standard would simply
+    // never appear, on every phone, permanently. Verified live against the project
+    // (rules matrix case 18). Do not tighten either half.
+    unsubs.push(
+      onSnapshot(
+        query(collection(fb.db, 'flags'), where('memberIds', 'array-contains', userId)),
+        // The same merge the console runs. It is a union keyed on uid that honours
+        // `removed`, so a narrower result set can only ever add to this mirror or
+        // drop a pole that stopped being the guest's — which is exactly what
+        // `releaseFlag` does when it takes the roster off a binding.
+        (snap) => mergeFlagsSnapshot(snap),
+        () => setCloudState('offline')
+      )
+    )
+
     // The public directory + everyone's progress: what lets a party roster and
     // the leaderboard show guests who signed up on a different device.
     unsubs.push(
