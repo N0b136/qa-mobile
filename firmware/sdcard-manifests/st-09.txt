@@ -1,0 +1,61 @@
+GENERATED - DO NOT EDIT, run npm run fw:clips
+(node firmware/tools/gen-clip-map.mjs; source content-intake/season-1.json)
+
+SD CARD MANIFEST - st-09  Story Willow
+Station type: story
+LoRa address / console station number: 9
+Canon fingerprint: 132EB1DA89E208F5
+Speech files on this card: 10
+
+Card: 8 GB microSD, FAT32, 32 kB allocation unit, formatted by the SD
+Association formatter. Folders named exactly two digits, files exactly three
+digits plus .mp3 - that is what DFPlayer playFolder(folder, track) addresses.
+Copy the folders in ascending order onto a freshly formatted card; some DFPlayer
+revisions index by FAT directory order, and copying out of order is the classic
+"right file, wrong track number" bench fault.
+
+THE GAPS ARE CORRECT. Track number is the episode number, forever. This card
+carries only the episodes whose rotation includes this station, so the numbering
+skips. Do not renumber to close a gap: adding this station to a new rotation
+later must stay a single file drop.
+
+--- SPEECH (one per order + episode this station appears in) ---
+
+  folder 01  Rangers of Questia
+    /01/002.mp3   ep 02  rg-02  Darish's Arrow
+    /01/005.mp3   ep 05  rg-05  Ranger's Mettle
+    /01/008.mp3   ep 08  rg-08  Amets' Blade
+    /01/010.mp3   ep 10  rg-10  The Return of Nordad
+  folder 02  Hearers of the Alehiim
+    /02/001.mp3   ep 01  ah-01  Hear Us (we hear)
+    /02/003.mp3   ep 03  ah-03  He Finds What is Lost
+    /02/004.mp3   ep 04  ah-04  Working Trough
+    /02/007.mp3   ep 07  ah-07  Repaired not Discarded
+  folder 03  Order of the Elm
+    /03/006.mp3   ep 06  el-06  The Song of the Stones
+    /03/009.mp3   ep 09  el-09  Devorah's Warning
+
+--- SYSTEM (identical on every card) ---
+
+  folder 08  station voice, no narrative content
+    /08/004.mp3   "this plinth is out of service" - played only on a hardware fault
+    /08/005.mp3   "your standard is finished, return it to the booth" - played for a returned pole
+
+  Tracks 001..003 of folder 08 are RESERVED and intentionally absent.
+  There is no "sorry, one moment" clip and there must never be one: an
+  unresolved tag leaves the station on ambience and asks the hub for the table.
+  A hold clip is a fallback clip wearing a hat.
+
+--- AMBIENCE (identical on every card) ---
+
+  folder 09  the plinth's idle bed, cycled so a long wait does not loop audibly
+    /09/001.mp3
+    /09/002.mp3
+    /09/003.mp3
+
+  QL_AMBIENCE_TRACKS in station/config.h is 3. If you put a different
+  number of files here, the station will eventually ask for a track that is not
+  on the card - and a DFPlayer asked for a missing track does not reliably do
+  nothing. Change both or neither.
+
+TOTAL FILES ON THIS CARD: 15

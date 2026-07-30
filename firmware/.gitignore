@@ -1,0 +1,32 @@
+# Key material must never reach a commit. provision-key.mjs already refuses to
+# WRITE a park key anywhere under the repository root — this is the second line
+# of defence, for a key copied in by hand or dropped here by a shell redirect.
+#
+# If one of these patterns ever matches something you actually want committed,
+# the answer is to rename that file, not to loosen the pattern.
+*.key
+*.psk
+*.pem
+park-key*
+*-park.key
+
+# esptool / nvs_partition_gen scratch. A generated NVS image contains the PSK in
+# the clear; provision-key.mjs builds them in a 0700 temp directory and shreds
+# them, but a hand-run of the IDF tool will not.
+*-nvs.bin
+nvs-before.bin
+nvs-after.bin
+psk.csv
+
+# Arduino build output.
+build/
+*.elf
+*.bin.map
+
+# SD card masters. The manifests are tracked; the audio is not — ~280 recordings
+# do not belong in git, the same call the project already made for the station
+# photo masters.
+sdcard/
+audio-masters/
+*.mp3
+*.wav

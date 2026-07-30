@@ -13,6 +13,7 @@ import { personaFromStaff } from '../../content/staff'
 import * as hubLink from '../../services/hubLink'
 import { installHubSim, isSimRequested } from '../../services/hubSim'
 import { broadcastTable, startTapPipeline } from '../../services/tapService'
+import { recordHeartbeat } from '../../services/stationHealthService'
 import ConsoleHeader from './ConsoleHeader'
 import StaffGate from './StaffGate'
 import CallsBoard from './CallsBoard'
@@ -63,6 +64,15 @@ export default function ConsoleScreen() {
     // and a per-effect connection would open the same port twice and report its
     // own second failure as 'held'.
     const stopTaps = startTapPipeline()
+    // The park reporting on itself. Kept out of the tap pipeline on purpose: a
+    // tap is a Firestore write and a heartbeat never leaves this machine, so
+    // they are two subscriptions with two lifetimes that happen to share a
+    // cable. Recording a frame only touches module memory (stationHealthService
+    // flushes to the mirror on its own coalesced timer), so twenty-one stations
+    // reporting cannot turn into twenty-one console repaints.
+    const stopHeartbeats = hubLink.onHeartbeat((frame) => {
+      recordHeartbeat(frame)
+    })
     // Only the SIMULATOR attaches itself. A real serial port needs a user
     // gesture to open (Slice 7), so it can never be connected from an effect.
     const simulated = isSimRequested()
@@ -77,6 +87,7 @@ export default function ConsoleScreen() {
     return () => {
       stopSync()
       stopTaps()
+      stopHeartbeats()
       if (simulated) hubLink.disconnect()
       window.clearInterval(interval)
     }

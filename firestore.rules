@@ -101,9 +101,19 @@ service cloud.firestore {
     // The `demo-` exception is what lets the presenter's /demo console seed its
     // cast into the console roster. It is scoped to ids that cannot collide with
     // a Firebase uid, so it grants nothing over a real guest's row.
+    //
+    // The `walk-` clause is the ticket booth enrolling a group who arrived with
+    // no phone between them. That record has no credential and never will, so
+    // nobody can ever sign in to write it — if staff cannot, nobody can, and the
+    // party is invisible to the console, the park chart and the day's log the
+    // moment they walk away from the counter. Tighter than the demo exception on
+    // both sides: STAFF only, and the document must say what it is, so a guest
+    // cannot mint one and no ordinary row can hide behind the prefix.
     match /guests/{uid} {
       allow read: if signedIn();
-      allow write: if isSelf(uid) || (isRealUser() && uid.matches('demo-.*'));
+      allow write: if isSelf(uid)
+        || (isRealUser() && uid.matches('demo-.*'))
+        || (isStaff() && uid.matches('walk-.*') && request.resource.data.walkUp == true);
     }
 
     // Read-for-all so party rosters and the leaderboard can rank other guests;
@@ -124,7 +134,15 @@ service cloud.firestore {
     match /bookings/{bookingId} {
       allow read: if isStaff() || ownsExisting();
       allow update, delete: if ownsExisting();
-      allow create: if ownsIncoming();
+      // Staff create ONLY for a walk-up. A group who arrived with no phone is
+      // sold their passage at the counter, and the record has to be filed under
+      // the walk-up's own id for passStates/redeem to read it — but that id has
+      // no credential, so ownsIncoming() can never be satisfied for it and the
+      // booking would live and die in one browser tab. Narrower than the guests
+      // clause above: staff may file a booking for a walk-up and for nobody
+      // else, so a real guest's passages stay theirs alone to create.
+      allow create: if ownsIncoming()
+        || (isStaff() && request.resource.data.userId.matches('walk-.*'));
     }
 
     // The passage ledger. It stopped being device-local when the gate became the
@@ -202,24 +220,34 @@ service cloud.firestore {
       allow read, create, delete: if isRealUser();
     }
 
+    // isStaff() runs alongside every guest clause here because the ticket booth
+    // makes a party ON BEHALF OF guests who are not holding a phone. A walk-up
+    // record can never sign in, so the "only you may add or remove yourself"
+    // rule has nobody to be satisfied by: without this, a walk-up family walks
+    // as a lone traveller — occupants() groups the park by party, and the board,
+    // the chart and the day's log would each show one guest instead of five.
     match /parties/{partyId} {
       allow read: if signedIn();
-      allow create: if isRealUser() && request.auth.uid in request.resource.data.memberIds;
+      allow create: if isStaff()
+        || (isRealUser() && request.auth.uid in request.resource.data.memberIds);
 
       // A guest may add or remove ONLY themselves. Renaming is open to members
       // and must leave the roster untouched. Nobody can conscript or evict
       // anyone else.
-      allow update: if isRealUser() && (
+      allow update: if isStaff() || (isRealUser() && (
         request.resource.data.memberIds.toSet().difference(resource.data.memberIds.toSet())
           == [request.auth.uid].toSet()
         || resource.data.memberIds.toSet().difference(request.resource.data.memberIds.toSet())
           == [request.auth.uid].toSet()
         || (request.auth.uid in resource.data.memberIds
           && request.resource.data.memberIds.toSet() == resource.data.memberIds.toSet())
-      );
+      ));
 
-      // Only the last member out can strike the party.
-      allow delete: if isRealUser() && resource.data.memberIds.toSet() == [request.auth.uid].toSet();
+      // Only the last member out can strike the party — or staff, who put the
+      // walk-up party there in the first place and are the only ones who can
+      // clear one up.
+      allow delete: if isStaff()
+        || (isRealUser() && resource.data.memberIds.toSet() == [request.auth.uid].toSet());
     }
 
     // ── Comm lanes (guest phone <-> Back Office console) ────────────────────
