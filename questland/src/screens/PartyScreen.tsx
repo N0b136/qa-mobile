@@ -7,6 +7,7 @@ import { completedCount, levelFor, totalXp } from '../services/progressService'
 import { createParty, getUserParty, joinParty, leaveParty } from '../services/partyService'
 import { ORGS, getOrg } from '../content/orgs'
 import ProgressBar from '../components/ProgressBar'
+import FlagStandard from '../components/FlagStandard'
 import { useToast } from '../components/Toast'
 import { Badge, Button, Card, Dialog, Icon, Input } from '../ui'
 import { isTracked, placeNameFor, presenceFor, statusOf, windowLeft } from '../services/presenceService'
@@ -175,6 +176,14 @@ export default function PartyScreen() {
               </Button>
             </div>
           </Card>
+
+          {/* The pole belongs to the PARTY, not to whoever is holding it — one
+              standard, one binding, one quest for everybody on this roster. So it
+              sits with the other thing the party shares, directly under the invite
+              code it is styled after, and only in the in-party face: a guest with
+              no party has no shared kit to be told about, and the gate already
+              asks them the arrival questions. */}
+          <FlagStandard userId={user.id} />
 
           <div className="stack" style={{ gap: 12 }}>
             {party.memberIds.map((memberId) => {

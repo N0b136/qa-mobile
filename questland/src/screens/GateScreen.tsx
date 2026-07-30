@@ -33,6 +33,7 @@ import type { PassState } from '../services/passService'
 import { getOrg } from '../content/orgs'
 import { VILLAGE_PLACE } from '../content/stationMap'
 import GateArrival from '../components/GateArrival'
+import FlagStandard from '../components/FlagStandard'
 import { Badge, Button, Card, Icon, Ornament, Tag } from '../ui'
 import { ORG_ICON } from './questIcons'
 
@@ -199,7 +200,10 @@ export default function GateScreen() {
         </Card>
       )}
 
-      {/* Your standard — FlagStandard mounts here once flagService lands. */}
+      {/* Your standard. The gate is where a pole is collected and handed back,
+          which makes this the one screen where an unbound standard is worth
+          saying out loud — it sits directly under the act it belongs to. */}
+      <FlagStandard userId={user.id} style={{ marginTop: 12 }} />
 
       <Ornament style={{ margin: '20px 0' }} />
 
