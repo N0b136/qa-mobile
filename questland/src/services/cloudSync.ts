@@ -51,6 +51,14 @@ export interface GuestDoc {
   partyName?: string
   level: number
   updatedAt: number
+  /**
+   * Enrolled at the booth, with no phone behind it. Carried through the round
+   * trip on purpose — unlike `demo`, which is dropped on the way back down —
+   * because every OTHER device shadows this directory into its own ql:users and
+   * ranks what it finds there. A marker that only the enrolling console held
+   * would put the walk-up back on every other phone's leaderboard.
+   */
+  walkUp?: true
 }
 
 export type Audience =
@@ -114,16 +122,27 @@ function normalizePartyCode(code: string): string {
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────
 
+/**
+ * Walk-ups are excluded from the BROADCASTS — everyone, and a whole order —
+ * because there is no phone behind the record: a notification counted against
+ * one is a line in the send receipt saying somebody was reached who was not.
+ * The count the console reports comes straight off this list, so dropping them
+ * here is what keeps that number honest.
+ *
+ * A direct send to one guest stays allowed even when it lands on a walk-up. It
+ * reaches nobody either, but staff chose that row by name and the receipt still
+ * says one — nothing is being overstated.
+ */
 export function resolveAudience(a: Audience, directory: GuestDoc[]): GuestDoc[] {
   switch (a.kind) {
     case 'all':
-      return directory
+      return directory.filter((g) => !g.walkUp)
     case 'guest':
       return directory.filter((g) => g.id === a.id)
     case 'party':
       return directory.filter((g) => g.partyId === a.id)
     case 'org':
-      return directory.filter((g) => g.orgId === a.id)
+      return directory.filter((g) => g.orgId === a.id && !g.walkUp)
     default:
       return []
   }
@@ -211,6 +230,7 @@ function buildGuestDoc(user: User): GuestDoc & { demo?: true } {
   if (user.partyId) doc.partyId = user.partyId
   const party = getUserParty(user.id)
   if (party?.name) doc.partyName = party.name
+  if (user.walkUp) doc.walkUp = true
   if (user.id.startsWith('demo-')) doc.demo = true
   return doc
 }
@@ -335,6 +355,7 @@ function mergeGuestsSnapshot(snap: QuerySnapshot<DocumentData>): void {
     if (data.orgId !== undefined) g.orgId = data.orgId
     if (data.partyId !== undefined) g.partyId = data.partyId
     if (data.partyName !== undefined) g.partyName = data.partyName
+    if (data.walkUp === true) g.walkUp = true
     dir.push(g)
   })
   dir.sort((a, b) => b.updatedAt - a.updatedAt)
@@ -367,6 +388,10 @@ function mergeGuestShadows(dir: GuestDoc[]): void {
     }
     if (g.orgId) shell.orgId = g.orgId
     if (g.partyId) shell.partyId = g.partyId
+    // Load-bearing: this shell is what the leaderboard on THIS device ranks, and
+    // leaderboardService filters on the flag. Drop it here and a walk-up enrolled
+    // at the booth reappears on every phone in the park.
+    if (g.walkUp) shell.walkUp = true
     if (!existing || !deepEqual(existing, shell)) {
       byId.set(g.id, shell)
       changed = true

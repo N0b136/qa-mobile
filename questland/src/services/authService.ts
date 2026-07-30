@@ -9,7 +9,7 @@
 
 import type { User } from '../types'
 import { load, remove, save } from './store'
-import { uid } from './ids'
+import { shortCode, uid } from './ids'
 import * as cloudSync from './cloudSync'
 import {
   cloudSignIn,
@@ -211,6 +211,58 @@ export async function signUp(email: string, password: string, name: string, avat
   }
   upsertUser(user)
   save<string | null>(SESSION_KEY, user.id)
+  cloudSync.pushGuestProfile(user)
+  return user
+}
+
+/**
+ * Enrols a group that walked up to the ticket booth with no phone between them.
+ *
+ * ONE record for the whole PARTY, never one per head: nobody in the group is
+ * carrying a device that could hold an account of their own, so the bodies ride
+ * in the party's headcount and on the Passage's `covers` instead. That is the
+ * only place a walk-up differs from any other guest — downstream, `passStates`,
+ * presence, the day's log and every console panel see a plain user id.
+ *
+ * There is no credential, and deliberately no path to promote this into a real
+ * account later. So the two credential fields say "no account" rather than
+ * "not filled in yet": `email` is '' — already what a mirrored directory shell
+ * carries, and the only value `findLocalByEmail` can never match, so a real
+ * signup can never collide with one of these — and `passHash` is left UNSET,
+ * which is what `signIn` reads as nothing to check against. An empty-string hash
+ * would instead be a hash somebody could eventually compute.
+ *
+ * The `walk-` prefix cannot collide with a Firebase uid (28 characters, no
+ * hyphen) — the same reasoning that makes `demo-` safe in the rules, gated
+ * tighter there: only staff may mint a `walk-` guest doc, and only one that
+ * says walkUp.
+ *
+ * NOT async, and it never touches Firebase Auth: there is no credential to
+ * validate. It also never writes ql:session — signUp does, and reusing it here
+ * would sign the console's own browser in as the party standing at the counter.
+ */
+export function createWalkUp(
+  name: string,
+  // `headcount` is accepted so the booth's one gesture reads as one call, but it
+  // is NOT stored on the user: the bodies live on the Passage (`covers`) and the
+  // flag (`headcount`), which are the records anything downstream actually
+  // consults. A third copy here would be the one nobody remembers to update.
+  opts: { orgId?: string; headcount?: number } = {}
+): User {
+  const now = Date.now()
+  const user: User = {
+    id: `walk-${shortCode(8)}`,
+    email: '',
+    name: name.trim() || 'Walk-up party',
+    avatar: 'shield',
+    createdAt: now,
+    walkUp: true,
+    updatedAt: now,
+  }
+  if (opts.orgId) user.orgId = opts.orgId
+  upsertUser(user)
+  // The public half only. There is no accounts/{uid} doc to push — that document
+  // exists to hold an email, and this record has none.
   cloudSync.pushGuestProfile(user)
   return user
 }

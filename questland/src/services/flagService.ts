@@ -32,8 +32,9 @@
 
 import type { Flag, FlagStatus } from '../types'
 import { load, save } from './store'
-import { getUser } from './authService'
-import { getUserParty } from './partyService'
+import { createWalkUp, getUser } from './authService'
+import { createParty, getUserParty } from './partyService'
+import { createBooking, getTier } from './bookingService'
 import { getOrg } from '../content/orgs'
 import { getEpisode } from '../content/quests'
 import { getStation } from '../content/stations'
@@ -699,6 +700,88 @@ export async function attachTag(
   return { ok: true, flag: written }
 }
 
+// ── Walk-ups ──────────────────────────────────────────────────────────────────
+
+export interface WalkUpSpec {
+  /** What to call them. It names the record and the party both. */
+  name: string
+  /** Bodies under the pole. One record for all of them, never one each. */
+  headcount: number
+  /** The passage sold over the counter. */
+  tierId: string
+}
+
+type WalkUpEnrolment =
+  | { ok: true; userId: string; bookingId: string; headcount: number }
+  | { ok: false; error: string }
+
+/**
+ * The local calendar day.
+ *
+ * NOT `toISOString().slice(0,10)`, which is UTC: a party walking up at seven in
+ * the evening west of Greenwich would be sold a passage dated tomorrow, and the
+ * pass engine — which reads booking dates as LOCAL days — would refuse it at the
+ * very counter it was just bought at, as "not yours to present yet".
+ */
+function todayLocal(at: number): string {
+  const d = new Date(at)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+/**
+ * Enrols a group that arrived with no phone: one record, one party, one passage.
+ *
+ * The passage is a REAL booking under the walk-up's own id, which is the whole
+ * trick — `passStates`, `redeem`, the ledger and the passage picker then work on
+ * them exactly as they work on a guest who booked at home, and not one line of
+ * the pass engine knows walk-ups exist.
+ */
+async function enrolWalkUp(spec: WalkUpSpec, orgId: string, at: number): Promise<WalkUpEnrolment> {
+  const name = spec.name.trim()
+  if (!name) return { ok: false, error: 'Give the party a name before binding.' }
+  const tier = getTier(spec.tierId)
+  if (!tier) return { ok: false, error: 'That passage is not sold here.' }
+  const headcount = Math.max(1, Math.floor(spec.headcount || 1))
+
+  // Everything that CAN be refused has been refused above this line, so no
+  // half-made walk-up is possible: the name, the tier and the headcount are the
+  // only three things the counter can get wrong, and none of them has written
+  // anything yet.
+  //
+  // The three writes below cannot fail in turn — `createParty` falls back to a
+  // local party when the cloud will not answer, and `createBooking` throws only
+  // on a tier that was just resolved. If the CALLER refuses afterwards (a pole
+  // claimed by another party in the same second), the record is left standing
+  // rather than torn back down: by then the Passage may already be charged
+  // against it, and deleting it would destroy the only receipt for the money
+  // taken. It is inert — no credential, no session, nothing can sign in as it —
+  // so the Guide simply presents the tag again and finds the party by name, and
+  // `redeem` being idempotent per (guest, order, episode) means the second
+  // attempt charges nothing.
+  const user = createWalkUp(name, { orgId, headcount })
+
+  // A party of their own, even at one body. `occupants()` groups the park by
+  // party, the day's log records a group and the console names one — without
+  // this the family would walk as `solo:` and every board would show one guest.
+  await createParty(user.id, name)
+
+  const booking = createBooking(user.id, {
+    tierId: tier.id,
+    date: todayLocal(at),
+    // When they actually walked up. The arrival slots are a book-ahead
+    // affordance and there is nothing to choose between at the counter.
+    slot: `${String(new Date(at).getHours()).padStart(2, '0')}:${String(new Date(at).getMinutes()).padStart(2, '0')}`,
+    // Priced per body through the gate. The QUEST allowance is the passage's and
+    // does not move with headcount — see passService.
+    adults: headcount,
+    children: 0,
+    addOnIds: [],
+  })
+
+  return { ok: true, userId: user.id, bookingId: booking.id, headcount }
+}
+
 // ── Binding a pole to a party ─────────────────────────────────────────────────
 
 export interface BindFlagInput {
@@ -706,6 +789,12 @@ export interface BindFlagInput {
   rfidUid: string
   /** The guest the walk is recorded as. Always one of the party. */
   holderId: string
+  /**
+   * A group with no phone between them, enrolled at the counter in this same
+   * gesture. Read ONLY when `holderId` is blank — a party already on the roll is
+   * never re-enrolled, however the Guide filled the form in.
+   */
+  walkUp?: WalkUpSpec
   orgId: string
   /** Staff override. Defaults to the holder's next unsealed episode. */
   episodeId?: string
@@ -737,15 +826,56 @@ export interface BindFlagInput {
  *
  * Rebinding the SAME group is not a conflict: it is how a Hero Pass party takes
  * up their next episode without changing poles.
+ *
+ * A group with no phone (`walkUp`, and only while `holderId` is blank) is
+ * enrolled here too — record, party and passage — before the ordinary path runs.
+ * They are a walk-up for the length of that one block and a guest thereafter.
  */
 export async function bindFlag(input: BindFlagInput): Promise<FlagOutcome> {
   const at = input.at ?? Date.now()
   const uid = normalizeUid(input.rfidUid)
   if (!uid) return { ok: false, error: 'That tag could not be read. Present it to the pad again.' }
 
-  const holder = getUser(input.holderId)
-  if (!holder) return { ok: false, error: 'That guest is not on the roll.' }
   if (!getOrg(input.orgId)) return { ok: false, error: 'That questline is not on the chart.' }
+
+  // The POLE is judged before anybody is enrolled. These refusals depend on
+  // nothing but the rack, and a walk-up minted in front of one of them would be
+  // a party put on the roll who never got a standard.
+  const existing = listFlags().find((f) => f.uid === uid)
+  // Read only when nobody has been identified. A party already on the roll is
+  // never enrolled a second time, however the Guide filled the form in.
+  const spec = input.holderId.trim() ? undefined : input.walkUp
+  const enrolling = !!spec
+  if (existing) {
+    if (existing.status === 'lost') {
+      return { ok: false, error: `${existing.label} is marked lost. Find it or take another.`, conflict: existing }
+    }
+    if (existing.status === 'retired') {
+      return { ok: false, error: `${existing.label} is retired. Take another from the rack.`, conflict: existing }
+    }
+    // A group enrolled in this same gesture did not exist a moment ago, so a
+    // pole out with ANY group is out with somebody else. The rebind exemption
+    // further down belongs to a party that already has a groupId to match.
+    if (enrolling && isOut(existing) && existing.groupId) {
+      return {
+        ok: false,
+        error: `${existing.label} is out with ${existing.groupName ?? 'another party'}.`,
+        conflict: existing,
+      }
+    }
+  }
+
+  // A group with no phone between them. The booth makes them a record, a party
+  // and a passage — and then this function carries on down the ORDINARY path.
+  // Nothing below here can tell a walk-up from a guest who booked on their sofa,
+  // which is why the pass engine, presence, the day's log and every console
+  // panel needed no walk-up case of their own.
+  const enrolled = spec ? await enrolWalkUp(spec, input.orgId, at) : null
+  if (enrolled && !enrolled.ok) return { ok: false, error: enrolled.error }
+
+  const holderId = enrolled ? enrolled.userId : input.holderId
+  const holder = getUser(holderId)
+  if (!holder) return { ok: false, error: 'That guest is not on the roll.' }
 
   // The episode is CONFIRMED here, never chosen.
   //
@@ -762,7 +892,7 @@ export async function bindFlag(input: BindFlagInput): Promise<FlagOutcome> {
   // refuse rather than quietly charge the wrong walk. A genuine replay or skip
   // needs the progress engine to walk a NAMED episode, which is a change to
   // progressService and explicitly out of this slice.
-  const open = currentEpisode(input.holderId, input.orgId)
+  const open = currentEpisode(holderId, input.orgId)
   if (!open) return { ok: false, error: 'There is no episode open on that questline.' }
   const episode = input.episodeId ? getEpisode(input.episodeId) : open
   if (!episode || episode.orgId !== input.orgId) {
@@ -775,36 +905,34 @@ export async function bindFlag(input: BindFlagInput): Promise<FlagOutcome> {
     }
   }
 
-  const party = getUserParty(input.holderId)
+  const party = getUserParty(holderId)
   const groupId = party ? party.id : `solo:${holder.id}`
   const groupName = party ? party.name : holder.name
   const memberIds = party && party.memberIds.length > 0 ? party.memberIds : [holder.id]
 
-  const existing = listFlags().find((f) => f.uid === uid)
-  if (existing) {
-    if (existing.status === 'lost') {
-      return { ok: false, error: `${existing.label} is marked lost. Find it or take another.`, conflict: existing }
-    }
-    if (existing.status === 'retired') {
-      return { ok: false, error: `${existing.label} is retired. Take another from the rack.`, conflict: existing }
-    }
-    if (isOut(existing) && existing.groupId && existing.groupId !== groupId) {
-      return {
-        ok: false,
-        error: `${existing.label} is out with ${existing.groupName ?? 'another party'}.`,
-        conflict: existing,
-      }
+  // The rebind exemption: the same group taking up their next episode on the
+  // same pole. An enrolment cannot reach this — its groupId was minted seconds
+  // ago and was refused against the rack above, before anybody was put on it.
+  if (existing && isOut(existing) && existing.groupId && existing.groupId !== groupId) {
+    return {
+      ok: false,
+      error: `${existing.label} is out with ${existing.groupName ?? 'another party'}.`,
+      conflict: existing,
     }
   }
+
+  // Bodies under the pole. A walk-up's roster is one record standing in for the
+  // whole family, so the count comes off the enrolment rather than the roster.
+  const heads = input.headcount ?? enrolled?.headcount ?? memberIds.length
 
   // Spend the Passage. Already paid for this episode? `redeem` hands back the
   // existing record and charges nothing — re-reading a binding at the counter
   // costs a party nothing.
   const spent = redeem(holder.id, {
-    bookingId: input.passBookingId,
+    bookingId: input.passBookingId ?? enrolled?.bookingId,
     orgId: input.orgId,
     episodeId: episode.id,
-    guests: input.headcount ?? memberIds.length,
+    guests: heads,
     at,
   })
   if (!spent.ok) return { ok: false, error: spent.error }
@@ -863,7 +991,7 @@ export async function bindFlag(input: BindFlagInput): Promise<FlagOutcome> {
     orgId: input.orgId,
     episodeId: episode.id,
     episodeNumber: episode.number,
-    headcount: input.headcount ?? memberIds.length,
+    headcount: heads,
     passCode: pass.code,
     boundBy: input.boundBy,
     boundAt: at,

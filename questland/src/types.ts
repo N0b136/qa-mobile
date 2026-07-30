@@ -17,6 +17,13 @@ export interface User {
   cloud?: boolean
   /** True on read-only shells mirrored from the cloud guest directory (other people). */
   remote?: boolean
+  /**
+   * A group enrolled at the ticket booth with no phone between them — ONE record
+   * for the whole party, the bodies riding in the party's headcount. It has no
+   * credential and can never be signed into, so it is kept off the leaderboard:
+   * a record nobody can open has no business ranking above guests who can.
+   */
+  walkUp?: true
   /** Last local edit, in ms — drives last-write-wins against the cloud profile. */
   updatedAt?: number
 }

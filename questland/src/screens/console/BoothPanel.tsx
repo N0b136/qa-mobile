@@ -49,6 +49,8 @@ import {
 import type { FlagState } from '../../services/flagService'
 import type { Flag } from '../../types'
 import { ORGS, getOrg } from '../../content/orgs'
+import { TIERS } from '../../content/bookingTiers'
+import { priceBooking } from '../../services/bookingService'
 import { episodesFor, getEpisode } from '../../content/quests'
 import { useToast } from '../../components/Toast'
 import type { SelectOption } from '../../ui'
@@ -63,6 +65,17 @@ interface Props {
 
 /** The party invite code, exactly as PartyScreen mints it. */
 const CODE_RE = /^[A-Z0-9]{6}$/
+
+/**
+ * What the counter sells to a party standing in front of it: a day, for one
+ * quest or for all of them, singly or at the group rate. Memberships and
+ * birthday packages are arranged in advance and carry paperwork this pad has no
+ * way to take, so they are not offered to a walk-up.
+ */
+const BOOTH_TIERS = TIERS.filter((t) => t.category === 'day' || t.category === 'day-group')
+
+/** Bodies under one pole. Beyond this it is a coach party and wants the desk. */
+const MAX_HEADS = 12
 
 const CODE_FIELD_ID = 'booth-invite-code'
 
@@ -139,6 +152,14 @@ export default function BoothPanel({ staffUid }: Props) {
   const [episodeChoice, setEpisodeChoice] = useState('')
   const [bookingId, setBookingId] = useState('')
 
+  // A group with no phone between them. Nothing is created here — the form is
+  // handed to `bindFlag`, which enrols them, sells the passage and binds the
+  // pole as ONE action. Filling this in and then walking away costs nothing.
+  const [walkOpen, setWalkOpen] = useState(false)
+  const [walkName, setWalkName] = useState('')
+  const [walkHeads, setWalkHeads] = useState(2)
+  const [walkTierId, setWalkTierId] = useState(BOOTH_TIERS[0].id)
+
   const [busy, setBusy] = useState(false)
   const [openPole, setOpenPole] = useState<Flag | null>(null)
 
@@ -162,6 +183,10 @@ export default function BoothPanel({ staffUid }: Props) {
     setOrgChoice('')
     setEpisodeChoice('')
     setBookingId('')
+    setWalkOpen(false)
+    setWalkName('')
+    setWalkHeads(2)
+    setWalkTierId(BOOTH_TIERS[0].id)
     refresh()
   }, [refresh])
 
@@ -286,13 +311,26 @@ export default function BoothPanel({ staffUid }: Props) {
     () => (party ? party.memberIds : holderId ? [holderId] : []),
     [party, holderId]
   )
-  const groupName = party?.name ?? holder?.name ?? ''
+
+  // A walk-up is identified the moment the form is answerable — no record exists
+  // yet, so there is nothing to look up and nothing to wait for.
+  const walkUp = walkOpen && !holderId
+  const walkTier = BOOTH_TIERS.find((t) => t.id === walkTierId) ?? BOOTH_TIERS[0]
+  const walkReady = walkUp && walkName.trim().length > 0
+  const identified = !!holder || walkReady
+
+  const groupName = party?.name ?? holder?.name ?? (walkUp ? walkName.trim() : '')
 
   // Order and episode are DERIVED unless staff say otherwise, so the form
   // follows the party as it is identified and only stops following once an
-  // override has actually been chosen.
+  // override has actually been chosen. A walk-up has walked nothing yet, so
+  // theirs is the first episode of whichever questline the chips are on.
   const orgId = orgChoice || holder?.orgId || ORGS[0].id
-  const derivedEpisode = holderId ? currentEpisode(holderId, orgId) : null
+  const derivedEpisode = holderId
+    ? currentEpisode(holderId, orgId)
+    : walkReady
+      ? (episodesFor(orgId)[0] ?? null)
+      : null
   const chosenEpisode = episodeChoice ? getEpisode(episodeChoice) : undefined
   const episode = chosenEpisode && chosenEpisode.orgId === orgId ? chosenEpisode : derivedEpisode
 
@@ -327,6 +365,11 @@ export default function BoothPanel({ staffUid }: Props) {
   // party back for the same episode, a mis-scan corrected — costs nothing.
   const alreadyPaid = !!holderId && !!episode && passSpentOn(holderId, orgId, episode.id) !== null
 
+  function pickOrg(id: string): void {
+    setOrgChoice(id)
+    setEpisodeChoice('')
+  }
+
   function selectPassage(row: PassageRow): void {
     // The passage is spent against the guest who holds it, so presenting a
     // party-mate's passage makes THEM the holder of the walk.
@@ -342,7 +385,7 @@ export default function BoothPanel({ staffUid }: Props) {
   // ── Committing ────────────────────────────────────────────────────────────
 
   async function handleBind(): Promise<void> {
-    if (!tag || !holderId || !episode) return
+    if (!tag || !identified || !episode) return
     setBusy(true)
     try {
       const res = await bindFlag({
@@ -350,7 +393,23 @@ export default function BoothPanel({ staffUid }: Props) {
         holderId,
         orgId,
         episodeId: episode.id,
-        passBookingId: bookingId || undefined,
+        // `selectedPassage`, not `bookingId`. The raw id outlives the party it
+        // belongs to: "Change" and "No app - enrol at the counter" both drop the
+        // holder while leaving the selection standing, so a booking chosen for
+        // one guest could reach the bind for another. It refuses, but only
+        // inside `redeem` - by which point a walk-up has already been given a
+        // record, a party and a booking, and the counter reads "Not bound" over
+        // a family that now half-exists. `selectedPassage` is derived from the
+        // CURRENT roster, so it is undefined the instant the party changes and
+        // undefined for a walk-up (who has no roster to hold a passage yet),
+        // which is exactly when nothing should be passed.
+        passBookingId: selectedPassage ? bookingId : undefined,
+        // Read only when `holderId` is blank. `bindFlag` enrols them, sells the
+        // passage and binds the pole in one action, so a refusal anywhere in
+        // that chain leaves no party half-made at the counter.
+        walkUp: walkReady
+          ? { name: walkName.trim(), headcount: walkHeads, tierId: walkTier.id }
+          : undefined,
         boundBy: staffUid,
         label: tag.known ? undefined : tag.label,
       })
@@ -373,7 +432,11 @@ export default function BoothPanel({ staffUid }: Props) {
       // questTaken, because the Passage was just spent above: at the counter the
       // arrival and the taking-up are the same moment, and the day's log has to
       // be able to say when a party's quest began.
-      checkInAtGate(holderId, Date.now(), {
+      // `res.flag.holderId` first: a walk-up's record was minted inside the bind
+      // and this panel has never seen its id, so posting `holderId` here would
+      // put the arrival under an empty string and the party would never reach
+      // the board they were just sold a passage for.
+      checkInAtGate(res.flag.holderId ?? holderId, Date.now(), {
         flagLabel: res.flag.label,
         orgId,
         questTaken: true,
@@ -638,10 +701,94 @@ export default function BoothPanel({ staffUid }: Props) {
                       setNameQuery('')
                       setCode('')
                       setCodeError(undefined)
+                      setWalkOpen(false)
                     }}
                   />
                 ) : null}
               </div>
+
+              {/* Walk-ups: no phone, no account, no invite code. Offered only
+                  while nobody is identified — a party already on the roll is
+                  never enrolled a second time. */}
+              {!holder ? (
+                <div className="booth__section">
+                  {walkOpen ? (
+                    <>
+                      <span className="booth__label">Walk-up party</span>
+                      <Input
+                        label="Party name"
+                        hint="One record for the whole group"
+                        icon="users"
+                        value={walkName}
+                        autoComplete="off"
+                        placeholder="The Harrow family"
+                        onChange={(e) => setWalkName(e.target.value)}
+                      />
+                      <div className="row" style={{ gap: 10, marginTop: 12, alignItems: 'center' }}>
+                        <span className="booth__label" style={{ margin: 0 }}>
+                          Guests
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          icon="minus"
+                          aria-label="One fewer guest"
+                          disabled={walkHeads <= 1}
+                          onClick={() => setWalkHeads((n) => Math.max(1, n - 1))}
+                        />
+                        <strong style={{ color: 'var(--text-heading)', minWidth: 20, textAlign: 'center' }}>
+                          {walkHeads}
+                        </strong>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          icon="plus"
+                          aria-label="One more guest"
+                          disabled={walkHeads >= MAX_HEADS}
+                          onClick={() => setWalkHeads((n) => Math.min(MAX_HEADS, n + 1))}
+                        />
+                      </div>
+                      <div style={{ marginTop: 12 }}>
+                        <Select
+                          label="Passage"
+                          hint="Sold at the counter"
+                          value={walkTierId}
+                          options={BOOTH_TIERS.map((t) => ({ value: t.id, label: t.name }))}
+                          onChange={(e) => setWalkTierId(e.target.value)}
+                        />
+                      </div>
+                      <p className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+                        {walkTier.name} for {walkHeads} {walkHeads === 1 ? 'guest' : 'guests'} —{' '}
+                        <strong style={{ color: 'var(--text-heading)' }}>
+                          ${priceBooking(walkTier, walkHeads, 0, []).total}
+                        </strong>
+                        . {walkTier.pass.quests === null
+                          ? 'Every quest, today.'
+                          : `${walkTier.pass.quests} quest, today.`}
+                      </p>
+                      <div style={{ marginTop: 8 }}>
+                        <Button size="sm" variant="ghost" onClick={() => setWalkOpen(false)}>
+                          Never mind
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon="user-plus"
+                      onClick={() => {
+                        setWalkOpen(true)
+                        setCode('')
+                        setCodeError(undefined)
+                        setNameQuery('')
+                      }}
+                    >
+                      No app — enrol at the counter
+                    </Button>
+                  )}
+                </div>
+              ) : null}
 
               {holder ? (
                 <>
@@ -653,7 +800,15 @@ export default function BoothPanel({ staffUid }: Props) {
                       <Badge tone="neutral">
                         {roster.length} {roster.length === 1 ? 'guest' : 'guests'}
                       </Badge>
-                      <Button size="sm" variant="ghost" onClick={() => setHolderId('')}>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setHolderId('')
+                          // The passage belonged to the party being dropped.
+                          setBookingId('')
+                        }}
+                      >
                         Change
                       </Button>
                     </div>
@@ -664,24 +819,7 @@ export default function BoothPanel({ staffUid }: Props) {
 
                   <div className="booth__section">
                     <span className="booth__label">Questline</span>
-                    <div className="booth__chips">
-                      {ORGS.map((org) => (
-                        <button
-                          key={org.id}
-                          type="button"
-                          className="booth__chip"
-                          aria-pressed={org.id === orgId}
-                          style={{ ['--chip-track' as string]: org.color }}
-                          onClick={() => {
-                            setOrgChoice(org.id)
-                            setEpisodeChoice('')
-                          }}
-                        >
-                          <Icon name="scroll-text" size={13} />
-                          {org.name}
-                        </button>
-                      ))}
-                    </div>
+                    <QuestlineChips orgId={orgId} onPick={pickOrg} />
                   </div>
 
                   <div className="booth__section">
@@ -747,13 +885,32 @@ export default function BoothPanel({ staffUid }: Props) {
                     )}
                   </div>
                 </>
+              ) : walkReady ? (
+                <>
+                  <div className="booth__section">
+                    <span className="booth__label">Questline</span>
+                    <QuestlineChips orgId={orgId} onPick={pickOrg} />
+                  </div>
+
+                  <div className="booth__section">
+                    <span className="booth__label">Episode</span>
+                    {/* No Select: a party enrolled a moment ago has walked
+                        nothing, so there is nothing to choose between. */}
+                    <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+                      They start at Episode {episode ? romanNumeral(episode.number) : 'I'}
+                      {episode ? ` — "${episode.title}"` : ''}. The passage is sold and spent as
+                      the standard is bound.
+                    </p>
+                  </div>
+                </>
               ) : (
                 <p className="muted booth__section" style={{ fontSize: 13 }}>
-                  Read the party&apos;s invite code, or find them by name.
+                  Read the party&apos;s invite code, find them by name, or enrol them at the
+                  counter.
                 </p>
               )}
 
-              {tag && holder && episode ? (
+              {tag && identified && episode ? (
                 <>
                   <div className="booth__readback">
                     <p>
@@ -762,12 +919,22 @@ export default function BoothPanel({ staffUid }: Props) {
                       &ldquo;{episode.title}&rdquo;
                       {selectedPassage
                         ? `, on ${selectedPassage.state.tier.name} ${selectedPassage.state.booking.code}`
-                        : alreadyPaid
-                          ? ', already paid for'
-                          : ''}
+                        : walkReady
+                          ? `, on a ${walkTier.name} for ${walkHeads} — $${
+                              priceBooking(walkTier, walkHeads, 0, []).total
+                            }`
+                          : alreadyPaid
+                            ? ', already paid for'
+                            : ''}
                       .
                     </p>
-                    {!selectedPassage && !alreadyPaid ? (
+                    {walkReady ? (
+                      <p className="booth__pass-note" style={{ marginTop: 8 }}>
+                        Take payment before binding. The party goes on the roll, the passage is
+                        sold and the standard is bound in one action.
+                      </p>
+                    ) : null}
+                    {!selectedPassage && !alreadyPaid && !walkReady ? (
                       <p className="booth__pass-note" style={{ marginTop: 8 }}>
                         No passage chosen — the binding will be refused unless this episode is
                         already paid for.
@@ -1060,6 +1227,33 @@ export default function BoothPanel({ staffUid }: Props) {
         </Dialog>
       ) : null}
     </Card>
+  )
+}
+
+/**
+ * The three questlines, as chips.
+ *
+ * Lifted out of the identified-party block so a walk-up gets the SAME control
+ * rather than a second copy of it — one that could drift, and read differently
+ * to a Guide depending on how the party in front of them happened to arrive.
+ */
+function QuestlineChips({ orgId, onPick }: { orgId: string; onPick: (id: string) => void }) {
+  return (
+    <div className="booth__chips">
+      {ORGS.map((org) => (
+        <button
+          key={org.id}
+          type="button"
+          className="booth__chip"
+          aria-pressed={org.id === orgId}
+          style={{ ['--chip-track' as string]: org.color }}
+          onClick={() => onPick(org.id)}
+        >
+          <Icon name="scroll-text" size={13} />
+          {org.name}
+        </button>
+      ))}
+    </div>
   )
 }
 
