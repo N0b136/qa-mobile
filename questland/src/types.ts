@@ -226,6 +226,18 @@ export interface Flag {
   uid: string
   /** Printed on the pole. 'FLAG-07'. */
   label: string
+  /**
+   * The pole is real, printed and racked, but no RFID tag has been potted into
+   * its tip yet — the normal state before opening day, and where a pole lands
+   * again when a tag dies under a perfectly good standard.
+   *
+   * `uid` is then a SYNTHETIC id minted by `flagService`, distinguishable from
+   * a factory uid by its length (see `mintPendingUid`). The pole binds, spends a
+   * Passage and walks like any other; the one thing it cannot do is be tapped at
+   * a plinth. `flagService.attachTag` gives it a real tag later, which changes
+   * this document's id and clears this field.
+   */
+  tagPending?: true
   status: FlagStatus
   /** Party id, or `solo:${userId}` — the key occupants() groups on. */
   groupId?: string

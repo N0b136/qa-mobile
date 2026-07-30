@@ -154,6 +154,18 @@
 }
 
 /* ── The rack ─────────────────────────────────────────────────────────────── */
+
+/* The count and the way to grow the rack sit on one line: an empty rack has to
+   carry its own remedy, or the panel tells an employee to do something the park
+   has no button for. */
+.booth__rack-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
 .booth__rack {
   display: flex;
   flex-wrap: wrap;
@@ -216,6 +228,16 @@
 .booth__pole--retired {
   border-style: dashed;
   color: var(--status-locked);
+}
+
+/* Waiting on a tag. The DS locked treatment — a dashed hairline with the shape
+   kept, never a faded-out chip — but it composes with whatever the pole is doing
+   rather than replacing it: a pending pole can be racked or out with a party, so
+   the status colour set above still has to read through. It is declared after
+   every status modifier because they carry the same specificity and only source
+   order decides which border-style lands. */
+.booth__pole--pending {
+  border-style: dashed;
 }
 
 .booth__pole-label {

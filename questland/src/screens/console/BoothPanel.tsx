@@ -30,9 +30,10 @@ import { currentEpisode } from '../../services/progressService'
 import { passStates, passStatusLabel, useForEpisode as passSpentOn } from '../../services/passService'
 import type { PassState } from '../../services/passService'
 import { checkInAtGate } from '../../services/presenceService'
-import { broadcastRow } from '../../services/tapService'
+import { broadcastRow, broadcastTable } from '../../services/tapService'
 import * as hubLink from '../../services/hubLink'
 import {
+  attachTag,
   bindFlag,
   completeFlag,
   flagByUid,
@@ -41,6 +42,7 @@ import {
   markLost,
   nextLabel,
   normalizeUid,
+  registerFlag,
   releaseFlag,
   retireFlag,
 } from '../../services/flagService'
@@ -71,6 +73,8 @@ interface PadTag {
   uid: string
   label: string
   known: boolean
+  /** The pole is on the rack but no tag has been potted into it yet. */
+  pending: boolean
 }
 
 interface PassageRow {
@@ -80,14 +84,22 @@ interface PassageRow {
 }
 
 function poleClass(s: FlagState): string {
-  if (s.flag.status === 'lost' || s.overdue) return 'booth__pole booth__pole--flagged'
-  if (s.flag.status === 'retired') return 'booth__pole booth__pole--retired'
-  if (s.flag.status === 'sealed') return 'booth__pole booth__pole--sealed'
-  if (s.flag.status === 'bound') return 'booth__pole booth__pole--out'
-  return 'booth__pole'
+  const parts = ['booth__pole']
+  if (s.flag.status === 'lost' || s.overdue) parts.push('booth__pole--flagged')
+  else if (s.flag.status === 'retired') parts.push('booth__pole--retired')
+  else if (s.flag.status === 'sealed') parts.push('booth__pole--sealed')
+  else if (s.flag.status === 'bound') parts.push('booth__pole--out')
+  // Waiting on a tag is a second axis, not a fifth status — a pending pole can
+  // be racked or out with a party — so it composes with the status colour rather
+  // than replacing it. The DS locked treatment: dashed hairline, shape kept.
+  if (s.flag.tagPending) parts.push('booth__pole--pending')
+  return parts.join(' ')
 }
 
 function poleGlyph(flag: Flag): string {
+  // A pole still waiting on its tag reads as the pad's own glyph: what is
+  // missing is the tap, and that is the thing the pad does.
+  if (flag.tagPending && flag.status === 'racked') return 'scan-line'
   switch (flag.status) {
     case 'bound':
       return 'flag'
@@ -130,6 +142,16 @@ export default function BoothPanel({ staffUid }: Props) {
   const [busy, setBusy] = useState(false)
   const [openPole, setOpenPole] = useState<Flag | null>(null)
 
+  // The enrolment form. One dialog serves both ends of a pole's life on the
+  // rack: `attachPole` unset puts a new pole up, set gives a pole that was
+  // enrolled ahead of its tag the tag it was waiting for.
+  const [formOpen, setFormOpen] = useState(false)
+  const [attachPole, setAttachPole] = useState<Flag | null>(null)
+  const [formLabel, setFormLabel] = useState('')
+  const [formUid, setFormUid] = useState('')
+  const [formError, setFormError] = useState<string | undefined>(undefined)
+  const [formBusy, setFormBusy] = useState(false)
+
   const reset = useCallback(() => {
     setStage('idle')
     setTag(null)
@@ -161,7 +183,7 @@ export default function BoothPanel({ staffUid }: Props) {
       const flag = flagByUid(uid)
 
       if (flag && (flag.status === 'bound' || flag.status === 'sealed')) {
-        setTag({ uid, label: flag.label, known: true })
+        setTag({ uid, label: flag.label, known: true, pending: !!flag.tagPending })
         setStage('complete')
         return
       }
@@ -175,7 +197,12 @@ export default function BoothPanel({ staffUid }: Props) {
         return
       }
 
-      setTag({ uid, label: flag?.label ?? nextLabel(), known: !!flag })
+      setTag({
+        uid,
+        label: flag?.label ?? nextLabel(),
+        known: !!flag,
+        pending: !!flag?.tagPending,
+      })
       setStage('bind')
     },
     [toast]
@@ -386,11 +413,92 @@ export default function BoothPanel({ staffUid }: Props) {
     }
   }
 
+  // ── Putting poles on the rack ─────────────────────────────────────────────
+
+  function openEnrol(): void {
+    setAttachPole(null)
+    setFormLabel(nextLabel())
+    setFormUid('')
+    setFormError(undefined)
+    setFormOpen(true)
+  }
+
+  function openAttach(flag: Flag): void {
+    // The pole dialog closes first. Two stacked modals over one another is a
+    // thing an employee at a counter has to unpick, and the pad already takes
+    // this route for completions.
+    setOpenPole(null)
+    setAttachPole(flag)
+    setFormLabel(flag.label)
+    setFormUid('')
+    setFormError(undefined)
+    setFormOpen(true)
+  }
+
+  function closeForm(): void {
+    setFormOpen(false)
+    setAttachPole(null)
+    setFormError(undefined)
+  }
+
+  async function submitForm(): Promise<void> {
+    if (formBusy) return
+    const rawUid = formUid.trim()
+    setFormBusy(true)
+    try {
+      if (attachPole) {
+        if (!rawUid) {
+          setFormError('Present the tag on the pad, or type its uid.')
+          return
+        }
+        const res = await attachTag(attachPole.uid, rawUid)
+        if (!res.ok) {
+          setFormError(res.error)
+          return
+        }
+        // The pole's uid CHANGED — its old row has to leave every station's
+        // cache and the new one arrive. A row broadcast can add or revise one
+        // uid and has no way to say that a uid is gone, so this is the one rack
+        // action that costs a whole table.
+        broadcastTable()
+        toast.show({
+          title: `${res.flag.label} has its tag`,
+          body: 'It answers at a plinth from the next tap.',
+          icon: 'scan-line',
+        })
+      } else {
+        const res = await registerFlag({
+          label: formLabel.trim().toUpperCase() || undefined,
+          // Blank is not a mistake: it enrols a pole that has been made and
+          // numbered but not yet tagged. It goes on the rack ready to bind.
+          rfidUid: rawUid || undefined,
+        })
+        if (!res.ok) {
+          setFormError(res.error)
+          return
+        }
+        broadcastRow(res.flag.uid)
+        toast.show({
+          title: `${res.flag.label} on the rack`,
+          body: res.flag.tagPending
+            ? 'No tag yet — attach one when it is potted in.'
+            : 'Ready to bind.',
+          icon: 'flag',
+        })
+      }
+      closeForm()
+      refresh()
+    } finally {
+      setFormBusy(false)
+    }
+  }
+
   // ── The rack ──────────────────────────────────────────────────────────────
 
   const rack = flagStates()
   const out = rack.filter((s) => s.flag.status === 'bound' || s.flag.status === 'sealed')
   const overdue = rack.filter((s) => s.overdue)
+  const pending = rack.filter((s) => s.flag.tagPending)
   const openState = openPole ? rack.find((s) => s.flag.uid === openPole.uid) : undefined
 
   /**
@@ -469,7 +577,13 @@ export default function BoothPanel({ staffUid }: Props) {
                 </span>
                 <span className="booth__stage-note">
                   {stage === 'bind'
-                    ? `${tag?.label ?? ''}${tag && !tag.known ? ' — new pole' : ''}`
+                    ? `${tag?.label ?? ''}${
+                        tag && !tag.known
+                          ? ' — new pole'
+                          : tag?.pending
+                            ? ' — no tag attached'
+                            : ''
+                      }`
                     : 'Tap a pole on the pad, or choose one from the rack'}
                 </span>
               </div>
@@ -665,6 +779,13 @@ export default function BoothPanel({ staffUid }: Props) {
                         Choose their own episode before binding.
                       </p>
                     ) : null}
+                    {tag.pending ? (
+                      <p className="row booth__pass-note" style={{ gap: 6, marginTop: 8 }}>
+                        <Icon name="scan-line" size={13} />
+                        This pole has no tag. The binding holds and the walk is recorded, but
+                        it cannot be tapped at a plinth until one is attached.
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="row" style={{ gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
@@ -683,14 +804,26 @@ export default function BoothPanel({ staffUid }: Props) {
 
         {/* ── The rack ──────────────────────────────────────────────────── */}
         <div>
-          <span className="booth__label">The rack</span>
-          <p className="muted" style={{ margin: '0 0 10px', fontSize: 12 }}>
-            {rack.length} poles · {out.length} out
-            {overdue.length > 0 ? ` · ${overdue.length} overdue` : ''}
-          </p>
+          <div className="booth__rack-head">
+            <div>
+              <span className="booth__label">The rack</span>
+              {/* Inline, like every other one-off in this panel: `.muted` sets a
+                  14px face and a class of equal specificity cannot be relied on
+                  to beat it once the two stylesheets are bundled. */}
+              <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
+                {rack.length} poles · {out.length} out
+                {overdue.length > 0 ? ` · ${overdue.length} overdue` : ''}
+                {pending.length > 0 ? ` · ${pending.length} awaiting a tag` : ''}
+              </p>
+            </div>
+            <Button size="sm" variant="secondary" icon="plus" onClick={openEnrol}>
+              Enrol a pole
+            </Button>
+          </div>
           {rack.length === 0 ? (
             <p className="muted" style={{ fontSize: 13 }}>
-              No poles enrolled. Tap a new tag on the pad to put one on the rack.
+              No poles on the rack. Enrol one — with its tag, or ahead of the tag if it has
+              not been potted in yet.
             </p>
           ) : (
             <div className="booth__rack">
@@ -725,6 +858,12 @@ export default function BoothPanel({ staffUid }: Props) {
           }
         >
           <p style={{ marginTop: 0 }}>{openState.note}</p>
+          {openPole.tagPending ? (
+            <p className="muted row" style={{ gap: 6, fontSize: 13 }}>
+              <Icon name="scan-line" size={13} />
+              Bind it and walk it as usual — it simply cannot be tapped at a plinth yet.
+            </p>
+          ) : null}
           {openPole.lastPlaceId ? (
             <p className="muted row" style={{ gap: 6, fontSize: 13 }}>
               <Icon name="map-pin" size={13} />
@@ -733,6 +872,12 @@ export default function BoothPanel({ staffUid }: Props) {
           ) : null}
 
           <div className="row" style={{ gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+            {openPole.tagPending ? (
+              <Button variant="secondary" icon="scan-line" onClick={() => openAttach(openPole)}>
+                Attach a tag
+              </Button>
+            ) : null}
+
             {openPole.status === 'bound' || openPole.status === 'sealed' ? (
               <Button
                 icon="flag-off"
@@ -811,6 +956,107 @@ export default function BoothPanel({ staffUid }: Props) {
             Release is an administrative undo — the binding should never have existed. Completing
             keeps the record of who walked and closes their day.
           </p>
+        </Dialog>
+      ) : null}
+
+      {formOpen ? (
+        <Dialog
+          eyebrow="The rack"
+          title={attachPole ? 'Attach a tag' : 'Enrol a pole'}
+          onClose={formBusy ? undefined : closeForm}
+          footer={
+            <>
+              <Button variant="ghost" onClick={closeForm} disabled={formBusy}>
+                Cancel
+              </Button>
+              <Button
+                icon={attachPole ? 'scan-line' : 'plus'}
+                onClick={() => void submitForm()}
+                disabled={formBusy}
+              >
+                {formBusy
+                  ? attachPole
+                    ? 'Attaching…'
+                    : 'Enrolling…'
+                  : attachPole
+                    ? `Attach to ${attachPole.label}`
+                    : 'Put it on the rack'}
+              </Button>
+            </>
+          }
+        >
+          <p style={{ marginTop: 0 }}>
+            {attachPole
+              ? `${attachPole.label} was enrolled ahead of its tag. Read the tag on the pad or type its uid, and the pole answers to it from the next tap. Its party, questline and passage are untouched.`
+              : 'Give the pole the number printed on it. The tag is optional — leave it blank for a pole that has been made but not yet tagged, and it still goes on the rack ready to bind.'}
+          </p>
+
+          {attachPole ? null : (
+            <div className="booth__section">
+              <Input
+                label="Label"
+                hint="Printed on the pole"
+                icon="flag"
+                value={formLabel}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="FLAG-01"
+                onChange={(e) => {
+                  setFormLabel(e.target.value.toUpperCase())
+                  if (formError) setFormError(undefined)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void submitForm()
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          <div className="booth__section">
+            <Input
+              label="Tag uid"
+              hint={attachPole ? 'From the pad' : 'Optional'}
+              icon="scan-line"
+              value={formUid}
+              autoComplete="off"
+              spellCheck={false}
+              // A 7-byte NTAG uid, 14 characters — a real shape off a real
+              // reader. Deliberately not 16: that is the length reserved for the
+              // ids minted for poles that have no tag.
+              placeholder="04A2B3C4D5E680"
+              onChange={(e) => {
+                // Upper-cased and nothing else. A uid is REJECTED, NOT REPAIRED
+                // — dropping the characters that do not belong would turn a
+                // mis-read tag into a different, plausible-looking uid, and the
+                // pole would answer to a tag nobody is holding.
+                setFormUid(e.target.value.toUpperCase())
+                if (formError) setFormError(undefined)
+              }}
+              onKeyDown={(e) => {
+                // A wedge reader types the uid and then an Enter.
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  void submitForm()
+                }
+              }}
+            />
+            <p className="booth__pass-note" style={{ marginTop: 6 }}>
+              Eight to twenty hex characters, exactly as the reader gives them.
+            </p>
+          </div>
+
+          {formError ? (
+            <p
+              className="row"
+              style={{ gap: 6, marginTop: 12, color: 'var(--status-danger)', font: 'var(--body-base)' }}
+            >
+              <Icon name="circle-alert" size={14} />
+              {formError}
+            </p>
+          ) : null}
         </Dialog>
       ) : null}
     </Card>

@@ -46,6 +46,37 @@ import * as cloudSync from './cloudSync'
 
 const FLAGS_KEY = 'ql:flags'
 
+/**
+ * Uids whose documents this console has struck, and when.
+ *
+ * `mergeFlagsSnapshot` seeds itself from the local mirror and then unions the
+ * WHOLE snapshot over it, honouring only the `removed` changes. So between the
+ * create and the delete of an `attachTag` the struck document is still in the
+ * server's result set, and the union would write it straight back into the
+ * mirror it was just taken out of: one physical pole showing as two chips under
+ * one label, with nothing on either to say which is the ghost. Retiring the
+ * wrong one takes a good pole out of service.
+ *
+ * cloudSync READS this key rather than importing anything from here, because
+ * flagService imports cloudSync and the arrow only goes one way. It is mirrored
+ * there beside `FLAGS_KEY` and the uid allowlist, which are duplicated for the
+ * same reason.
+ *
+ * It is deliberately local. A second booth machine holds no tombstone and sees
+ * the pair for that one round trip, until the `removed` change reaches it —
+ * which is the right trade: this guards the console an employee is looking at
+ * while they act on the pole in their hand, and costs no coordination.
+ */
+const STRUCK_KEY = 'ql:flagsStruck'
+
+/**
+ * Long enough to cover a slow round trip; short enough that a delete which never
+ * landed still resurfaces as a duplicate an employee can see and retire — which
+ * is the documented outcome of a half-finished attach, not a state to hide
+ * forever.
+ */
+const STRUCK_TTL_MS = 5 * 60 * 1000
+
 /** Booth writes happen with an employee watching a spinner — same deadline as auth. */
 const BOOTH_TIMEOUT_MS = 10_000
 
@@ -124,6 +155,18 @@ function upsertLocal(flag: Flag): Flag {
   return flag
 }
 
+/**
+ * Moves a pole onto a new id in ONE local write.
+ *
+ * `attachTag` is the only caller, and this is deliberately not two calls: the
+ * mirror is a single `save`, so it cannot half-change. The ordering that has to
+ * be got right is the CLOUD one — see `attachTag`.
+ */
+function swapLocal(oldUid: string, flag: Flag): Flag {
+  setFlags([...listFlags().filter((f) => f.uid !== oldUid && f.uid !== flag.uid), flag])
+  return flag
+}
+
 /** Local write plus a fire-and-forget write-through. */
 function writeFlag(flag: Flag): Flag {
   upsertLocal(flag)
@@ -149,6 +192,52 @@ function clean<T extends Record<string, unknown>>(obj: T): T {
  */
 function pushFlagDoc(flag: Flag): void {
   cloudSync.pushFlag(flag)
+}
+
+/**
+ * Strikes a pole's document.
+ *
+ * Only `attachTag` needs this — nothing else in the rack ever changes a pole's
+ * id, and every other write is a whole-document `setDoc`. It lives here rather
+ * than beside `pushFlag` in cloudSync because it is one half of an operation
+ * whose ORDERING is the whole point, and both halves belong where that can be
+ * read in one place.
+ */
+function deleteFlagDoc(uid: string): void {
+  // Before the delete is even attempted, because the snapshot that would
+  // resurrect the document can arrive before the delete does — it is fired by
+  // the CREATE that preceded this call.
+  markStruck(uid)
+  void ensureFirebase().then(async (fb) => {
+    if (!fb) return
+    try {
+      const { doc, deleteDoc } = await import('firebase/firestore')
+      await deleteDoc(doc(fb.db, 'flags', uid))
+    } catch {
+      // Swallowed on purpose. The new document is already written, so the worst
+      // this leaves is a duplicate: the stale doc comes back through the next
+      // snapshot as a second chip carrying the same label, which an employee can
+      // see and retire. A pole that vanished from every console would not be
+      // visible at all — which is why the create is the half that goes first.
+    }
+  })
+}
+
+/**
+ * Tombstones a uid so the snapshot merge cannot put it back.
+ *
+ * Expired entries are dropped on every strike, so the record never grows: the
+ * only writer is `attachTag`, and it is a counter operation, not a loop.
+ */
+function markStruck(uid: string): void {
+  const now = Date.now()
+  const struck = load<Record<string, number>>(STRUCK_KEY, {})
+  const next: Record<string, number> = {}
+  Object.entries(struck).forEach(([k, at]) => {
+    if (typeof at === 'number' && now - at < STRUCK_TTL_MS) next[k] = at
+  })
+  next[uid] = now
+  save(STRUCK_KEY, next)
 }
 
 /**
@@ -185,6 +274,67 @@ function clearPresenceDocs(userIds: string[]): void {
 export function normalizeUid(raw: string): string | null {
   const up = raw.trim().toUpperCase()
   return /^[0-9A-F]{8,20}$/.test(up) ? up : null
+}
+
+// ── A pole enrolled ahead of its tag ─────────────────────────────────────────
+//
+// Poles are printed, numbered and racked before opening day; the tags are potted
+// into the tips afterwards, and one occasionally dies under a standard that is
+// otherwise perfectly good. So a pole exists on the rack with no tag on it, and
+// it still has to bind, spend a Passage and walk — the tag is only how a plinth
+// recognises it, not what the park sells.
+//
+// The record's id IS the tag uid (`flags/{tagUid}`), so a pole with no tag still
+// needs one. It is minted here and must satisfy `normalizeUid` unchanged,
+// because from that moment it flows through every path a real uid does.
+//
+// COLLISION-SAFETY IS BY LENGTH, NOT BY LUCK. ISO/IEC 14443-3 defines exactly
+// three UID sizes — single 4 bytes, double 7, triple 10 — so a uid read off a
+// reader and hex-encoded is always 8, 14 or 20 characters. Nothing else can come
+// off a pad. A synthetic uid is 16, a length no tag in the world can produce, so
+// it cannot shadow a factory uid however many tags the park buys, and a tag
+// presented at the counter can never be refused as "already enrolled" against a
+// pole that has none. The random half exists only so two consoles enrolling
+// pending poles on separate machines cannot mint the same id; the guarantee
+// against real hardware is the length alone. The 'FF' prefix is cosmetic — it
+// makes a synthetic id obvious in a log — and carries no part of the argument.
+const PENDING_UID_LEN = 16
+const PENDING_UID_PREFIX = 'FF'
+const HEX = '0123456789ABCDEF'
+
+/**
+ * Hex, from the CSPRNG.
+ *
+ * Not `ids.shortCode`: its alphabet is deliberately not hex (it drops the
+ * letters that misread when said aloud), and `ids.uid`'s own fallback is
+ * base-36 — neither would survive `normalizeUid`. 256 % 16 === 0, so indexing
+ * this alphabet with a raw byte carries none of the modulo bias `shortCode` has
+ * to reject-sample away.
+ */
+function randomHex(len: number): string {
+  let out = ''
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(len)
+    crypto.getRandomValues(bytes)
+    for (let i = 0; i < len; i++) out += HEX[bytes[i] & 0x0f]
+    return out
+  }
+  // Every browser this console runs in has WebCrypto; this only keeps a bare
+  // test runner from making enrolment throw.
+  for (let i = 0; i < len; i++) out += HEX[Math.floor(Math.random() * 16)]
+  return out
+}
+
+/** An id for a pole that has no tag yet. Distinct from every real uid by length. */
+function mintPendingUid(): string {
+  const taken = new Set(listFlags().map((f) => f.uid))
+  let uid: string
+  // Fifty-six random bits: a repeat is not a real possibility. The loop is here
+  // so that "impossible" can never quietly mean "overwrote a pole on the rack".
+  do {
+    uid = PENDING_UID_PREFIX + randomHex(PENDING_UID_LEN - PENDING_UID_PREFIX.length)
+  } while (taken.has(uid))
+  return uid
 }
 
 /** True while the pole is away from the rack with a party. */
@@ -243,6 +393,14 @@ function outFor(ms: number): string {
 }
 
 function noteFor(flag: Flag, minutesOut: number | undefined, overdue: boolean): string {
+  // A missing tag is said AFTER the status, never instead of it: a pending pole
+  // can be bound and out with a party, and where that party is matters more at
+  // the counter than what is potted in the tip.
+  const tag = flag.tagPending ? ' No tag attached yet.' : ''
+  return `${statusNote(flag, minutesOut, overdue)}${tag}`
+}
+
+function statusNote(flag: Flag, minutesOut: number | undefined, overdue: boolean): string {
   const org = flag.orgId ? getOrg(flag.orgId)?.name : undefined
   const walk = [flag.groupName, org, flag.episodeNumber ? `Episode ${flag.episodeNumber}` : undefined]
     .filter(Boolean)
@@ -340,8 +498,22 @@ function withDeadline<T>(work: Promise<T>, ms: number, onTimeout: T): Promise<T>
  * Compare-and-set rather than last-write-wins because two booth machines can be
  * reading poles at the same counter: whichever transaction commits second must
  * see the first one's binding, not overwrite it.
+ *
+ * `requireFree` tightens that to "nothing whatever may be filed under this id".
+ * The same-group exemption exists for ONE case — a Hero party rebinding the pole
+ * they are already carrying — and it is only safe because a rebind writes over
+ * the very record it read. `attachTag` is not a rebind: it writes a pole onto an
+ * id that belonged to a DIFFERENT pole, so any document already there is another
+ * standard and overwriting it would lose one of two physical poles from the
+ * rack. This is the whole server-side defence for that path, because the local
+ * clash check runs against a mirror that can be stale or still filling — which
+ * is precisely the condition this transaction exists for.
  */
-async function claimFlagDoc(next: Flag, groupId: string | null): Promise<ClaimResult> {
+async function claimFlagDoc(
+  next: Flag,
+  groupId: string | null,
+  requireFree = false
+): Promise<ClaimResult> {
   const fb = await ensureFirebaseWithin(BOOTH_TIMEOUT_MS)
   if (!fb) return { ok: false, reason: 'unavailable' }
   try {
@@ -351,6 +523,7 @@ async function claimFlagDoc(next: Flag, groupId: string | null): Promise<ClaimRe
     const claim = runTransaction<ClaimResult>(fb.db, async (tx) => {
       const snap = await tx.get(ref)
       const server = snap.exists() ? (snap.data() as Flag) : null
+      if (server && requireFree) return { ok: false, reason: 'conflict', flag: server }
       if (server && isOut(server) && server.groupId && server.groupId !== groupId) {
         return { ok: false, reason: 'conflict', flag: server }
       }
@@ -373,7 +546,12 @@ async function claimFlagDoc(next: Flag, groupId: string | null): Promise<ClaimRe
 }
 
 export interface RegisterFlagInput {
-  rfidUid: string
+  /**
+   * The uid as the pad read it. OMITTED OR BLANK enrols the pole ahead of its
+   * tag: it goes on the rack under a synthetic id, ready to bind, and takes a
+   * real tag later through `attachTag`.
+   */
+  rfidUid?: string
   /** Printed on the pole. Minted as the next free FLAG-NN when omitted. */
   label?: string
   at?: number
@@ -391,7 +569,13 @@ export interface RegisterFlagInput {
  */
 export async function registerFlag(input: RegisterFlagInput): Promise<FlagOutcome> {
   const at = input.at ?? Date.now()
-  const uid = normalizeUid(input.rfidUid)
+  const raw = (input.rfidUid ?? '').trim()
+
+  // No tag on the counter is not an error — it is a pole made ahead of its tag,
+  // which is the ordinary state of a rack before opening day. It is enrolled
+  // under a minted id and is a real pole in every other respect.
+  const pending = raw === ''
+  const uid = pending ? mintPendingUid() : normalizeUid(raw)
   if (!uid) return { ok: false, error: 'That tag could not be read. Present it to the pad again.' }
 
   const known = listFlags().find((f) => f.uid === uid)
@@ -407,6 +591,7 @@ export async function registerFlag(input: RegisterFlagInput): Promise<FlagOutcom
     status: 'racked',
     updatedAt: at,
     tableAt: at,
+    ...(pending ? { tagPending: true as const } : {}),
     ...(input.demo ? { demo: input.demo } : {}),
   }
 
@@ -420,6 +605,98 @@ export async function registerFlag(input: RegisterFlagInput): Promise<FlagOutcom
     // 'unavailable' — fall through and keep the pole on this machine's rack.
   }
   return { ok: true, flag: writeFlag(flag) }
+}
+
+/**
+ * Gives a pole that was enrolled ahead of its tag the tag it was waiting for.
+ *
+ * Without this, pre-enrolment is a dead end: a park that racks FLAG-01..12 in
+ * March and tags them in May would have `registerFlag` mint FLAG-13.. beside the
+ * twelve poles it already owns, and the printed numbers would stop meaning
+ * anything.
+ *
+ * ── THE ID CHANGES, SO THIS IS A CREATE PLUS A DELETE ────────────────────────
+ *
+ * A document id cannot be edited, and the id here IS the uid. The ORDER decides
+ * what a half-finished attach leaves behind, so the new document is written
+ * FIRST and the old one struck only once it has landed. Fail on the create and
+ * the pole is exactly where it was — on the rack, under its pending id, still
+ * bindable, nothing lost. Fail on the delete and the rack carries a duplicate
+ * for a while: two chips, one label, visible to the employee and retirable.
+ * Delete first and a failure between the two halves loses the pole from every
+ * console in the park, which is not a state anybody can see, let alone fix.
+ *
+ * ── A POLE THAT IS OUT WITH A PARTY MAY BE ATTACHED, AND HERE IS WHY ─────────
+ *
+ * It is allowed precisely BECAUSE only a tag-pending pole can reach this
+ * function. No tag anywhere in the world carries the old uid, so no tap can be
+ * in flight against it and no station holds a row that resolves it — the id
+ * being replaced is one nothing but this rack has ever seen. The binding rides
+ * across untouched (party, questline, episode, passage, label), so the walk is
+ * undisturbed; the party simply gains the ability to tap at the next plinth,
+ * which is the whole point of walking up to the counter mid-day with a tag.
+ *
+ * `tableAt` moves, like every write that changes what a station must resolve.
+ * The caller must broadcast the WHOLE table rather than a row: a row can add or
+ * revise one uid, but it has no way to say that a uid is gone.
+ */
+export async function attachTag(
+  currentUid: string,
+  rfidUid: string,
+  opts: RackFlagOptions = {}
+): Promise<FlagOutcome> {
+  const at = opts.at ?? Date.now()
+  const target = normalizeUid(rfidUid)
+  if (!target) return { ok: false, error: 'That tag could not be read. Present it to the pad again.' }
+
+  const pole = flagByUid(currentUid)
+  if (!pole) return { ok: false, error: 'That pole is not on the rack.' }
+  // A pole that already answers to a tag is left alone. Re-tagging a live pole
+  // would mean retiring its old uid from the park's table as well as adding the
+  // new one — a station holding the stale row would go on resolving a tag that
+  // is no longer on any pole — and that is a rack operation of its own, not a
+  // side effect of this one.
+  if (!pole.tagPending) {
+    return { ok: false, error: `${pole.label} already answers to a tag.`, conflict: pole }
+  }
+  const clash = listFlags().find((f) => f.uid === target)
+  if (clash) {
+    return { ok: false, error: `That tag is already enrolled as ${clash.label}.`, conflict: clash }
+  }
+
+  const next: Flag = clean({ ...pole, uid: target, updatedAt: at, tableAt: at })
+  // The pole has its tag now, so the field that said it had none must not ride
+  // across. Deleted rather than set to undefined: this object is written whole
+  // by `setDoc`, and a key that is merely undefined is a key Firestore rejects.
+  delete next.tagPending
+
+  if (isConfigured()) {
+    // The tag must answer to NOBODY, so the claim is `requireFree` and the group
+    // is `null`. Passing this pole's own group would hand the transaction the
+    // rebind exemption: a tag already out with this very party — two poles on the
+    // counter, one uid mistyped for the other — would satisfy `server.groupId ===
+    // groupId`, and the other pole's document would be overwritten under this
+    // pole's binding while keeping ITS label, then struck by the delete below.
+    const claimed = await claimFlagDoc(next, null, true)
+    if (claimed.ok) {
+      const written = swapLocal(pole.uid, claimed.flag)
+      deleteFlagDoc(pole.uid)
+      return { ok: true, flag: written }
+    }
+    if (claimed.reason === 'conflict') {
+      upsertLocal(claimed.flag)
+      return {
+        ok: false,
+        error: `That tag is already enrolled as ${claimed.flag.label}.`,
+        conflict: claimed.flag,
+      }
+    }
+    // 'unavailable' — attach on this machine; the write-through catches up.
+  }
+  const written = swapLocal(pole.uid, next)
+  pushFlagDoc(next)
+  deleteFlagDoc(pole.uid)
+  return { ok: true, flag: written }
 }
 
 // ── Binding a pole to a party ─────────────────────────────────────────────────
@@ -573,6 +850,11 @@ export async function bindFlag(input: BindFlagInput): Promise<FlagOutcome> {
   const next: Flag = clean({
     uid,
     label,
+    // Carried, not dropped. This object is built from scratch rather than
+    // patched, and a pole enrolled ahead of its tag is still waiting for one
+    // after it has been bound — losing the flag here would make a pole that
+    // cannot be tapped look like one that can.
+    tagPending: existing?.tagPending,
     status: 'bound' as FlagStatus,
     groupId,
     groupName,
@@ -644,6 +926,8 @@ export async function releaseFlag(rfidUid: string, opts: RackFlagOptions = {}): 
   const next: Flag = clean({
     uid: flag.uid,
     label: flag.label,
+    // Belongs to the pole, not to the binding being taken back.
+    tagPending: flag.tagPending,
     status: 'racked' as FlagStatus,
     lastSeenAt: flag.lastSeenAt,
     lastPlaceId: flag.lastPlaceId,
@@ -834,6 +1118,12 @@ export function tableVersion(): number {
  * the park has never heard of: the first is silence, the second sends a station
  * into a resync loop. Rows are sorted by uid so the same rack always produces
  * the same bytes, which is what makes the firmware's table CRC meaningful.
+ *
+ * A pole enrolled ahead of its tag is listed on the same terms — one more known
+ * pole with nothing to play. It costs a row that can never be tapped, and buys a
+ * table builder with no special cases in it. Attaching the tag then REPLACES
+ * that row with one under the real uid, which is the single rack change a row
+ * broadcast cannot express: `attachTag`'s caller has to send the whole table.
  *
  * Nothing on the air is free text — every field here is a number or hex. The
  * first person who wants a station to greet a party by name will ask for
