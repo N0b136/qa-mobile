@@ -93,6 +93,9 @@ const FLAGS_KEY = 'ql:flags'
 
 /** The tag-uid allowlist, mirrored from `flagService.normalizeUid`. See mergeFlagsSnapshot. */
 const FLAG_UID_RE = /^[0-9A-F]{8,20}$/
+/** Mirrored from `flagService`'s STRUCK_KEY / STRUCK_TTL_MS. See mergeFlagsSnapshot. */
+const FLAGS_STRUCK_KEY = 'ql:flagsStruck'
+const FLAGS_STRUCK_TTL_MS = 5 * 60 * 1000
 const ANNOUNCE_KEY = 'ql:announcements'
 /** Matches announcementService's BOARD_CAP — heroes ride inside the documents. */
 const ANNOUNCE_CAP = 40
@@ -545,6 +548,18 @@ function mergeFlagsSnapshot(snap: QuerySnapshot<DocumentData>): void {
     if (c.type === 'removed') byUid.delete(c.doc.id)
   })
 
+  // A pole given its tag moves onto a new id, which is a create plus a delete —
+  // and the create's own snapshot still carries the struck document, because the
+  // delete has not reached the server yet. Without this the union below would
+  // write it back into the mirror it was just taken out of: one physical pole as
+  // two chips under one label, an `assignmentTable` row for a uid no tag carries,
+  // and no way for an employee to tell which chip is the ghost. `flagService`
+  // tombstones a uid the moment it strikes it; the tombstone ages out, so a
+  // delete that never landed still resurfaces as the visible, retirable
+  // duplicate that a half-finished attach is documented to leave.
+  const now = Date.now()
+  const struck = load<Record<string, number>>(FLAGS_STRUCK_KEY, {})
+
   snap.forEach((d) => {
     const incoming = d.data() as Flag
     if (!incoming || typeof incoming.updatedAt !== 'number') return
@@ -560,6 +575,10 @@ function mergeFlagsSnapshot(snap: QuerySnapshot<DocumentData>): void {
     // whole listener down: `localeCompare` on undefined throws inside the
     // snapshot callback, which kills every merge after it.
     if (typeof incoming.label !== 'string' || incoming.label === '') return
+    // After the allowlist, never before it: a document id is outside data, and
+    // it must not index anything until it has been vouched for.
+    const strickenAt = struck[d.id]
+    if (typeof strickenAt === 'number' && now - strickenAt < FLAGS_STRUCK_TTL_MS) return
     const existing = byUid.get(incoming.uid)
     if (!existing || incoming.updatedAt >= existing.updatedAt) byUid.set(incoming.uid, incoming)
   })
