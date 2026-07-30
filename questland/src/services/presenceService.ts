@@ -934,6 +934,21 @@ export function enRoute(now: number = Date.now()): Occupant[] {
 }
 
 /**
+ * Everyone standing in the Village of Queston — through the gate, not yet on a
+ * walk.
+ *
+ * The village is the one place with no window: a station holds a party for
+ * fifteen minutes and the chief's house for five, but a village record has
+ * nothing to expire INTO, so `statusOf` returns 'village' for as long as the
+ * record is tracked at all. That makes this list the park's waiting room rather
+ * than a snapshot of a moment — a group sits on it until they call on the chief,
+ * leave the board, or a Guide checks them in somewhere else.
+ */
+export function inVillage(now: number = Date.now()): Occupant[] {
+  return occupants(now).filter((o) => o.status === 'village')
+}
+
+/**
  * Takes a released standard off a party's rows WITHOUT taking the party off the
  * board.
  *

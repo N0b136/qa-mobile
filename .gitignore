@@ -13,6 +13,9 @@ skills-lock.json
 # Superseded / scratch
 content-intake/park-map-sample.svg
 scratch/
+# One-off screenshot/verification harnesses and their output — the pattern is
+# documented in CLAUDE.md, but a run's PNGs are not repo history.
+scratchpad/
 *.log
 
 # Station card art masters — heavy source PNGs kept local only; the
