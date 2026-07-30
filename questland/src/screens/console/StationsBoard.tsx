@@ -416,37 +416,52 @@ export default function StationsBoard() {
         </div>
       ) : null}
 
-      <BoardList title="On the paths" empty="Nobody is between places.">
-        {roaming.map((o, i) => (
-          <BoardRow
-            key={o.key}
-            first={i === 0}
-            glyph="footprints"
-            name={o.name}
-            orgId={o.orgId}
-            note={`left ${o.placeName} · ${elapsed(o, now)}`}
-          />
-        ))}
-      </BoardList>
+      {/* Two columns, side by side under the chart — the paths on the left, the
+          village on the right. `auto-fit` rather than a hard `1fr 1fr`: the card
+          spans the console grid, and the same component has to survive a narrow
+          render (a Warden's tablet, a browser at half width) by stacking rather
+          than crushing two rosters into 160px each. */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          columnGap: 32,
+          rowGap: 0,
+          alignItems: 'start',
+        }}
+      >
+        <BoardList title="On the paths" empty="Nobody is between places.">
+          {roaming.map((o, i) => (
+            <BoardRow
+              key={o.key}
+              first={i === 0}
+              glyph="footprints"
+              name={o.name}
+              orgId={o.orgId}
+              note={`left ${o.placeName} · ${elapsed(o, now)}`}
+            />
+          ))}
+        </BoardList>
 
-      {/* The waiting room. A group here is through the gate and has not called on
-          the chief yet, so the one fact staff want past the name is whether they
-          are holding a quest at all: an order badge means the booth has bound
-          them and they are walking up the road, and no badge means the passage is
-          still to be presented. */}
-      <BoardList title="In the village" empty="Nobody is waiting in Queston.">
-        {villagers.map((o, i) => (
-          <BoardRow
-            key={o.key}
-            first={i === 0}
-            glyph={o.kind === 'party' ? 'users' : 'user'}
-            name={o.name}
-            orgId={o.orgId}
-            trailing={o.orgId ? null : <Badge tone="neutral">No quest yet</Badge>}
-            note={`arrived ${elapsed(o, now)}`}
-          />
-        ))}
-      </BoardList>
+        {/* The waiting room. A group here is through the gate and has not called
+            on the chief yet, so the one fact staff want past the name is whether
+            they are holding a quest at all: an order badge means the booth has
+            bound them and they are walking up the road, and no badge means the
+            passage is still to be presented. */}
+        <BoardList title="In the village" empty="Nobody is waiting in Queston.">
+          {villagers.map((o, i) => (
+            <BoardRow
+              key={o.key}
+              first={i === 0}
+              glyph={o.kind === 'party' ? 'users' : 'user'}
+              name={o.name}
+              orgId={o.orgId}
+              trailing={o.orgId ? null : <Badge tone="neutral">No quest yet</Badge>}
+              note={`arrived ${elapsed(o, now)}`}
+            />
+          ))}
+        </BoardList>
+      </div>
 
       {openPlace ? (
         <Dialog
@@ -530,14 +545,18 @@ export default function StationsBoard() {
 }
 
 /**
- * One of the rosters under the chart. Both answer the same shape of question —
- * "who is in this state, and how long have they been in it" — so they are one
- * component; a second hand-rolled heading would drift from the first the next
- * time either is touched.
+ * One of the two columns of roster under the chart. Both answer the same shape
+ * of question — "who is in this state, and how long have they been in it" — so
+ * they are one component; a second hand-rolled heading would drift from the
+ * first the next time either is touched.
+ *
+ * It owns its own element rather than returning a fragment, because it is a
+ * column: a fragment's heading and rows would be laid out as separate grid
+ * items and the two lists would interleave.
  */
 function BoardList({ title, empty, children }: { title: string; empty: string; children: ReactNode }) {
   return (
-    <>
+    <section style={{ minWidth: 0 }}>
       <h3
         style={{
           margin: '18px 0 8px',
@@ -556,7 +575,7 @@ function BoardList({ title, empty, children }: { title: string; empty: string; c
           {children}
         </div>
       )}
-    </>
+    </section>
   )
 }
 
