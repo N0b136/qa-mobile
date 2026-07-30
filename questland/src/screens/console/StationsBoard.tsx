@@ -6,19 +6,33 @@
 // station and joins the en-route list below the chart — we do not track precise
 // locations, so "somewhere on the paths" is the whole of what we claim.
 //
+// Two lists sit under the chart, and they are the two places a party can be that
+// no station pin will show you standing at for long: on the paths between
+// stations, and in the village before the walk has started. The village square
+// does carry a pin, but a group can sit in it for an hour — reading that off a
+// head count means opening the dialog to find out who, which is exactly what
+// staff at the booth are asking. So it gets a list of its own.
+//
 // The ring around each pin is a different fact about the same place: whether
 // the reader out there is alive, and whether it is holding the flag table the
 // park is actually running. Occupancy and condition have to be readable at the
 // same glance, so they never share a channel — the glyph and the head count
 // stay gold for occupancy, the ring and the corner mark carry the condition.
 
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { Children, useEffect, useState, useSyncExternalStore } from 'react'
+import type { ReactNode } from 'react'
 import MapCanvas from '../../components/MapCanvas'
 import { DEFAULT_POSITION, MAP_LANDMARKS, QUEST_START, STATION_COORDS, VILLAGE_PLACE } from '../../content/stationMap'
 import { STATIONS } from '../../content/stations'
 import type { Station } from '../../content/types'
 import { getOrg } from '../../content/orgs'
-import { START_WINDOW_MS, STATION_WINDOW_MS, enRoute, occupantsByPlace } from '../../services/presenceService'
+import {
+  START_WINDOW_MS,
+  STATION_WINDOW_MS,
+  enRoute,
+  inVillage,
+  occupantsByPlace,
+} from '../../services/presenceService'
 import type { Occupant } from '../../services/presenceService'
 import { tableVersion } from '../../services/flagService'
 import { GATE_STATION_NO, stationNoForPlace } from '../../services/hubProtocol'
@@ -212,7 +226,14 @@ export default function StationsBoard() {
 
   const byPlace = occupantsByPlace(now)
   const roaming = enRoute(now)
-  const atStations = Object.values(byPlace).reduce((n, list) => n + list.length, 0)
+  const villagers = inVillage(now)
+  // The village square is a place in `byPlace` like any other, so it has to come
+  // out of the station tally by hand — otherwise the strip counts every waiting
+  // group twice, once as "at a station" and once as "in the village".
+  const atStations = Object.entries(byPlace).reduce(
+    (n, [placeId, list]) => (placeId === VILLAGE_PLACE.id ? n : n + list.length),
+    0
+  )
 
   const places = chartPlaces()
   const readers = places.filter((p) => p.stationNo !== undefined)
@@ -275,11 +296,15 @@ export default function StationsBoard() {
       <div className="row" style={{ gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
         <span className="row muted" style={{ gap: 6, fontSize: 13 }}>
           <Icon name="map-pin" size={14} />
-          {atStations} checked in
+          {atStations} at stations
         </span>
         <span className="row muted" style={{ gap: 6, fontSize: 13 }}>
           <Icon name="footprints" size={14} />
           {roaming.length} en route
+        </span>
+        <span className="row muted" style={{ gap: 6, fontSize: 13 }}>
+          <Icon name="castle" size={14} />
+          {villagers.length} in the village
         </span>
       </div>
 
@@ -391,39 +416,37 @@ export default function StationsBoard() {
         </div>
       ) : null}
 
-      <h3
-        style={{
-          margin: '18px 0 8px',
-          font: '600 var(--text-sm)/1.2 var(--font-display)',
-          textTransform: 'uppercase',
-          letterSpacing: 'var(--tracking-display)',
-          color: 'var(--text-heading)',
-        }}
-      >
-        On the paths
-      </h3>
-      {roaming.length === 0 ? (
-        <p className="muted">Nobody is between places.</p>
-      ) : (
-        <div className="stack" style={{ gap: 0 }}>
-          {roaming.map((o, i) => (
-            <div
-              key={o.key}
-              className="row row--between"
-              style={{ padding: '10px 0', borderTop: i === 0 ? 'none' : '1px solid var(--border-hairline)' }}
-            >
-              <span className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                <Icon name="footprints" size={14} />
-                <strong style={{ color: 'var(--text-heading)' }}>{o.name}</strong>
-                <OrgBadge orgId={o.orgId} />
-              </span>
-              <span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
-                left {o.placeName} · {elapsed(o, now)}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+      <BoardList title="On the paths" empty="Nobody is between places.">
+        {roaming.map((o, i) => (
+          <BoardRow
+            key={o.key}
+            first={i === 0}
+            glyph="footprints"
+            name={o.name}
+            orgId={o.orgId}
+            note={`left ${o.placeName} · ${elapsed(o, now)}`}
+          />
+        ))}
+      </BoardList>
+
+      {/* The waiting room. A group here is through the gate and has not called on
+          the chief yet, so the one fact staff want past the name is whether they
+          are holding a quest at all: an order badge means the booth has bound
+          them and they are walking up the road, and no badge means the passage is
+          still to be presented. */}
+      <BoardList title="In the village" empty="Nobody is waiting in Queston.">
+        {villagers.map((o, i) => (
+          <BoardRow
+            key={o.key}
+            first={i === 0}
+            glyph={o.kind === 'party' ? 'users' : 'user'}
+            name={o.name}
+            orgId={o.orgId}
+            trailing={o.orgId ? null : <Badge tone="neutral">No quest yet</Badge>}
+            note={`arrived ${elapsed(o, now)}`}
+          />
+        ))}
+      </BoardList>
 
       {openPlace ? (
         <Dialog
@@ -503,6 +526,72 @@ export default function StationsBoard() {
         </Dialog>
       ) : null}
     </Card>
+  )
+}
+
+/**
+ * One of the rosters under the chart. Both answer the same shape of question —
+ * "who is in this state, and how long have they been in it" — so they are one
+ * component; a second hand-rolled heading would drift from the first the next
+ * time either is touched.
+ */
+function BoardList({ title, empty, children }: { title: string; empty: string; children: ReactNode }) {
+  return (
+    <>
+      <h3
+        style={{
+          margin: '18px 0 8px',
+          font: '600 var(--text-sm)/1.2 var(--font-display)',
+          textTransform: 'uppercase',
+          letterSpacing: 'var(--tracking-display)',
+          color: 'var(--text-heading)',
+        }}
+      >
+        {title}
+      </h3>
+      {Children.count(children) === 0 ? (
+        <p className="muted">{empty}</p>
+      ) : (
+        <div className="stack" style={{ gap: 0 }}>
+          {children}
+        </div>
+      )}
+    </>
+  )
+}
+
+function BoardRow({
+  first,
+  glyph,
+  name,
+  orgId,
+  trailing,
+  note,
+}: {
+  /** The top row wears no rule — the heading above it already is one. */
+  first: boolean
+  glyph: string
+  name: string
+  orgId?: string
+  /** Shown in place of the order badge when there is no order to name. */
+  trailing?: ReactNode
+  note: string
+}) {
+  return (
+    <div
+      className="row row--between"
+      style={{ padding: '10px 0', gap: 10, borderTop: first ? 'none' : '1px solid var(--border-hairline)' }}
+    >
+      <span className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <Icon name={glyph} size={14} />
+        <strong style={{ color: 'var(--text-heading)' }}>{name}</strong>
+        <OrgBadge orgId={orgId} />
+        {trailing}
+      </span>
+      <span className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+        {note}
+      </span>
+    </div>
   )
 }
 
