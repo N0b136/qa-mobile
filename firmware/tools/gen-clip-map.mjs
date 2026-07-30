@@ -290,6 +290,33 @@ function build() {
     )
   }
 
+  // LoRa address N is stations[N-1] — the header's clip runs are emitted BY
+  // ARRAY POSITION (renderHeader), while every card manifest derives its address
+  // from the id instead (`Number(station.id.slice(3))`, renderManifest). Those
+  // two agree only while the array is in st-01..st-21 order, and nothing else in
+  // this tool can tell that it isn't: a permutation keeps the length check above
+  // happy, keeps the 210-slot season-1.json cross-check happy (it is keyed by
+  // id), leaves the canon fingerprint byte-identical, and passes --check against
+  // its own regenerated output. So this is the one guard between a harmless-
+  // looking edit — alphabetise STATIONS, group the three base stations — and
+  // every plinth in the wood holding the wrong clip run: the card is cut right,
+  // the firmware is the liar, address 1 asks clipPresent() for a track its own
+  // card has and is told no, so it stands silent, and hands the DFPlayer track
+  // numbers that are not on the card. Nothing in the app notices, because the
+  // app looks stations up by id and never by position.
+  stations.forEach((s, i) => {
+    const expected = `st-${String(i + 1).padStart(2, '0')}`
+    if (s.id !== expected) {
+      die(
+        `stations.ts is out of address order: index ${i} holds '${s.id}', but LoRa address ` +
+          `${i + 1} must be '${expected}'. This tool assigns clip runs by array position and ` +
+          `card manifests by id — reordering STATIONS silently sends every plinth somebody ` +
+          `else's speech. Put the array back in st-01..st-${String(stations.length).padStart(2, '0')} ` +
+          `order; do not "fix" this tool.`,
+      )
+    }
+  })
+
   const byId = new Map(stations.map((s) => [s.id, s]))
   const orgById = new Map(orgs.map((o) => [o.id, o]))
 

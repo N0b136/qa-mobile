@@ -488,10 +488,18 @@ a receiver you cannot reason about.
 Q1|T|0|7|312|ammzAKLiu40QnqJEousTfPp5bQHpeuR2GS0KiUfRhxnXsSU=|BdkXRO2pnJM=
 ```
 
-the MAC input is the 61 bytes `Q1|T|0|7|312|ammzAKLiu40QnqJEousTfPp5bQHpeuR2GS0KiUfRhxnXsSU=|`
+the MAC input is the 62 bytes `Q1|T|0|7|312|ammzAKLiu40QnqJEousTfPp5bQHpeuR2GS0KiUfRhxnXsSU=|`
 — the separator included. Including it means the covered region ends at an unambiguous
 byte, so a payload that happens to end in something pipe-like cannot be re-cut into a
 different split with the same MAC.
+
+Count it if you are changing it: 3 + 2 + 2 + 2 + 4 + 48 + 1 = 62, and §5's worked vector
+below gives the finished line as 75 bytes with the newline, which only adds up as
+62 + 12 (MAC) + 1 (`\n`). This sentence read 61 until 2026-07-30 and cost nothing on the
+air — both implementations always covered the right bytes — but it is the number a person
+checks a board's covered-byte count against, so a wrong one here sends them hunting an
+off-by-one that is not in the firmware. `firmware/tools/check-vectors.mjs` asserts this
+figure against the string; if you edit one, edit both.
 
 Encrypt-then-MAC, not MAC-then-encrypt: the MAC is checked **before** anything touches the
 ciphertext, so a forged frame is rejected without the decryptor ever running on

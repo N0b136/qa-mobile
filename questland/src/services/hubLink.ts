@@ -553,11 +553,17 @@ function scheduleReconnect(detail?: string): void {
       setState('idle')
       return
     }
-    void openTransport()
+    void openTransport(true)
   }, delay)
 }
 
-async function openTransport(): Promise<HubState> {
+/**
+ * `auto` is true only when the reconnect timer called this, never when a person
+ * pressed the button. The `held` branch below is the only thing that reads it,
+ * and it is the difference between a ladder that keeps climbing and one that
+ * stops — see the note there before removing the argument.
+ */
+async function openTransport(auto = false): Promise<HubState> {
   const t = transport
   if (!t) {
     setState('idle')
@@ -583,7 +589,25 @@ async function openTransport(): Promise<HubState> {
         setState('idle')
         break
       case 'held':
-        setState('held', message)
+        // `held` is terminal when a PERSON just asked for the port: another tab
+        // or a serial monitor holding it will not let go on a timer, and saying
+        // so is the whole point of the state.
+        //
+        // It must NOT be terminal when the ladder asked. Chrome raises the same
+        // `NetworkError` whether another window holds the port or the device is
+        // simply no longer on the bus (see openFailure in hubSerial.ts), and on
+        // rung 1 of a reconnect the second reading is the likely one — we held
+        // that port open a second ago. WHAT BREAKS IF THIS RE-ARMS NOTHING: a
+        // Warden knocks the cable out, the read loop faults, rung 1 tries to
+        // reopen a port whose device is gone, and this branch parks the link in
+        // `held` with no timer armed. Pushing the cable back in then does
+        // nothing at all — the board tells the Warden to close a window they
+        // never opened, every tap in the park queues behind it, and the flag
+        // table cannot go out either because the push needs `live`. Keeping the
+        // port object across closes exists precisely so that cable comes back
+        // on its own; this is the branch that lets it.
+        if (auto) scheduleReconnect(message)
+        else setState('held', message)
         break
       default:
         // A hub that vanished mid-shift is worth retrying; one that refused
@@ -612,6 +636,24 @@ export function connect(next?: HubTransport): Promise<HubState> {
   if (closeTimer !== null) {
     clearTimeout(closeTimer)
     closeTimer = null
+  }
+  // A pending ladder rung is now MOOT — this call supersedes it, and leaving it
+  // armed is a second open() on a port this one is about to have open. The
+  // button is enabled in `reconnecting` and says "Connect again", so the
+  // impatient press is the invited action: connect() opens the port and goes
+  // live, then the rung nobody cancelled fires into an already-open port, Chrome
+  // throws InvalidStateError, and the link walks itself back down the ladder and
+  // parks in `error` over a hub that is visibly streaming taps. `pump()` gates
+  // on `live`, so the flag table, answers and commands queue for a hub the
+  // console is sitting on top of, and the push button is disabled while frames
+  // scroll past. Only unmounting the board clears it. The ladder is re-armed by
+  // scheduleReconnect() if this attempt fails, so nothing is lost by dropping it
+  // here; `reconnectAttempt` is deliberately NOT reset (retryNow() is the call
+  // that means "start the backoff over"), or a press-loop could hold the ladder
+  // at rung 1 forever.
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
   }
   holds++
 

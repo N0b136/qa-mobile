@@ -10,7 +10,11 @@
     "icons": "node scripts/generate-icons.mjs",
     "icons:console": "node scripts/generate-console-icons.mjs",
     "optimize:brand": "node scripts/optimize-brand.mjs",
-    "stations": "node scripts/optimize-stations.mjs"
+    "stations": "node scripts/optimize-stations.mjs",
+    "fw:clips": "node ../firmware/tools/gen-clip-map.mjs",
+    "fw:proto": "node ../firmware/tools/sync-proto.mjs",
+    "fw:key": "node ../firmware/tools/provision-key.mjs",
+    "fw:kat": "node --experimental-strip-types ../firmware/tools/check-vectors.mjs"
   },
   "dependencies": {
     "@fontsource/alegreya-sans": "^5.3.0",
