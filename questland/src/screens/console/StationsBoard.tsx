@@ -425,7 +425,14 @@ export default function StationsBoard() {
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          columnGap: 32,
+          // Wide, and load-bearing rather than decorative: each row's note is
+          // right-aligned to its column's edge, so at 1440 the left list's
+          // "left Riddlebridge · 26 min ago" ends a few pixels from the right
+          // list's heading. The gutter is what separates the two columns —
+          // there is no rule drawn in it, because a vertical hairline would
+          // cross every row's own hairline and read as a table, implying a
+          // row-for-row correspondence between two independently sorted lists.
+          columnGap: 48,
           rowGap: 0,
           alignItems: 'start',
         }}
