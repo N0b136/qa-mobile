@@ -60,7 +60,13 @@ export interface StationHealth {
   rssi: number
   volume: number
   fwBuild: number
-  /** Set from a non-zero `err` code; cleared when the station reports clean again. */
+  /**
+   * Set from a non-zero `err` code; cleared when the station reports clean again.
+   *
+   * CURRENT STATE, not history — it is rewritten from every frame, so its
+   * presence means the LAST thing this plinth said was that it is erroring.
+   * That is what makes it safe for `conditionOf` to read it as a fault.
+   */
   lastError?: string
 }
 
@@ -270,9 +276,13 @@ export function healthFor(placeId: string): StationHealth | undefined {
  *      rest are memories of a frame that may be minutes old: a station that is
  *      gone cannot be commanded, cannot be re-synced, and cannot be trusted to
  *      still be faulted or still be behind. Somebody has to walk out to it.
- *   3. fault   — alive, but the SD card or the DFPlayer is bad. It talks and it
- *      will not play; the guest gets a dead plinth. Also needs a person, this
- *      time carrying a part, so it ranks above the condition that does not.
+ *   3. fault   — alive, but not well: the SD card or the DFPlayer is bad, OR
+ *      the station is reporting a non-zero `err`. It talks and it will not
+ *      play; the guest gets a dead plinth. Also needs a person, this time
+ *      carrying a part, so it ranks above the condition that does not. A
+ *      station that is erroring AND behind reads fault, not stale, for the same
+ *      reason: the walk out to it is the urgent fact, and the table push that
+ *      would fix the staleness is going out park-wide anyway.
  *   4. stale   — alive and whole, holding a table older than the park's. This is
  *      the dangerous one precisely because it is invisible without this board,
  *      but it is LAST of the alarms because it is the only one fixable from the
@@ -292,12 +302,30 @@ export function conditionOf(
 ): StationCondition {
   if (!h) return 'unknown'
   if (now - h.lastHeartbeatAt > SILENT_AFTER_MS) return 'silent'
-  if (!h.sdOk || !h.playerOk) return 'fault'
+  // `lastError` counts as a fault even with the card and the player both
+  // answering. Drop it and a plinth failing every play — a clip index that
+  // points past the end of the folder, an amp that will not come up, a card
+  // that mounts and reads nothing — wears a live gold ring while the guests
+  // it is turning away report it as broken, and the Warden has twenty-three
+  // green rings and no idea which one to walk to. Nothing else on this board
+  // ever surfaces `err`.
+  if (!h.sdOk || !h.playerOk || h.lastError) return 'fault'
   if (h.tableVersion < parkTableVersion) return 'stale'
   return 'live'
 }
 
-/** Alive, but behind the park's table — the ones a table push would fix. */
+/**
+ * Alive, but behind the park's table — the ones a table push would fix.
+ *
+ * A station that is behind AND faulted is deliberately NOT here: `conditionOf`
+ * calls it a fault, and this list follows the ring rather than second-guessing
+ * it, so the count under the push button can never disagree with the chips
+ * above it. Nothing is lost by that — `broadcastTable()` is park-wide, so a
+ * faulted plinth takes the table whenever anybody pushes for the others, and it
+ * reappears here on the first heartbeat after its fault clears. If it is the
+ * only station behind, the push control is hidden, which is right: somebody is
+ * already walking out to that plinth.
+ */
 export function staleStations(parkTableVersion: number, now: number = Date.now()): StationHealth[] {
   return listHealth().filter((h) => conditionOf(h, parkTableVersion, now) === 'stale')
 }

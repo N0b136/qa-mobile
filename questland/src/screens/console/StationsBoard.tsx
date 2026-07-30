@@ -149,7 +149,12 @@ const CONDITION_GLYPH: Record<StationCondition, string> = {
 const CONDITION_NOTE: Record<StationCondition, string> = {
   live: 'Reporting, and holding the current flag table.',
   stale: 'Reporting, but holding an older flag table. A table push from this board clears it.',
-  fault: 'Reporting, but its SD card or audio player is not answering.',
+  // NAMES BOTH CAUSES, the same rule the hub hints follow. A plinth reports a
+  // fault three ways — dead card, dead player, or a non-zero error code with
+  // both of those fine — and a note that only mentions the hardware sends a
+  // Warden to check two cables on a station whose trouble is in its firmware,
+  // then leaves them doubting the board when it turns out both are seated.
+  fault: 'Reporting, but not well — an error code, or its SD card or audio player not answering. The pin says which.',
   silent: 'Was reporting and stopped. Somebody has to walk out to it.',
   unknown: 'Nothing heard since the console opened.',
 }
@@ -842,11 +847,19 @@ function HealthBlock({
           <Reading label="Unsent taps" value={String(health.queueDepth)} alarm={health.queueDepth > 0} />
           <Reading label="SD card" value={health.sdOk ? 'OK' : 'Not answering'} alarm={!health.sdOk} />
           <Reading label="Audio player" value={health.playerOk ? 'OK' : 'Not answering'} alarm={!health.playerOk} />
+          {/* THE THIRD FAULT CAUSE, AND IT SITS WITH THE OTHER TWO. These three
+              lines are the whole of what an ember fault ring can mean, and the
+              dialog is the only place a Warden can tell "the card is dead" from
+              "the board is throwing 5s" — the difference between a spare SD in
+              a pocket and a reflash. Left at the foot of the block, four
+              unchanging readings below Volume and Firmware, it reads as trivia
+              and gets scrolled past on exactly the plinth somebody was sent
+              out to fix. */}
+          {health.lastError ? <Reading label="Reported fault" value={health.lastError} alarm /> : null}
           <Reading label="Signal" value={`${health.rssi} dBm`} />
           <Reading label="Volume" value={`${health.volume} of 30`} />
           <Reading label="Uptime" value={duration(health.uptimeS)} />
           <Reading label="Firmware" value={`build ${health.fwBuild}`} />
-          {health.lastError ? <Reading label="Reported" value={health.lastError} alarm /> : null}
         </div>
       )}
     </div>

@@ -75,6 +75,14 @@ export interface SimHeartbeatOptions {
   qd?: number
   sd?: 0 | 1
   df?: 0 | 1
+  /**
+   * A non-zero code, which the console reads as a FAULT on its own — sd and df
+   * can both still be 1. That is the case the `fault` preset does not cover and
+   * the only way to drive it headless, so it stays a first-class option here:
+   * without it the erroring-but-whole plinth is a condition nobody can put on a
+   * board without hand-editing localStorage. Cleared by the next frame that
+   * leaves it at 0.
+   */
   err?: number
   rssi?: number
   vol?: number
@@ -326,7 +334,11 @@ export class SimulatedTransport implements HubTransport {
    * twenty minutes to a dead plinth:
    *
    *   stale  → `{ condition: 'stale' }`, or `{ tblver: <behind the park>, tblage: 900 }`
-   *   fault  → `{ condition: 'fault' }`, or `{ sd: 0 }` / `{ df: 0 }`
+   *   fault  → `{ condition: 'fault' }`, or `{ sd: 0 }` / `{ df: 0 }`, or
+   *            `{ err: 5 }` — an error code faults a station with its card and
+   *            player both fine, and that is the only way to stage that one
+   *   clear  → `{ err: 0 }` (the default): `err` is current state, so the very
+   *            next frame at 0 takes the station back to live
    *   silent → send nothing at all and let it age out
    */
   heartbeat(stationNo: number, opts: SimHeartbeatOptions = {}): string | null {
