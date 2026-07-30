@@ -15,8 +15,11 @@ import { createSos } from './sosService'
 import { clearPresenceFor, seedPresence } from './presenceService'
 import { clearUsesFor } from './passService'
 import { clearLegsFor, runIdFor, seedLegs } from './questLogService'
-import { clearDemoFlags, seedFlags } from './flagService'
+import { clearDemoFlags, seedFlags, tableVersion } from './flagService'
 import { clearTapMemory } from './tapService'
+import { clearHealth, seedHealth } from './stationHealthService'
+import type { StationHealth } from './stationHealthService'
+import { allStationNos } from './hubProtocol'
 import { simUid } from './hubSim'
 import { clearAnnouncementsBy, seedAnnouncements } from './announcementService'
 import { stationsFor } from '../content/stations'
@@ -232,6 +235,39 @@ function demoFlags(now: number, hostId: string): Flag[] {
   return flags
 }
 
+// ── Staged station health ─────────────────────────────────────────────────────
+//
+// A park that is mostly well. Two plinths are not, because a board that only
+// ever shows twenty-three green rings teaches a Warden nothing and proves
+// nothing on a stage: the whole argument for a cached flag table is that the
+// staleness is visible, so the pitch has to be able to point at it.
+
+/** Silverhoard Mine — alive, but holding a table from before this morning's bindings. */
+const STALE_STATION_NO = 17
+/** Coolcreek Stone — was reporting, stopped half an hour ago. Somebody has to walk out. */
+const SILENT_STATION_NO = 5
+
+function demoHealth(now: number, parkVersion: number): Array<{ stationNo: number } & Partial<StationHealth>> {
+  return allStationNos().map((stationNo) => {
+    if (stationNo === STALE_STATION_NO) {
+      return {
+        stationNo,
+        // BELOW the park's, which is the whole of what makes a station stale.
+        tableVersion: parkVersion - 47 * MIN,
+        lastTableSyncAt: now - 47 * MIN,
+        rssi: -104,
+        queueDepth: 2,
+      }
+    }
+    if (stationNo === SILENT_STATION_NO) {
+      // Nothing since then — the board ages it into silence on its own, which is
+      // the only honest way to stage a station that has stopped talking.
+      return { stationNo, tableVersion: parkVersion, lastHeartbeatAt: now - 31 * MIN, lastTableSyncAt: now - 95 * MIN }
+    }
+    return { stationNo, tableVersion: parkVersion, lastTableSyncAt: now - 12 * MIN, uptimeS: 5 * 3600 + stationNo * 37 }
+  })
+}
+
 // ── Staged station records ────────────────────────────────────────────────────
 //
 // The log the console's records panel reads. Presence says where the cast is
@@ -433,6 +469,13 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
   // The rack. LOCAL ONLY, deliberately — `flags` is a staff-write collection and
   // /demo runs as the presenting GUEST, so a push would only ever be refused.
   seedFlags(demoFlags(now, currentUserId))
+
+  // And the plinths reporting on themselves — read off the rack that was just
+  // seeded, so the park's table version and the stations' agree except where we
+  // want them not to. LOCAL ONLY for the same reason and one more: station
+  // health never leaves this machine at all.
+  seedHealth(demoHealth(now, tableVersion()), now)
+
   const lantern = {
     partyId: LANTERN_PARTY_ID,
     partyName: 'Lantern Circle',
@@ -665,6 +708,10 @@ export function resetDemoData(currentUserId: string): void {
   // would make the first replayed tap of the next demo look like a duplicate.
   clearDemoFlags()
   clearTapMemory()
+  // The staged board goes with the rack it was staged against. Not restored to
+  // "all live" — an empty health map is `unknown` everywhere, which is the true
+  // reading for a console that has just been told to forget the park.
+  clearHealth()
 
   const user = getUser(currentUserId)
   save(PARTIES_KEY, listParties().filter((p) => !p.id.startsWith('demo-')))

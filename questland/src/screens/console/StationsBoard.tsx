@@ -1,11 +1,18 @@
-// The park board: the same chart the guests carry, with parties on it.
+// The park board: the same chart the guests carry, with parties on it — and
+// with the plinths reporting on themselves.
 //
 // A pin shows how many parties are standing at that station right now; tapping
 // one names them. Fifteen minutes after a check-in a party stops being at the
 // station and joins the en-route list below the chart — we do not track precise
 // locations, so "somewhere on the paths" is the whole of what we claim.
+//
+// The ring around each pin is a different fact about the same place: whether
+// the reader out there is alive, and whether it is holding the flag table the
+// park is actually running. Occupancy and condition have to be readable at the
+// same glance, so they never share a channel — the glyph and the head count
+// stay gold for occupancy, the ring and the corner mark carry the condition.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import MapCanvas from '../../components/MapCanvas'
 import { DEFAULT_POSITION, MAP_LANDMARKS, QUEST_START, STATION_COORDS, VILLAGE_PLACE } from '../../content/stationMap'
 import { STATIONS } from '../../content/stations'
@@ -13,40 +20,251 @@ import type { Station } from '../../content/types'
 import { getOrg } from '../../content/orgs'
 import { START_WINDOW_MS, STATION_WINDOW_MS, enRoute, occupantsByPlace } from '../../services/presenceService'
 import type { Occupant } from '../../services/presenceService'
+import { tableVersion } from '../../services/flagService'
+import { GATE_STATION_NO, stationNoForPlace } from '../../services/hubProtocol'
+import * as hubLink from '../../services/hubLink'
+import { broadcastTable } from '../../services/tapService'
+import { conditionOf, listHealth, staleStations } from '../../services/stationHealthService'
+import type { StationCondition, StationHealth } from '../../services/stationHealthService'
+import { useToast } from '../../components/Toast'
 import { Badge, Button, Card, Dialog, Icon } from '../../ui'
 import { STATION_ICON } from '../questIcons'
 import { questLine } from './GuestsAfield'
+
+interface ChartPlace {
+  id: string
+  name: string
+  glyph: string
+  coord: { x: number; y: number }
+  /**
+   * The LoRa address of the reader standing here, if one does. Condition is
+   * keyed on THIS and never on the place id: a place id says where a guest is,
+   * which is not always where the box is.
+   */
+  stationNo?: number
+  /** False for a mark that carries only a reader — nobody checks in at the gate box. */
+  occupancy: boolean
+}
+
+/** Landmark glyphs a chart pin now stands on. Drawn twice they are just noise. */
+const PINNED_LANDMARKS = new Set(['village', 'gate'])
+
+const GATE_LANDMARK = MAP_LANDMARKS.find((lm) => lm.id === 'gate')
+
+/**
+ * The chart: everywhere a party can be standing, and everywhere a reader is.
+ *
+ * Those are two different sets and the gate is why. All 23 LoRa addresses send
+ * a heartbeat — 21 stations, the chief's house, the gate — but `placeIdForStation(23)`
+ * is `village`, because a guest who taps in at the gate IS in the Village of
+ * Queston. Right for presence, wrong for hardware: the box is a post at the
+ * entrance and the square is a couple of hundred metres up the road. A
+ * condition is a claim about a physical thing, and the Warden it sends out has
+ * to walk to where that thing stands. So the square carries the arrivals and no
+ * reader, and the entrance carries the reader and no arrivals.
+ */
+function chartPlaces(): ChartPlace[] {
+  const places: ChartPlace[] = [
+    { id: VILLAGE_PLACE.id, name: VILLAGE_PLACE.name, glyph: 'castle', coord: DEFAULT_POSITION, occupancy: true },
+    {
+      id: QUEST_START.id,
+      name: QUEST_START.name,
+      glyph: 'house',
+      coord: { x: QUEST_START.x, y: QUEST_START.y },
+      stationNo: stationNoForPlace(QUEST_START.id) ?? undefined,
+      occupancy: true,
+    },
+  ]
+  if (GATE_LANDMARK) {
+    places.push({
+      id: 'gate-reader',
+      name: GATE_LANDMARK.label,
+      glyph: GATE_LANDMARK.icon,
+      coord: { x: GATE_LANDMARK.x, y: GATE_LANDMARK.y },
+      stationNo: GATE_STATION_NO,
+      occupancy: false,
+    })
+  }
+  STATIONS.forEach((st: Station) => {
+    const coord = STATION_COORDS[st.id]
+    if (!coord) return
+    places.push({
+      id: st.id,
+      name: st.name,
+      glyph: STATION_ICON[st.type] ?? 'map-pin',
+      coord,
+      stationNo: stationNoForPlace(st.id) ?? undefined,
+      occupancy: true,
+    })
+  })
+  return places
+}
+
+// Staff copy: plain and precise. A Warden reading this at 11pm needs the fact,
+// not the costume.
+const CONDITION_LABEL: Record<StationCondition, string> = {
+  live: 'live',
+  stale: 'stale',
+  fault: 'fault',
+  silent: 'silent',
+  unknown: 'no report',
+}
+
+const CONDITION_TONE: Record<StationCondition, 'gold' | 'forge' | 'locked' | 'neutral'> = {
+  live: 'gold',
+  // Ember is firelight — it is the park's live/now colour, and here that is
+  // exactly what a condition needing a hand today is.
+  stale: 'forge',
+  fault: 'forge',
+  // The DS locked treatment: dashed hairline, shape kept. A station we have
+  // lost is absent, not dimmed.
+  silent: 'locked',
+  unknown: 'neutral',
+}
+
+const CONDITION_GLYPH: Record<StationCondition, string> = {
+  live: 'signal',
+  stale: 'refresh-cw',
+  fault: 'triangle-alert',
+  silent: 'wifi-off',
+  unknown: 'circle-dashed',
+}
+
+const CONDITION_NOTE: Record<StationCondition, string> = {
+  live: 'Reporting, and holding the current flag table.',
+  stale: 'Reporting, but holding an older flag table. A table push from this board clears it.',
+  fault: 'Reporting, but its SD card or audio player is not answering.',
+  silent: 'Was reporting and stopped. Somebody has to walk out to it.',
+  unknown: 'Nothing heard since the console opened.',
+}
+
+/** Live first, then the alarms in the order a Warden would work them. */
+const CONDITION_ORDER: StationCondition[] = ['live', 'stale', 'fault', 'silent', 'unknown']
 
 function minutesLeft(o: Occupant, now: number): number {
   const window = o.placeKind === 'start' ? START_WINDOW_MS : STATION_WINDOW_MS
   return Math.max(0, Math.ceil((o.since + window - now) / 60000))
 }
 
-function elapsed(o: Occupant, now: number): string {
-  const mins = Math.floor((now - o.since) / 60000)
+function ago(at: number, now: number): string {
+  const mins = Math.floor((now - at) / 60000)
   if (mins < 1) return 'just now'
   if (mins < 60) return `${mins} min ago`
   const h = Math.floor(mins / 60)
   return `${h}h ${mins % 60}m ago`
 }
 
+function elapsed(o: Occupant, now: number): string {
+  return ago(o.since, now)
+}
+
+function clock(at: number): string {
+  if (!at) return '—'
+  return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function duration(seconds: number): string {
+  const mins = Math.floor(seconds / 60)
+  if (mins < 60) return `${mins} min`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ${mins % 60}m`
+  return `${Math.floor(hours / 24)}d ${hours % 24}h`
+}
+
+/**
+ * Table versions are `max(flag.tableAt)` — a millisecond epoch, not a counter,
+ * so "three versions behind" is not a thing that can be said. Two build times
+ * can be, and that is what staff actually need: which table this plinth is
+ * running and which one the park is.
+ */
+function tableLine(h: StationHealth, parkVersion: number): string {
+  if (!parkVersion) return 'No flag table in the rack yet'
+  if (!h.tableVersion) return `None held — the park is on ${clock(parkVersion)}`
+  if (h.tableVersion >= parkVersion) return `Current (${clock(h.tableVersion)})`
+  return `Holding ${clock(h.tableVersion)} — the park is on ${clock(parkVersion)}`
+}
+
 export default function StationsBoard() {
   // Display-only tick: the whole board is time-derived, so it must re-read on
   // its own even when nobody checks in.
+  //
+  // Station health leans on this harder than presence does. A station goes
+  // SILENT by nothing happening — no heartbeat, no store write, no reason to
+  // repaint — so the one condition staff most need to see is the one condition
+  // that could never announce itself. This interval is what makes it appear.
+  // It is also why recording a heartbeat does not have to notify anybody: the
+  // health map is module memory, read fresh here every ten seconds.
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 10000)
     return () => window.clearInterval(t)
   }, [])
 
-  // A place is a station, the chief's house, or the village itself.
-  const [openPlace, setOpenPlace] = useState<{ id: string; name: string } | null>(null)
+  // A place is a station, the chief's house, the gate reader or the village.
+  const [openPlace, setOpenPlace] = useState<ChartPlace | null>(null)
+  const [filter, setFilter] = useState<StationCondition | null>(null)
+
+  const toast = useToast()
+  // The push control is only honest while the cable is up — a write made with
+  // no port open queues silently, and a button that says it sent something it
+  // did not is worse than no button.
+  const hubState = useSyncExternalStore(hubLink.subscribe, hubLink.getState)
 
   const byPlace = occupantsByPlace(now)
   const roaming = enRoute(now)
   const atStations = Object.values(byPlace).reduce((n, list) => n + list.length, 0)
 
+  const places = chartPlaces()
+  const readers = places.filter((p) => p.stationNo !== undefined)
+  const parkVersion = tableVersion()
+  const health = new Map(listHealth().map((h) => [h.stationNo, h]))
+  const condition = new Map<string, StationCondition>(
+    readers.map((p) => [p.id, conditionOf(health.get(p.stationNo as number), parkVersion, now)])
+  )
+  const counts = CONDITION_ORDER.map((c) => ({
+    condition: c,
+    n: readers.filter((p) => condition.get(p.id) === c).length,
+  })).filter((entry) => entry.n > 0)
+  const stale = staleStations(parkVersion, now)
+
+  // A chip vanishes the moment its condition empties out, and a repaired plinth
+  // leaving `silent` is exactly the event staff are watching for — so a filter
+  // still pointing at it would leave the chart drawing no pins at all, under a
+  // strip with nothing highlighted and nothing on it to say why. Reconciled in
+  // the same pass it empties (so there is no blank frame) and cleared from
+  // state as well, so it cannot switch itself back on when the condition
+  // returns.
+  const filterEmpty = filter !== null && !counts.some((entry) => entry.condition === filter)
+  const activeFilter = filterEmpty ? null : filter
+  useEffect(() => {
+    if (filterEmpty) setFilter(null)
+  }, [filterEmpty])
+
+  // Filtering HIDES the pins that do not match rather than fading them: a
+  // half-visible pin on a photographic map is a pin nobody can read, and the
+  // faded-out treatment is not one this system uses.
+  const shown = activeFilter ? places.filter((p) => condition.get(p.id) === activeFilter) : places
+
   const openOccupants = openPlace ? (byPlace[openPlace.id] ?? []) : []
+  const openHealth = openPlace?.stationNo !== undefined ? health.get(openPlace.stationNo) : undefined
+  const openCondition = openPlace ? (condition.get(openPlace.id) ?? 'unknown') : 'unknown'
+
+  function pushTable() {
+    const chunks = broadcastTable()
+    if (chunks === 0) {
+      toast.show({
+        title: 'Nothing went out',
+        body: 'The hub refused the table. Check the cable, then try again.',
+        icon: 'triangle-alert',
+      })
+      return
+    }
+    toast.show({
+      title: 'Flag table pushed',
+      body: 'Every station reports the version it holds on its next heartbeat — up to two minutes.',
+      icon: 'refresh-cw',
+    })
+  }
 
   return (
     <Card
@@ -77,7 +295,7 @@ export default function StationsBoard() {
         }}
       >
         <MapCanvas fit="contain">
-          {MAP_LANDMARKS.map((lm) => (
+          {MAP_LANDMARKS.filter((lm) => !PINNED_LANDMARKS.has(lm.id)).map((lm) => (
             <span
               key={lm.id}
               title={lm.label}
@@ -95,40 +313,83 @@ export default function StationsBoard() {
             </span>
           ))}
 
-          {/* The village and the chief's house are places a party can be
-              standing too — the gate check-in lands in one, every quest starts
-              in the other. */}
-          <PlacePin
-            label={VILLAGE_PLACE.name}
-            glyph="castle"
-            coord={DEFAULT_POSITION}
-            occupants={byPlace[VILLAGE_PLACE.id] ?? []}
-            onOpen={() => setOpenPlace({ id: VILLAGE_PLACE.id, name: VILLAGE_PLACE.name })}
-          />
-          <PlacePin
-            label={QUEST_START.name}
-            glyph="house"
-            coord={QUEST_START}
-            occupants={byPlace[QUEST_START.id] ?? []}
-            onOpen={() => setOpenPlace({ id: QUEST_START.id, name: QUEST_START.name })}
-          />
-
-          {STATIONS.map((st) => {
-            const coord = STATION_COORDS[st.id]
-            if (!coord) return null
-            return (
-              <PlacePin
-                key={st.id}
-                label={st.name}
-                glyph={STATION_ICON[st.type] ?? 'map-pin'}
-                coord={coord}
-                occupants={byPlace[st.id] ?? []}
-                onOpen={() => setOpenPlace({ id: st.id, name: st.name })}
-              />
-            )
-          })}
+          {/* The village square and the chief's house are places a party can be
+              standing — the gate check-in lands in one, every quest starts in
+              the other. The entrance is the opposite case: a reader with no
+              standing room. Each pin carries whichever of the two it has. */}
+          {shown.map((place) => (
+            <PlacePin
+              key={place.id}
+              label={place.name}
+              glyph={place.glyph}
+              coord={place.coord}
+              occupancy={place.occupancy}
+              occupants={place.occupancy ? (byPlace[place.id] ?? []) : []}
+              condition={condition.get(place.id) ?? null}
+              onOpen={() => setOpenPlace(place)}
+            />
+          ))}
         </MapCanvas>
       </div>
+
+      {/* The staleness window, made visible. This strip is the reason the
+          cached flag table is a defensible design at all. */}
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+        {counts.map(({ condition: c, n }) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => setFilter(activeFilter === c ? null : c)}
+            aria-pressed={activeFilter === c}
+            title={CONDITION_NOTE[c]}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              lineHeight: 0,
+              cursor: 'pointer',
+              borderRadius: 'var(--radius-pill)',
+              // Selection is a ring drawn on the chip's own edge; focus stays
+              // the DS's 2px gold outline at 2px offset, sitting outside it.
+              // They must not share the channel, and an inline `outline` here —
+              // even `none` — beats every author rule in the sheet, so a focus
+              // indicator given away here could never be won back.
+              boxShadow: activeFilter === c ? '0 0 0 2px var(--gold-700)' : undefined,
+            }}
+          >
+            <Badge tone={CONDITION_TONE[c]} icon={CONDITION_GLYPH[c]}>
+              {n} {CONDITION_LABEL[c]}
+            </Badge>
+          </button>
+        ))}
+        {activeFilter ? (
+          <button
+            type="button"
+            onClick={() => setFilter(null)}
+            style={{ background: 'none', border: 'none', padding: 0, lineHeight: 0, cursor: 'pointer' }}
+          >
+            <Badge tone="neutral" icon="x">
+              Show all
+            </Badge>
+          </button>
+        ) : null}
+      </div>
+
+      {/* The remedy the stale note names. It is a park-wide broadcast, not a
+          per-station one, so it belongs beside the count and not inside any one
+          plinth's dialog. */}
+      {stale.length > 0 ? (
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
+          <Button size="sm" variant="secondary" icon="refresh-cw" disabled={hubState !== 'live'} onClick={pushTable}>
+            Push the flag table
+          </Button>
+          <span className="muted" style={{ fontSize: 12, fontFamily: 'var(--font-ui)' }}>
+            {hubState === 'live'
+              ? `${stale.length} ${stale.length === 1 ? 'station is' : 'stations are'} behind the park's table. One push goes to all of them.`
+              : 'The hub is not connected, so nothing can go out from here yet.'}
+          </span>
+        </div>
+      ) : null}
 
       <h3
         style={{
@@ -166,7 +427,7 @@ export default function StationsBoard() {
 
       {openPlace ? (
         <Dialog
-          eyebrow="Who is here"
+          eyebrow="Place"
           title={openPlace.name}
           onClose={() => setOpenPlace(null)}
           footer={
@@ -175,7 +436,11 @@ export default function StationsBoard() {
             </Button>
           }
         >
-          {openOccupants.length === 0 ? (
+          {!openPlace.occupancy ? (
+            // The reader stands here; the check-in it takes is recorded in the
+            // village, and that is where the board shows the party.
+            <p className="muted">Arrivals through this gate are shown at the Village of Queston.</p>
+          ) : openOccupants.length === 0 ? (
             <p className="muted">Nobody is checked in here right now.</p>
           ) : (
             <div className="stack" style={{ gap: 0 }}>
@@ -229,6 +494,12 @@ export default function StationsBoard() {
               ))}
             </div>
           )}
+
+          {/* No reader, nothing to report on. The village square is a place
+              guests stand, not a box on a post. */}
+          {openPlace.stationNo === undefined ? null : (
+            <HealthBlock health={openHealth} condition={openCondition} parkVersion={parkVersion} now={now} />
+          )}
         </Dialog>
       ) : null}
     </Card>
@@ -242,31 +513,185 @@ function OrgBadge({ orgId }: { orgId?: string }) {
 }
 
 /**
+ * The reader at this place, in full. Everything here comes from one heartbeat
+ * frame except the park's table version, which comes from the rack.
+ */
+function HealthBlock({
+  health,
+  condition,
+  parkVersion,
+  now,
+}: {
+  health: StationHealth | undefined
+  condition: StationCondition
+  parkVersion: number
+  now: number
+}) {
+  return (
+    <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border-hairline)' }}>
+      <div className="row row--between" style={{ marginBottom: 10, gap: 12 }}>
+        <h4
+          style={{
+            margin: 0,
+            font: '600 var(--text-sm)/1.2 var(--font-display)',
+            textTransform: 'uppercase',
+            letterSpacing: 'var(--tracking-display)',
+            color: 'var(--text-heading)',
+          }}
+        >
+          The reader
+        </h4>
+        <Badge tone={CONDITION_TONE[condition]} icon={CONDITION_GLYPH[condition]}>
+          {CONDITION_LABEL[condition]}
+        </Badge>
+      </div>
+
+      <p className="muted" style={{ fontSize: 12, fontFamily: 'var(--font-ui)', marginBottom: 8 }}>
+        {CONDITION_NOTE[condition]}
+      </p>
+
+      {!health ? null : (
+        <div className="stack" style={{ gap: 0, fontFamily: 'var(--font-ui)' }}>
+          <Reading label="Heartbeat" value={`${ago(health.lastHeartbeatAt, now)} · ${clock(health.lastHeartbeatAt)}`} />
+          <Reading
+            label="Flag table synced"
+            value={
+              health.lastTableSyncAt
+                ? `${ago(health.lastTableSyncAt, now)} · ${clock(health.lastTableSyncAt)}`
+                : // Two different absences, and they are not the same fact: a
+                  // station holding no table has never committed one, while a
+                  // station holding one whose age we refused is a counter we do
+                  // not believe. Neither is a time.
+                  health.tableVersion
+                  ? 'Not reported'
+                  : 'Never'
+            }
+          />
+          <Reading label="Version held" value={tableLine(health, parkVersion)} alarm={condition === 'stale'} />
+          <Reading label="Unsent taps" value={String(health.queueDepth)} alarm={health.queueDepth > 0} />
+          <Reading label="SD card" value={health.sdOk ? 'OK' : 'Not answering'} alarm={!health.sdOk} />
+          <Reading label="Audio player" value={health.playerOk ? 'OK' : 'Not answering'} alarm={!health.playerOk} />
+          <Reading label="Signal" value={`${health.rssi} dBm`} />
+          <Reading label="Volume" value={`${health.volume} of 30`} />
+          <Reading label="Uptime" value={duration(health.uptimeS)} />
+          <Reading label="Firmware" value={`build ${health.fwBuild}`} />
+          {health.lastError ? <Reading label="Reported" value={health.lastError} alarm /> : null}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Reading({ label, value, alarm = false }: { label: string; value: string; alarm?: boolean }) {
+  return (
+    <div
+      className="row row--between"
+      style={{ gap: 16, padding: '6px 0', borderTop: '1px solid var(--border-hairline)' }}
+    >
+      <span className="muted" style={{ fontSize: 12 }}>
+        {label}
+      </span>
+      <span style={{ fontSize: 13, textAlign: 'right', color: alarm ? 'var(--ember-300)' : 'var(--text-body)' }}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+interface RingSpec {
+  border: string
+  mark: string | null
+  /** The corner mark's own colours — ember for a live thing wanting a hand, locked for a place we have lost. */
+  markColor: string
+  markBorder: string
+}
+
+const RING: Record<StationCondition, RingSpec> = {
+  live: { border: '1px solid var(--gold-700)', mark: null, markColor: '', markBorder: '' },
+  stale: {
+    border: '1px solid var(--ember-500)',
+    mark: 'refresh-cw',
+    markColor: 'var(--ember-300)',
+    markBorder: '1px solid var(--ember-700)',
+  },
+  fault: {
+    border: '1px solid var(--ember-500)',
+    mark: 'triangle-alert',
+    markColor: 'var(--ember-300)',
+    markBorder: '1px solid var(--ember-700)',
+  },
+  // Dashed hairline, full shape, no fade — the system's absent treatment.
+  //
+  // It carries a mark as well, and it is the one deviation from the ring recipe
+  // worth making: the chart is drawn to FIT the panel, and at that scale a 1px
+  // dash on a 24px ring is sub-pixel — a dead plinth was indistinguishable from
+  // a well one until you zoomed in, which is the exact failure this board is
+  // built to prevent. The mark keeps the absent palette rather than borrowing
+  // ember, because a station we have lost is not a live thing wanting a hand.
+  silent: {
+    border: '1px dashed var(--stone-600)',
+    mark: 'wifi-off',
+    markColor: 'var(--status-locked)',
+    markBorder: '1px dashed var(--stone-600)',
+  },
+  unknown: { border: '1px solid var(--border-hairline)', mark: null, markColor: '', markBorder: '' },
+}
+
+/** A mark with no reader behind it. Plain hairline: nothing is being claimed. */
+const NO_READER_RING: RingSpec = {
+  border: '1px solid var(--border-hairline)',
+  mark: null,
+  markColor: '',
+  markBorder: '',
+}
+
+/**
  * An occupied place wears a filled gold marker with a head count; an empty one
  * stays a hairline glyph, so a glance at the chart reads as "where everyone is".
- * Places are the 21 stations plus the village and the chief's house.
+ * Places are the 21 stations, the village square, the chief's house and the
+ * entrance — the last two of those carry only one of the two readings each.
+ *
+ * The ring is the second reading: the condition of the reader standing there.
+ * It never touches the glyph colour or the head count, because a Warden has to
+ * be able to see a full station on a stale plinth — that combination is the
+ * whole reason this board exists.
  */
 function PlacePin({
   label,
   glyph,
   coord,
+  occupancy,
   occupants,
+  condition,
   onOpen,
 }: {
   label: string
   glyph: string
   coord: { x: number; y: number }
+  /** Whether guests can stand here at all — false for the gate reader. */
+  occupancy: boolean
   occupants: Occupant[]
+  /** Null where there is no reader: the village square is a place, not a plinth. */
+  condition: StationCondition | null
   onOpen: () => void
 }) {
   const busy = occupants.length > 0
   const heads = occupants.reduce((n, o) => n + Math.max(1, o.memberNames.length), 0)
+  const ring = condition ? RING[condition] : NO_READER_RING
+  // A plinth wanting attention is never the faint one on the chart, empty or not.
+  const attention = condition === 'stale' || condition === 'fault' || condition === 'silent'
+
+  const occupancyPhrase = occupancy ? (busy ? `${occupants.length} checked in` : 'nobody checked in') : null
+  const readerPhrase = condition ? `reader ${CONDITION_LABEL[condition]}` : null
+  const detail = [occupancy ? (busy ? `${occupants.length} here` : 'empty') : null, condition ? CONDITION_NOTE[condition] : null]
+    .filter(Boolean)
+    .join(' · ')
 
   return (
     <button
       onClick={onOpen}
-      title={`${label} — ${busy ? `${occupants.length} here` : 'empty'}`}
-      aria-label={`${label}, ${busy ? `${occupants.length} checked in` : 'nobody checked in'}`}
+      title={detail ? `${label} — ${detail}` : label}
+      aria-label={[label, occupancyPhrase, readerPhrase].filter(Boolean).join(', ')}
       style={{
         position: 'absolute',
         left: `${coord.x * 100}%`,
@@ -279,12 +704,24 @@ function PlacePin({
         border: 'none',
         cursor: 'pointer',
         color: busy ? 'var(--gold-300)' : 'var(--text-muted)',
-        opacity: busy ? 1 : 0.55,
+        opacity: busy || attention ? 1 : 0.55,
         filter: busy ? 'drop-shadow(0 1px 3px rgba(0,0,0,.7))' : undefined,
       }}
     >
       <span style={{ position: 'relative', display: 'block' }}>
-        <Icon name={busy ? 'map-pinned' : glyph} size={busy ? 24 : 15} />
+        <span
+          style={{
+            display: 'grid',
+            placeItems: 'center',
+            width: busy ? 32 : 24,
+            height: busy ? 32 : 24,
+            borderRadius: 'var(--radius-pill)',
+            border: ring.border,
+            background: 'var(--surface-overlay)',
+          }}
+        >
+          <Icon name={busy ? 'map-pinned' : glyph} size={busy ? 20 : 14} />
+        </span>
         {busy ? (
           <span
             style={{
@@ -302,6 +739,25 @@ function PlacePin({
             }}
           >
             {heads}
+          </span>
+        ) : null}
+        {ring.mark ? (
+          <span
+            style={{
+              position: 'absolute',
+              bottom: -6,
+              right: -7,
+              display: 'grid',
+              placeItems: 'center',
+              width: 16,
+              height: 16,
+              borderRadius: 'var(--radius-pill)',
+              background: 'var(--stone-950)',
+              border: ring.markBorder,
+              color: ring.markColor,
+            }}
+          >
+            <Icon name={ring.mark} size={10} />
           </span>
         ) : null}
       </span>

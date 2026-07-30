@@ -23,7 +23,7 @@
 // devtools console, a QA harness or the presenter's demo remote.
 
 import type { HubFrame, HubHeartbeatFrame, HubInboundFrame, HubTableRow } from '../types'
-import { decodeLine, encodeLine, normalizeWireUid } from './hubProtocol'
+import { allStationNos, decodeLine, encodeLine, normalizeWireUid } from './hubProtocol'
 import * as hubLink from './hubLink'
 import type { HubTransport, HubTransportHandlers } from './hubLink'
 
@@ -56,6 +56,17 @@ export interface SimFrameRecord {
 
 /** Everything `heartbeat()` will make up for you unless you say otherwise. */
 export interface SimHeartbeatOptions {
+  /**
+   * A whole condition in one word, applied BEFORE the fields below so anything
+   * named explicitly still wins.
+   *
+   * `stale` needs a version genuinely behind the park's, and the park's version
+   * is an epoch, not a counter — so it is derived from the table this simulated
+   * park has actually committed rather than invented. Push a table first (the
+   * console does on connect); against an empty rack there is nothing to be
+   * behind and the station reads current, correctly.
+   */
+  condition?: 'live' | 'stale' | 'fault'
   ups?: number
   /** Leave unset for "current". Set it BEHIND the park's version to make a station read stale. */
   tblver?: number
@@ -314,19 +325,20 @@ export class SimulatedTransport implements HubTransport {
    * to reach the conditions staff must be able to see BEFORE a group walks
    * twenty minutes to a dead plinth:
    *
-   *   stale  → `{ tblver: <behind the park>, tblage: 900 }`
-   *   fault  → `{ sd: 0 }` or `{ df: 0 }`
+   *   stale  → `{ condition: 'stale' }`, or `{ tblver: <behind the park>, tblage: 900 }`
+   *   fault  → `{ condition: 'fault' }`, or `{ sd: 0 }` / `{ df: 0 }`
    *   silent → send nothing at all and let it age out
    */
   heartbeat(stationNo: number, opts: SimHeartbeatOptions = {}): string | null {
+    const preset = this.presetFor(opts.condition)
     const frame: HubHeartbeatFrame = {
       t: 'hb',
       st: stationNo,
       ups: opts.ups ?? Math.floor((Date.now() - this.bootedAt) / 1000),
-      tblver: opts.tblver ?? this.tableVersion,
-      tblage: opts.tblage ?? Math.floor((Date.now() - this.tableCommittedAt) / 1000),
+      tblver: opts.tblver ?? preset.tblver ?? this.tableVersion,
+      tblage: opts.tblage ?? preset.tblage ?? Math.floor((Date.now() - this.tableCommittedAt) / 1000),
       qd: opts.qd ?? 0,
-      sd: opts.sd ?? 1,
+      sd: opts.sd ?? preset.sd ?? 1,
       df: opts.df ?? 1,
       err: opts.err ?? 0,
       rssi: opts.rssi ?? -92,
@@ -334,6 +346,38 @@ export class SimulatedTransport implements HubTransport {
       fw: opts.fw ?? SIM_FW,
     }
     return this.emit(frame)
+  }
+
+  /**
+   * Every station reporting in at once, so a whole board can be staged from one
+   * line in a devtools console instead of twenty-three.
+   *
+   * `overrides` is keyed by station number: a `SimHeartbeatOptions` shapes that
+   * station's frame, and the literal `'silent'` sends NOTHING for it — which is
+   * the only way silence can be simulated, because silence is the absence of a
+   * frame and not a kind of frame.
+   */
+  heartbeatAll(overrides: Record<number, SimHeartbeatOptions | 'silent'> = {}): number {
+    let sent = 0
+    for (const stationNo of allStationNos()) {
+      const override = overrides[stationNo]
+      if (override === 'silent') continue
+      if (this.heartbeat(stationNo, override ?? {})) sent++
+    }
+    return sent
+  }
+
+  /** Field defaults behind `SimHeartbeatOptions.condition`. Empty for 'live' — the frame is already healthy. */
+  private presetFor(condition: SimHeartbeatOptions['condition']): Partial<HubHeartbeatFrame> {
+    if (condition === 'stale') {
+      // One millisecond behind is behind, but a board reading "held for 0s" is
+      // no use to anybody: back it off by a quarter of an hour so the gap the
+      // dialog prints is the gap a real lapsed sync would show.
+      const behind = Math.max(0, this.tableVersion - 15 * 60 * 1000)
+      return { tblver: behind, tblage: 900 }
+    }
+    if (condition === 'fault') return { sd: 0 }
+    return {}
   }
 
   /** Pull the cable. The link should go to `reconnecting`, not `error`, and keep its write queue. */
@@ -407,6 +451,7 @@ export interface HubSimApi {
   booth(uid: string): string | null
   replay(stationNo: number, n?: number): number
   heartbeat(stationNo: number, opts?: SimHeartbeatOptions): string | null
+  heartbeatAll(overrides?: Record<number, SimHeartbeatOptions | 'silent'>): number
   drop(): void
   restore(): void
   raw(line: string, opts?: { newline?: boolean }): void
@@ -444,6 +489,7 @@ export function installHubSim(): SimulatedTransport {
       booth: (uid) => sim.booth(uid),
       replay: (stationNo, n) => sim.replay(stationNo, n),
       heartbeat: (stationNo, opts) => sim.heartbeat(stationNo, opts),
+      heartbeatAll: (overrides) => sim.heartbeatAll(overrides),
       drop: () => sim.drop(),
       restore: () => sim.restore(),
       raw: (line, opts) => sim.raw(line, opts),
