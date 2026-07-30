@@ -637,6 +637,24 @@ export function connect(next?: HubTransport): Promise<HubState> {
     clearTimeout(closeTimer)
     closeTimer = null
   }
+  // A pending ladder rung is now MOOT — this call supersedes it, and leaving it
+  // armed is a second open() on a port this one is about to have open. The
+  // button is enabled in `reconnecting` and says "Connect again", so the
+  // impatient press is the invited action: connect() opens the port and goes
+  // live, then the rung nobody cancelled fires into an already-open port, Chrome
+  // throws InvalidStateError, and the link walks itself back down the ladder and
+  // parks in `error` over a hub that is visibly streaming taps. `pump()` gates
+  // on `live`, so the flag table, answers and commands queue for a hub the
+  // console is sitting on top of, and the push button is disabled while frames
+  // scroll past. Only unmounting the board clears it. The ladder is re-armed by
+  // scheduleReconnect() if this attempt fails, so nothing is lost by dropping it
+  // here; `reconnectAttempt` is deliberately NOT reset (retryNow() is the call
+  // that means "start the backoff over"), or a press-loop could hold the ladder
+  // at rung 1 forever.
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
   holds++
 
   if (next && next !== transport) {

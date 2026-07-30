@@ -1445,7 +1445,14 @@ static void pumpRadioRx(void) {
   raw[n] = '\0';
   radioRxCount_++;
 
-  QlHeader h;
+  // Zero-initialised, not bare. QlHeader is a plain POD with no member
+  // initialisers, and the MAC-failure trace below reads h.src on a path where
+  // ql_line_open returned an ERROR. ql_line_open now zeroes and then publishes
+  // the claimed header before the MAC check, so that read is sound at both ends;
+  // the `{}` is the half that survives somebody changing the other. Take it off
+  // and the one line that tells a mis-provisioned station from a dead one starts
+  // naming whichever board number was left on the stack.
+  QlHeader h{};
   char plain[QL_PLAIN_MAX + 1];
   size_t plainLen = 0;
   QlRxResult rc = ql_line_open(raw, n, QL_HUB_SELF_ADDR, &h, plain, sizeof(plain), &plainLen);

@@ -68,5 +68,12 @@ Orgs: **Rangers of Questia** (ranks Scout ep5, Watcher ep9), **Hearers of the Al
 - **The console mounts standalone** (`console-main.tsx`, no Router) and must supply its own `ToastProvider` — `SendWord` calls `useToast()`, which THROWS without one. Signed OUT the gate returns first and hides the bug; **test the SIGNED-IN console.**
 - **The Firestore SDK round-trip is NOT verifiable in this sandbox** (headless Chromium gets `ERR_CONNECTION_RESET` through the agent proxy; node's fetch reaches googleapis, which is how the REST rules suites run). Cross-device behaviour needs a check on real hardware — say so rather than claiming it passed.
 
+**Firmware / the wire**
+- **`ql_line_open` publishes TYPE/DST/SRC/SEQ BEFORE the MAC check** (range-checked, zeroed on entry) so the hub's MAC-failure trace can name a mis-provisioned board. On any non-OK return those are **CLAIMED and UNAUTHENTICATED — log strings only.** Never route, credit, count or reply off them. Anyone can put any SRC on a line.
+- **The `STATIONS` array's ORDER is the LoRa address.** `gen-clip-map.mjs` emits clip runs by array position while card manifests derive the address from the id; reordering `stations.ts` sends every plinth somebody else's speech, and the length check, 210-slot cross-assertion, canon fingerprint and `--check` all stay green. Guarded now — do not "fix" the guard.
+- **`hubSerial` keeps the granted port across closes** — `requestPort()` needs a user gesture and the reconnect ladder is a timer, so clearing `this.port` means a human must re-pick the device on every reconnect.
+- **The `.ino` files cannot be compiled here** (no `Arduino.h`/`LoRa.h`/`MFRC522.h`/`DFRobotDFPlayerMini.h`). Edited constructs can be checked against the real `config.h` + the `ql_crypto.h` stubs; that is not a board. Say so.
+- **`npm run fw:kat` must be GREEN on a clean tree.** A drift guard that is red on day one cannot be gated on, so it gets ignored and then deleted. Fix a real disagreement at its source; never restore a known-bad number.
+
 ## Build history
 Dated per-feature history, verification status, and commit/PR references live in `docs/build-history.md` — read it when you need the story behind an existing feature. Do not copy it back into this file.

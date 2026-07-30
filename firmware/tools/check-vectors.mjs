@@ -114,10 +114,11 @@ const WORKED = {
   blobLen: 35,
   payload: 'ammzAKLiu40QnqJEousTfPp5bQHpeuR2GS0KiUfRhxnXsSU=',
   macInput: 'Q1|T|0|7|312|ammzAKLiu40QnqJEousTfPp5bQHpeuR2GS0KiUfRhxnXsSU=|',
-  // §5's own prose figure. It is off by one — see the note at the check that
-  // uses it. Transcribed as the document has it, not as it ought to be, because
-  // this file's job is to say what the document says.
-  macInputLen: 61,
+  // §5's own prose figure. Transcribed as the document has it, not as it ought
+  // to be, because this file's job is to say what the document says. It read 61
+  // and §5 was corrected to 62 on 2026-07-30 — see the note at the check that
+  // uses it before touching either.
+  macInputLen: 62,
   mac: '05D91744EDA99C93',
   macB64: 'BdkXRO2pnJM=',
   line: 'Q1|T|0|7|312|ammzAKLiu40QnqJEousTfPp5bQHpeuR2GS0KiUfRhxnXsSU=|BdkXRO2pnJM=',
@@ -391,33 +392,37 @@ check(
   const macInput = body.slice(0, body.length - f[6].length)
   check('T TAP MAC input', w.macInput, macInput, WHY_MAC_BOUNDARY)
 
-  // THIS ONE IS CURRENTLY RED, AND THE CODE IS NOT THE THING THAT IS WRONG.
+  // THIS ONE WAS RED FROM THE DAY IT WAS WRITTEN UNTIL 2026-07-30, AND THE CODE
+  // WAS NEVER THE THING THAT WAS WRONG.
   //
-  // §5 says "the MAC input is the 61 bytes Q1|T|0|7|312|<payload>|". Count them:
-  // 3 + 2 + 2 + 2 + 4 + 48 + 1 = 62. The document's OWN other figure agrees with
-  // 62 and not with 61 — it gives the finished line as 75 bytes with the
-  // newline, and 62 + 12 (MAC) + 1 (\n) is 75, while 61 + 12 + 1 is 74.
+  // §5 used to say "the MAC input is the 61 bytes Q1|T|0|7|312|<payload>|".
+  // Count them: 3 + 2 + 2 + 2 + 4 + 48 + 1 = 62. The document's OWN other figure
+  // agreed with 62 and not with 61 — it gives the finished line as 75 bytes with
+  // the newline, and 62 + 12 (MAC) + 1 (\n) is 75, while 61 + 12 + 1 is 74. The
+  // sentence in §5 has been corrected, and the transcription above with it, so
+  // this file is now GREEN on a clean tree.
   //
-  // Everything that actually crosses the air reproduces byte for byte: the MAC
-  // input STRING, mac[0..7], and the finished line all match §5 exactly, on the
-  // check immediately above and the ones immediately below. So this is an
-  // arithmetic slip in the prose of §5, not drift in the construction, and it
-  // costs nobody a frame. It is left failing on purpose, because a document that
-  // is the referee for two implementations does not get to carry a number that
-  // is wrong — the firmware self-test reads the same section, and a person
-  // checking a board's covered-byte count against it will chase an off-by-one
-  // that is not in the board. Fix the sentence in §5, do not touch hubCrypto.ts.
+  // WHAT BREAKS IF SOMEBODY PUTS 61 BACK, in either place: nothing on the air —
+  // the construction was always right — but this whole tool exits 1 again, and a
+  // drift guard that is red on a clean tree is a drift guard nobody can gate on.
+  // It cannot go in CI, in a hook, or on a bench checklist, because it fails on
+  // day one and gets deleted. Worse, the next person to move a label, a byte
+  // order or the MAC boundary sees "2 disagreements" where they were trained to
+  // expect the familiar 1, and skims — which is exactly the every-frame-fails-
+  // its-MAC-and-nothing-names-the-cause morning this file exists to prevent.
+  // Green must stay reachable. Fix a real disagreement at its source; never
+  // restore a known-bad number to keep a comment company.
   check(
     'T TAP MAC input length',
     String(w.macInputLen),
     String(macInput.length),
-    'KNOWN, AND IT IS THE DOCUMENT THAT IS WRONG. The MAC input string on the check above matches ' +
-      '§5 character for character, and so do mac[0..7] and the finished line — the construction is ' +
-      'correct. §5 just miscounts that string: 3 + 2 + 2 + 2 + 4 + 48 + 1 = 62, not 61, and §5\'s ' +
-      'own line total (75 bytes with the newline) only adds up with 62. Fix the sentence in ' +
-      'PROTOCOL.md §5; do not touch hubCrypto.ts, and do not go looking for an off-by-one in a ' +
-      'board. If instead the MAC INPUT check above is also red, ignore all of this — that is a real ' +
-      'boundary drift and it fails every frame exactly the way a wrong key does.',
+    'The MAC input string on the check above, mac[0..7], and the finished line all fix the covered ' +
+      'region; this is just its length. If ONLY this one is red, somebody has edited the byte count ' +
+      'in PROTOCOL.md §5 or the transcription of it here and the two no longer agree — count the ' +
+      'string: 3 + 2 + 2 + 2 + 4 + 48 + 1 = 62, and §5\'s own line total (75 bytes with the ' +
+      'newline) only adds up with 62. If instead the MAC INPUT check above is ALSO red, ignore the ' +
+      'arithmetic entirely — that is real boundary drift, and it fails every frame in the park ' +
+      'exactly the way a wrong key does.',
   )
   check('T TAP mac[0..7]', w.mac, hexOf(Buffer.from(f[6], 'base64')), WHY_DERIVATION)
   check('T TAP mac field (b64)', w.macB64, f[6], WHY_DERIVATION)

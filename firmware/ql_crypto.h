@@ -477,11 +477,24 @@ static inline size_t ql_line_seal(char type, uint8_t dst, uint8_t src, uint32_t 
  *
  * `line` is NOT modified; the caller keeps its receive buffer. The payload is
  * written to `plainOut` NUL-terminated so ql_proto.h's splitters can chew on it.
+ *
+ * ON A NON-OK RETURN, `*hdr` HOLDS CLAIMED, UNAUTHENTICATED VALUES — FOR LOGGING
+ * ONLY. It is zeroed on entry and then filled with TYPE/DST/SRC/SEQ as soon as
+ * those pass their structural and range checks at step 2, which is BEFORE the
+ * MAC verify at step 5. Anyone can put any SRC on a line. Never route, credit,
+ * count or reply off a header this function did not return QL_RX_OK for.
+ * `epoch` stays 0 until the blob is decoded, because it is not on the line.
  */
 static inline QlRxResult ql_line_open(const char *line, size_t len, uint8_t self, QlHeader *hdr,
                                       char *plainOut, size_t plainCap, size_t *plainLen) {
   if (!ql_key_ready_) return QL_RX_NO_KEY;
   if (line == NULL || hdr == NULL || plainOut == NULL) return QL_RX_MALFORMED;
+
+  // Callers declare `QlHeader h;` on the stack and it is a plain POD, so until
+  // this runs every field is an indeterminate stack byte. Zero it before any
+  // path can return, so a caller that reads the header on a FAILURE reads a 0
+  // and not somebody else's leftovers.
+  memset(hdr, 0, sizeof(*hdr));
 
   // A trailing newline is the frame terminator, not content.
   while (len && (line[len - 1] == '\n' || line[len - 1] == '\r')) len--;
@@ -512,6 +525,27 @@ static inline QlRxResult ql_line_open(const char *line, size_t len, uint8_t self
   if (!ql_parse_u32(f[4], QL_U32_MAX, &seq)) { ql_malformed_++; return QL_RX_MALFORMED; }
   // SRC must be a real node. 255 is broadcast — a destination, never a source.
   if (src != QL_ADDR_HUB && !ql_st_is_place((uint16_t)src)) { ql_malformed_++; return QL_RX_MALFORMED; }
+
+  // ── THE CLAIMED HEADER, PUBLISHED BEFORE THE MAC IS CHECKED ───────────────
+  //
+  // These four are now range-checked and cannot be anything but a plausible
+  // address, type and counter — but they are NOT yet authenticated, and this is
+  // deliberately the only thing published before step 5. It exists for ONE
+  // reader: the hub's MAC-failure trace, which names the board whose frames are
+  // failing. Leave these writes to the success path at the bottom of the
+  // function and that trace prints an uninitialised stack byte, so a station
+  // flashed from the wrong key file — the exact fault the trace was added to
+  // catch, since a mis-provisioned board and a dead one look identical from the
+  // counter — reports itself as a different, plausible, innocent pole number on
+  // every frame, and a Guide spends the afternoon walking to the wrong plinths.
+  //
+  // The word "claimed" in that trace is load-bearing: anyone can put any SRC on
+  // a line. Read the contract in the doc block before using these for anything
+  // that is not a log string. `epoch` is not on the line and stays 0 here.
+  hdr->type = f[1][0];
+  hdr->dst = (uint8_t)dst;
+  hdr->src = (uint8_t)src;
+  hdr->seq = seq;
 
   if (dst != self && dst != QL_ADDR_BROADCAST) return QL_RX_NOT_FOR_US;
 

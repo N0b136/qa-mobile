@@ -656,6 +656,26 @@ static void tapPop() {
  */
 static void tapPush(const TapRec *rec) {
   if (qCount == QL_TAP_RING) {
+    // ── THE IN-FLIGHT SNAPSHOT IS NOT PINNED, SO CANCEL IT BEFORE EVICTING ──
+    //
+    // pumpTapQueue seals the entry at the HEAD into tapLine and sets tapActive;
+    // nothing records which slot it came from. Evicting the head here hands that
+    // exact slot back — (qHead+1 + qCount-1) % RING is the old qHead — so the
+    // new tap is written on top of the sealed entry, and when the ACK lands
+    // onAck's tapPop() retires the head as it now stands: the NEXT tap, one that
+    // has never been on the air. That guest's check-in leaves the ring with no
+    // QUEUE_FULL line against it, because the one this branch emits below was
+    // already spent naming an entry that was in fact delivered. A hole in the
+    // Station Records CSV and nothing anywhere saying a tap was dropped.
+    //
+    // Cancelling first makes the victim the entry the policy below actually
+    // nominates — the oldest, which is the sealed one — and it is logged as the
+    // eviction it is. The ACK for it, if one arrives, finds tapActive false and
+    // returns without popping anything. The next pass re-peeks the real head.
+    // Same shape as the give-up branch in pumpTapQueue; tapRetryAt is set fresh
+    // at every seal, so there is no stale retry state to clear.
+    tapActive = false;
+    tapAttempts = 0;
     qHead = (uint16_t)((qHead + 1) % QL_TAP_RING);
     qCount--;
     qDiscarded++;
