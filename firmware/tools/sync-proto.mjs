@@ -409,6 +409,27 @@ if (PLINTHS !== null) {
       T.set(name, value)
     }
   }
+} else {
+  // A MISS HERE IS A FAILURE, NOT A SKIP. It is the only unreadable input in
+  // this file that could ever have been silent — macro(), tsConst(), tsFields()
+  // and tsUidBounds() all push a failure — and it is the most expensive one to
+  // lose: with PLINTHS null nothing calls T.set('STATION_NO_MAX', ...), so
+  // every `st` bound resolves to {unknown} and the six frames carrying `st` are
+  // demoted to notes that only print under --verbose. The run still says
+  // "OK ... agree." and exits 0 while comparing 33 of 43 bounds instead of 39.
+  //
+  // WHAT BREAKS IF THIS ELSE GOES AWAY: a later, unrelated edit adds a 22nd
+  // plinth without touching QL_ADDR_PLINTH_MAX, this guard is the only thing
+  // that would have caught it, and it says nothing — the hub accepts an `st`
+  // the firmware resolves to a different plinth, which is a guest hearing
+  // another station's audio with nothing in any log to say why.
+  fail(
+    'stationMap.ts STATION_COORDS could not be read',
+    'this guard derives the addressable places from that block',
+    'the `export const STATION_COORDS ... \\n}` shape no longer matches',
+    'Until this tool can count the plinths it cannot compare any station-number bound, and `st` ' +
+      'is the one field the console uses to index the park. Do not leave it uncompared.',
+  )
 }
 
 const FIELDS = tsFields(codecSrc)

@@ -506,7 +506,29 @@ static void noteError(uint16_t code) { lastErrCode = code; }
  * follows it, which is exactly what a plain last-writer-wins slot would do.
  */
 static void logEvent(uint8_t lvl, uint16_t code, int64_t a1, int64_t a2) {
-  if (lvl >= 4) noteError(code);
+  // ── THE DIRECTION OF THIS TEST IS THE WHOLE FAULT CHANNEL ─────────────────
+  // Syslog counts DOWNWARDS into severity, so the faults are 2 and 3 (NO_KEY,
+  // MAC_FAIL, TABLE_CRC_FAIL, SD_FAULT, DF_FAULT, READER_FAULT, QUEUE_FULL) and
+  // 4 and up are warnings and chatter (BOOT, TABLE_COMMIT, RESYNC_START). That
+  // reads backwards to almost everyone, which is exactly how this line once got
+  // written as `lvl >= 4` — the precise inversion of what it must do.
+  //
+  // WHAT BREAKS IF IT IS FLIPPED BACK: lastErrCode is what pumpHeartbeat puts
+  // in the heartbeat's ERR field, and ERR is the only route a fault code has to
+  // the console today (LOG frames are dropped there until Slice 6). Inverted,
+  // every healthy plinth reports ERR=100 from its own boot log — staff learn
+  // within a day that the field means nothing — while a wedged MFRC522, the one
+  // fault with no dedicated heartbeat field and the one that stops a station
+  // reading tags at all, reports nothing. SECURITY.md's "macfail non-zero on
+  // one board means that board's PSK is wrong" rests on this line too, and
+  // MAC_FAIL is logged at level 3.
+  //
+  // The code LATCHES until reboot on purpose: a reader that wedged for ten
+  // minutes at noon and re-inited itself is still the reason that plinth went
+  // quiet, and nothing else in the park remembers it. Whether a fault is
+  // CURRENT is answered by the dedicated fields (h.sd, h.df, h.tblver), never
+  // by ERR — do not "fix" the latch by clearing it on an unrelated recovery.
+  if (lvl <= 3) noteError(code);
   if (logPending && logRec.lvl < lvl) return;
   logRec.lvl = lvl;
   logRec.code = code;
@@ -1273,6 +1295,32 @@ static void onBeacon(char *plain, uint32_t now) {
     // permanently unable to sync (a dead chunk path, a hub bug) and still cost
     // the band only one frame every thirty seconds.
     nextSyncAt = now ? now : 1;
+  } else if (nextSyncAt == 0) {
+    // ── CORRECTION #4, THE BRANCH THAT ARMS THE LADDER IN THE FIRST PLACE ────
+    // GOING STALE MUST ARM AN ATTEMPT. Nothing else in the firmware does it on
+    // this transition: the not-stale branch above zeroes nextSyncAt on every
+    // beacon while we are in sync, pumpSync returns immediately on
+    // `nextSyncAt == 0`, and syncBeaconGated is only ever set INSIDE pumpSync,
+    // past that same return — so the gated branch above cannot bootstrap
+    // itself. Without this third branch the 4/8/16/32 s ladder is never
+    // entered at all.
+    //
+    // WHAT BREAKS IF IT IS DELETED: the counter rebinds twenty parties, the hub
+    // publishes the new version, every plinth reads it in the next beacon and
+    // then sits on its old table for the rest of the day. It is not even a
+    // silent plinth, which would at least reach the unresolved-tag branch and
+    // kickResync — a pole that ALSO existed at the old version still hits
+    // tableFind, resolves locally off the stale row, and plays the WRONG
+    // episode to the party standing there. A freshly flashed board is the same
+    // story from ver 0: stale against its very first beacon and unable to ask
+    // for a table until a guest has already been failed at it.
+    //
+    // The cap is untouched: one arm per stale transition (hence the
+    // `nextSyncAt == 0` test — a pending attempt is not re-armed), then the
+    // ladder, then syncBeaconGated collapses twenty-one stations going stale
+    // together to one SYNC per beacon.
+    syncAttempts = 0;
+    nextSyncAt = armNow();
   }
 
   if (verbose) {

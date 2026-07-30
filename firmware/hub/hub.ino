@@ -1299,10 +1299,29 @@ static void handleTap(const QlHeader &h, char *payload) {
     return;
   }
 
-  if (tableCount_ == 0) {
+  if (tableEverCommitted_ && tableCount_ == 0) {
     // The weak path, and the only one. See the pcReady note: with no bindings
     // anywhere there is no walk to lose, because every tap that can arrive is
     // an unknown tag the console refuses before it reaches a check-in.
+    //
+    // `tableEverCommitted_` IS LOAD-BEARING, not a belt-and-braces extra. On its
+    // own, `tableCount_ == 0` says "THIS HUB holds no table", which is a
+    // different claim from "the park has no bindings" — and only the second one
+    // justifies releasing a tap. The flag table is RAM-only by design, so the
+    // count reads 0 after every hub reboot until the console's push commits,
+    // and it stays 0 if that push dies half-way (a closed tab, a stalled
+    // browser) because applyTableChunk commits nothing until the last chunk
+    // lands. The chunks that DID arrive have already made pcAttached() true and
+    // keep it true for a further QL_PC_ATTACH_MS.
+    //
+    // WHAT BREAKS IF THIS GUARD IS REMOVED: that window falls exactly where the
+    // stations are draining their NVS tap rings into the hub that just came
+    // back. Every tap in the burst is new to tapMarks_, so every one takes this
+    // path and is ACKed on enqueue alone — each station deletes its only copy —
+    // into a queue nobody is reading. No presence, no leg, no error anywhere,
+    // which is the failure the note at the top of this file says must never
+    // happen. A hub that has never committed a table knows nothing about the
+    // park's bindings and must HOLD the tap, not release it.
     if (ticket) {
       sendAck(h.src);
       m.acked = true;

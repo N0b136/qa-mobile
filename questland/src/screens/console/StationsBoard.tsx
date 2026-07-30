@@ -12,7 +12,7 @@
 // same glance, so they never share a channel — the glyph and the head count
 // stay gold for occupancy, the ring and the corner mark carry the condition.
 
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import MapCanvas from '../../components/MapCanvas'
 import { DEFAULT_POSITION, MAP_LANDMARKS, QUEST_START, STATION_COORDS, VILLAGE_PLACE } from '../../content/stationMap'
 import { STATIONS } from '../../content/stations'
@@ -23,6 +23,8 @@ import type { Occupant } from '../../services/presenceService'
 import { tableVersion } from '../../services/flagService'
 import { GATE_STATION_NO, stationNoForPlace } from '../../services/hubProtocol'
 import * as hubLink from '../../services/hubLink'
+import type { HubState } from '../../services/hubLink'
+import { SerialTransport } from '../../services/hubSerial'
 import { broadcastTable } from '../../services/tapService'
 import { conditionOf, listHealth, staleStations } from '../../services/stationHealthService'
 import type { StationCondition, StationHealth } from '../../services/stationHealthService'
@@ -177,6 +179,65 @@ function duration(seconds: number): string {
  * can be, and that is what staff actually need: which table this plinth is
  * running and which one the park is.
  */
+/**
+ * ONE serial transport for the tab, not one per press.
+ *
+ * The browser's port picker is a one-time grant that the transport holds on to,
+ * so pressing the button a second time reuses the port already chosen instead of
+ * putting a dialog in front of a Warden who has already answered it. Handing
+ * `hubLink.connect()` a fresh instance would swap the transport out and throw
+ * that grant away. Constructing it is free — nothing opens until the click.
+ */
+const SERIAL = new SerialTransport()
+
+/**
+ * What the connect control says in each state, written for a Warden standing in
+ * the booth: every line is either "nothing is wrong" or a thing to go and do.
+ * `held` is the only one that needs a human, so it is the only one that names an
+ * action — and a serial monitor left open in another program counts as a window.
+ */
+const HUB_CONTROL: Record<HubState, { label: string; icon: string; hint: string }> = {
+  unsupported: {
+    label: 'Connect the hub',
+    icon: 'cable',
+    hint: 'This browser cannot open a serial port.',
+  },
+  idle: {
+    label: 'Connect the hub',
+    icon: 'cable',
+    hint: "Choose the hub's USB port. The cable carries every tap in the park.",
+  },
+  connecting: {
+    label: 'Opening the port',
+    icon: 'cable',
+    hint: "Choose the hub in the browser's picker.",
+  },
+  live: {
+    label: 'Hub connected',
+    icon: 'plug',
+    hint: 'USB serial at 115200. Taps arrive as they happen.',
+  },
+  reconnecting: {
+    label: 'Connect again',
+    icon: 'refresh-cw',
+    hint: 'The hub stopped answering. Trying again on its own — check the cable and the power.',
+  },
+  held: {
+    // NAMES BOTH CAUSES ON PURPOSE. The browser gives one error for "another
+    // window holds this port" and for "that device is not on the bus", so a
+    // hint that only mentions the window sends a Warden whose cable is loose
+    // off hunting for a tab nobody opened while the park's taps queue up.
+    label: 'Connect again',
+    icon: 'triangle-alert',
+    hint: 'Another window may hold the port, or the cable is out. Check both, then connect again.',
+  },
+  error: {
+    label: 'Connect again',
+    icon: 'triangle-alert',
+    hint: 'The hub would not open. Check the cable, then try again.',
+  },
+}
+
 function tableLine(h: StationHealth, parkVersion: number): string {
   if (!parkVersion) return 'No flag table in the rack yet'
   if (!h.tableVersion) return `None held — the park is on ${clock(parkVersion)}`
@@ -248,6 +309,81 @@ export default function StationsBoard() {
   const openOccupants = openPlace ? (byPlace[openPlace.id] ?? []) : []
   const openHealth = openPlace?.stationNo !== undefined ? health.get(openPlace.stationNo) : undefined
   const openCondition = openPlace ? (condition.get(openPlace.id) ?? 'unknown') : 'unknown'
+
+  // The cable's whole lifecycle lives on this board.
+  //
+  // `hubLink.connect()` is reference-counted, and the hold taken by the button
+  // below is released when this board unmounts — which is what signing out does,
+  // because ConsoleScreen swaps the whole grid for the staff gate. So the port
+  // is never open one moment longer than the staff session behind the taps it
+  // carries, which is the same rule the Firestore listeners follow.
+  const holdsHub = useRef(false)
+  useEffect(() => {
+    return () => {
+      if (!holdsHub.current) return
+      holdsHub.current = false
+      hubLink.disconnect()
+    }
+  }, [])
+
+  // The simulator attaches itself from an effect; a real port cannot, because
+  // `requestPort()` needs a user gesture. Hidden entirely where Web Serial is
+  // absent — Firefox, Safari, the QA sandbox — rather than shown as a button
+  // that could only ever fail. `?hub=sim` covers what staff do instead.
+  const canAttachHub = SERIAL.supported() && !hubLink.isSimulated()
+  const hubControl = HUB_CONTROL[hubState]
+
+  function attachHub() {
+    // NOTHING may be awaited above this call. `requestPort()` opens the
+    // browser's port picker and the browser only allows that while the click's
+    // user activation is still live; one await in front of it and Chrome throws
+    // SecurityError, which reads — wrongly — as "permission refused".
+    const already = holdsHub.current
+    holdsHub.current = true
+    const opening = hubLink.connect(SERIAL)
+    // Every connect() takes a hold. This board keeps exactly one, or a few
+    // impatient presses would leave a count that sign-out can never unwind.
+    if (already) hubLink.disconnect()
+
+    void opening.then((result) => {
+      if (result === 'live') {
+        toast.show({
+          title: 'Hub connected',
+          body: 'USB serial at 115200. Every tap in the park lands here now.',
+          icon: 'plug',
+        })
+        return
+      }
+      if (result === 'idle') {
+        // The picker was dismissed: nothing was chosen, so nothing went wrong.
+        // An error toast here would be the console inventing a fault out of a
+        // guide changing their mind. Give the hold back and say nothing.
+        holdsHub.current = false
+        hubLink.disconnect()
+        return
+      }
+      if (result === 'reconnecting') {
+        toast.show({
+          title: 'The hub did not answer',
+          body: "Trying again on its own. Check the cable and the hub's power.",
+          icon: 'refresh-cw',
+        })
+        return
+      }
+      toast.show({
+        title: result === 'held' ? 'The port did not open' : 'The hub would not open',
+        // Same reason as the `held` hint above: one browser error covers both
+        // "another window has this port" and "that device is not on the bus",
+        // so a toast that only accuses the other window sends a Warden with a
+        // loose cable hunting for a tab nobody opened.
+        body:
+          result === 'held'
+            ? 'Another console tab or a serial monitor may have it, or the cable is out. Check both, then connect again.'
+            : (hubLink.getSnapshot().error ?? 'Check the cable, then try again.'),
+        icon: 'triangle-alert',
+      })
+    })
+  }
 
   function pushTable() {
     const chunks = broadcastTable()
@@ -374,6 +510,26 @@ export default function StationsBoard() {
           </button>
         ) : null}
       </div>
+
+      {/* The cable itself, above the things that need it. Everything below this
+          line — the push, the heartbeats, every tap in the park — arrives
+          through the port this one button opens. */}
+      {canAttachHub ? (
+        <div className="row" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={hubControl.icon}
+            disabled={hubState === 'connecting' || hubState === 'live'}
+            onClick={attachHub}
+          >
+            {hubControl.label}
+          </Button>
+          <span className="muted" style={{ fontSize: 12, fontFamily: 'var(--font-ui)' }}>
+            {hubControl.hint}
+          </span>
+        </div>
+      ) : null}
 
       {/* The remedy the stale note names. It is a park-wide broadcast, not a
           per-station one, so it belongs beside the count and not inside any one
