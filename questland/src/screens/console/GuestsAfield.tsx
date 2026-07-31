@@ -62,7 +62,11 @@ export default function GuestsAfield({ onSend }: Props) {
       ) : (
         <>
           <p className="muted" style={{ marginBottom: 10, fontSize: 13 }}>
-            {afield.length} {afield.length === 1 ? 'group' : 'groups'} · {heads} travellers
+            {/* The group count already turns; the head count did not, so a lone
+                walker read "1 groups · 1 travellers" on the first arrival of
+                the morning — the one moment a Warden is most likely looking. */}
+            {afield.length} {afield.length === 1 ? 'group' : 'groups'} · {heads}{' '}
+            {heads === 1 ? 'traveller' : 'travellers'}
           </p>
           <div className="stack" style={{ gap: 0 }}>
             {afield.map((o, i) => {

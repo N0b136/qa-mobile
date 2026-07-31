@@ -42,7 +42,7 @@ import { QUEST_START, VILLAGE_PLACE } from '../content/stationMap'
 import { currentEpisode } from './progressService'
 import { redeem, recordCover } from './passService'
 import { clearPresenceFor, detachFlag } from './presenceService'
-import { ensureFirebase, ensureFirebaseWithin, isConfigured } from './firebase'
+import { ensureFirebase, ensureFirebaseWithin, hasRealAuth, isConfigured } from './firebase'
 import * as cloudSync from './cloudSync'
 
 const FLAGS_KEY = 'ql:flags'
@@ -458,10 +458,121 @@ export function nextLabel(): string {
 
 // ── Enrolling a pole ──────────────────────────────────────────────────────────
 
+/**
+ * Three different answers, and they are not interchangeable.
+ *
+ *  - `conflict`    the transaction ran and the rack said no: the pole is out
+ *                  with somebody else. The server copy comes back with it.
+ *  - `refused`     the SERVER threw the write out — rules or session. Repeating
+ *                  it on this machine will never make it land, so nothing may be
+ *                  written locally and the employee has to be told.
+ *  - `unavailable` nobody answered. The write is unjudged, local-first takes
+ *                  over, and the write-through catches up.
+ *
+ * `refused` exists because it used to be folded into `unavailable`, and that one
+ * conflation is the worst bug this file has had: a staff session that expired
+ * mid-shift made every bind at the counter succeed on screen — chip on the rack,
+ * standard in the guest's hand — while Firestore refused all of it. The parties
+ * walked out with poles no station could resolve, and the day's bindings died
+ * with the browser profile. A verdict and a silence must never share a branch.
+ */
 type ClaimResult =
   | { ok: true; flag: Flag }
   | { ok: false; reason: 'conflict'; flag: Flag }
+  | { ok: false; reason: 'refused' }
   | { ok: false; reason: 'unavailable' }
+
+/**
+ * What the counter reads when the server refused a write that CHANGED NOTHING.
+ *
+ * Staff copy, so it is the fact and the next move — no lore, no apology. A
+ * Warden reading this at eleven at night needs to know the write did not land,
+ * why it did not, and what to do about it; "Nothing was saved" is the sentence
+ * that stops them assuming the pole is bound and handing it over.
+ *
+ * ── "NOTHING WAS SAVED" IS A CLAIM ABOUT THE WHOLE CALL ──────────────────────
+ *
+ * Every use of this string is asserting that the refused call wrote NOTHING
+ * ANYWHERE up to the point it refused — not merely that the refused write is
+ * safe to repeat. Idempotency is not enough to earn this sentence: a Passage
+ * that a repeat re-reads for free was still spent the first time, and a Warden
+ * told nothing was saved will not go looking for it.
+ *
+ * Only four call sites can say it, and all four claim the document before they
+ * touch anything at all: `registerFlag`, `attachTag`, `releaseFlag` and
+ * `completeFlag`.
+ *
+ * `bindFlag` is NOT one of them and must never use this string. It runs
+ * `redeem` and `recordCover` before its claim, so a Quest Experience is spent
+ * for an episode nobody walked and the party's phones read it as taken — and a
+ * walk-up bind has minted a record, a party and a Passage on top of that. It
+ * therefore reports no refusal at all; see the note there.
+ */
+const REFUSED_COPY =
+  'The server refused that write. This staff session has expired, or the account is no longer on the roster. Sign in again, then repeat it. Nothing was saved.'
+
+/**
+ * Codes where the request was ADJUDICATED — by the rules or by the identity
+ * behind it — as against never answered.
+ *
+ * Nothing is added on a guess. Everything else — Firestore's own 'unavailable',
+ * a deadline, a failed dynamic import, an error carrying no code at all — means
+ * "we could not ask", and MUST stay `unavailable` or a booth on dropped wifi
+ * stops being able to bind a pole at all. Fail SOFT on the unreadable: calling an
+ * unknown error a refusal shuts the counter for a wifi blip, which is a worse day
+ * than the bug this set exists to catch.
+ *
+ * ── THE SECOND GROUP IS THE CASE THIS WHOLE BRANCH WAS BUILT FOR ─────────────
+ *
+ * The reported bug is a staff session that expired mid-shift, and the first two
+ * codes DO NOT CATCH IT. When the refresh token is revoked or the account is
+ * turned off, the failure is raised by AUTH, not by the rules: Firestore asks for
+ * a token, auth throws `auth/user-token-expired`, and Firestore rethrows it
+ * VERBATIM rather than remapping it to its own 'unauthenticated'. `split('/')`
+ * already strips the 'auth/', so the tail is 'user-token-expired' — which was not
+ * in this set, so the expired session fell to `unavailable` and wrote locally.
+ * The exact reported failure, with the fix nominally in place.
+ *
+ * It is worse than a misfiled verdict, too. The SDK's retry test calls `fail()`
+ * on these codes from inside a promise it has already dropped, so the throw goes
+ * nowhere and `runTransaction` NEVER SETTLES: `.catch(claimError)` is never
+ * reached at all and only the ten-second deadline ends the call — see the
+ * pre-flight in `claimFlagDoc`, which is what actually stops that.
+ *
+ * 'network-request-failed' is deliberately NOT here. It is auth's way of saying
+ * the token could not be FETCHED — no wifi — which is a silence and must stay
+ * soft, exactly like Firestore's own 'unavailable'.
+ */
+const CLAIM_REFUSALS = new Set([
+  // The rules said no.
+  'permission-denied',
+  'unauthenticated',
+  // The identity behind the write is gone. No amount of retrying on this machine
+  // mints a new one; somebody has to sign in again.
+  'user-token-expired',
+  'user-disabled',
+  'user-not-found',
+  'invalid-user-token',
+])
+
+/**
+ * Reads a thrown Firebase error as one of the two non-conflict outcomes.
+ *
+ * A FirebaseError carries a string `code`. Firestore's arrive bare
+ * ('permission-denied'); other SDK surfaces prefix theirs
+ * ('firestore/permission-denied'), so the tail after the last '/' is what gets
+ * matched — and an error that is not an object, or has no string code, is
+ * unreadable and therefore unavailable.
+ */
+function claimError(err: unknown): ClaimResult {
+  if (err && typeof err === 'object' && 'code' in err) {
+    const code = (err as { code: unknown }).code
+    if (typeof code === 'string' && CLAIM_REFUSALS.has(code.split('/').pop() ?? '')) {
+      return { ok: false, reason: 'refused' }
+    }
+  }
+  return { ok: false, reason: 'unavailable' }
+}
 
 /**
  * Bounds a promise that has no timeout of its own.
@@ -509,6 +620,34 @@ function withDeadline<T>(work: Promise<T>, ms: number, onTimeout: T): Promise<T>
  * rack. This is the whole server-side defence for that path, because the local
  * clash check runs against a mirror that can be stale or still filling — which
  * is precisely the condition this transaction exists for.
+ *
+ * ── WHAT THIS FUNCTION GUARANTEES, AND THE ONE THING IT DOES NOT ─────────────
+ *
+ * A refusal this function has CLASSIFIED is never returned as `unavailable`. The
+ * pre-flight below, the `classify` latch and the outer catch cover all three
+ * places a refusal can arrive from, so no branch here turns a verdict into a
+ * shrug — which is what the earlier version of this comment claimed outright,
+ * and it was not true.
+ *
+ * THE RESIDUAL: a refusal that arrives AFTER the ten-second deadline is reported
+ * `unavailable`, because the caller has already been answered and gone. That is
+ * not a narrow window either — the SDK treats 'unauthenticated' as retryable and
+ * spends roughly eight seconds of backoff over five attempts before it rejects,
+ * so a slow link can put the rejection the wrong side of the deadline. Three
+ * things make it survivable, and none of them is the race:
+ *
+ *  - the dominant cause of a late refusal is the dead staff session, and the
+ *    pre-flight below answers that one BEFORE the transaction is ever started;
+ *  - an expired session is not a one-off, so the very next counter action takes
+ *    the pre-flight and is refused loudly, seconds later;
+ *  - the local write a late refusal permits is the same one a genuine outage
+ *    permits, which is the deliberate local-first behaviour of the whole booth.
+ *
+ * Closing it properly means the caller learning about a verdict that arrived
+ * after it returned — a rack-level reconciliation, not a line in this function.
+ * Until that exists, this is the honest shape of it. Do not restore a sentence
+ * promising more, because a comment asserting a guarantee the code lacks is how
+ * the next person stops checking.
  */
 async function claimFlagDoc(
   next: Flag,
@@ -517,9 +656,41 @@ async function claimFlagDoc(
 ): Promise<ClaimResult> {
   const fb = await ensureFirebaseWithin(BOOTH_TIMEOUT_MS)
   if (!fb) return { ok: false, reason: 'unavailable' }
+
+  // ── PRE-FLIGHT: signed out is a refusal, not a shrug ────────────────────────
+  //
+  // Sound only BECAUSE it sits after that await. `hasRealAuth()` reads null both
+  // for "no session" and for "Firebase has not booted yet", and those demand
+  // opposite answers. A non-null handle removes the ambiguity: `ensureFirebase`
+  // resolves only once `onAuthStateChanged` has reported, so past this line a
+  // false reading is a settled fact — nobody is signed in — and every write in
+  // this file needs `isRealUser()` to pass the rules. Sending it anyway can only
+  // ever be refused.
+  //
+  // It also ends the hang. On an expired token the SDK's retry test throws from
+  // inside a promise it has already dropped, so `runTransaction` never settles
+  // and `.catch` never fires; the deadline was the only thing ending the call,
+  // ten seconds with a guest at the counter, and then it answered `unavailable`
+  // and wrote locally anyway. Auth clears `currentUser` when it invalidates a
+  // token, so that session never reaches the transaction now.
+  if (!hasRealAuth()) return { ok: false, reason: 'refused' }
+
   try {
     const { doc, runTransaction } = await import('firebase/firestore')
     const ref = doc(fb.db, 'flags', next.uid)
+
+    // A latch, so a refusal cannot be thrown away by the race below.
+    //
+    // Local to this call and never module-level: two claims can be in the air at
+    // once (two pads, one tab), and a shared latch would hand one call's refusal
+    // to the other call's timeout — a shrug turned into a refusal is a counter
+    // that stops working for no reason.
+    let refused = false
+    const classify = (err: unknown): ClaimResult => {
+      const out = claimError(err)
+      if (!out.ok && out.reason === 'refused') refused = true
+      return out
+    }
 
     const claim = runTransaction<ClaimResult>(fb.db, async (tx) => {
       const snap = await tx.get(ref)
@@ -534,15 +705,38 @@ async function claimFlagDoc(
       tx.set(ref, clean({ ...written }))
       return { ok: true, flag: written }
     })
+      // Classified HERE and not in the outer catch, because the outer catch
+      // never sees this rejection: `withDeadline` RACES this promise, and a race
+      // the timeout wins throws the loser's error away. Read the code before the
+      // race and a refusal that lands at nine seconds is still a refusal; read it
+      // after and it is silently a timeout, which is the exact swallow this
+      // whole change exists to remove.
+      .catch(classify)
 
     // An employee is standing at a counter with a guest in front of them. A
     // server verdict is worth waiting for; it is not worth waiting for forever.
-    return await withDeadline<ClaimResult>(claim, BOOTH_TIMEOUT_MS, {
+    // The timeout value is `unavailable` on purpose: no verdict arrived inside
+    // ten seconds, and a booth that cannot reach Firestore must keep working.
+    const raced = await withDeadline<ClaimResult>(claim, BOOTH_TIMEOUT_MS, {
       ok: false,
       reason: 'unavailable',
     })
-  } catch {
-    return { ok: false, reason: 'unavailable' }
+
+    // `Promise.race` settles on whichever promise is FIRST, and when both are
+    // ready in the same turn that is the one registered first — the timer. So a
+    // refusal classified in the same tick as the deadline could still be handed
+    // back as a shrug. The latch is read after the race precisely to take that
+    // tie back: a refusal that was classified at all wins over a timeout.
+    if (!raced.ok && raced.reason === 'unavailable' && refused) {
+      return { ok: false, reason: 'refused' }
+    }
+    return raced
+  } catch (err) {
+    // Reaches here only for a failure BEFORE the transaction — the dynamic
+    // import, or `doc()` on a uid the allowlist should have caught. `claimError`
+    // rather than the latched `classify`, which is scoped to the try: nothing
+    // raced this throw, so there is no tie to take back.
+    return claimError(err)
   }
 }
 
@@ -603,6 +797,11 @@ export async function registerFlag(input: RegisterFlagInput): Promise<FlagOutcom
       upsertLocal(claimed.flag)
       return { ok: false, error: `That tag is already enrolled as ${claimed.flag.label}.`, conflict: claimed.flag }
     }
+    // Refused, so the pole does NOT go on this machine's rack. Rack it anyway
+    // and the console shows a chip that exists nowhere else in the park: an
+    // employee binds a party to it, hands over the pole, and every plinth in the
+    // woods reads its tag as unknown, because no document was ever written.
+    if (claimed.reason === 'refused') return { ok: false, error: REFUSED_COPY }
     // 'unavailable' — fall through and keep the pole on this machine's rack.
   }
   return { ok: true, flag: writeFlag(flag) }
@@ -692,6 +891,13 @@ export async function attachTag(
         conflict: claimed.flag,
       }
     }
+    // Refused, so the create half never happened — which means the delete half
+    // must not either. Swapping the id locally here would strike a good document
+    // this console can still see while writing its replacement nowhere: the pole
+    // answers to its new tag on this browser profile alone, and every other
+    // console in the park goes on holding it under the pending id it no longer
+    // has. Two consoles, two different poles, one physical stick.
+    if (claimed.reason === 'refused') return { ok: false, error: REFUSED_COPY }
     // 'unavailable' — attach on this machine; the write-through catches up.
   }
   const written = swapLocal(pole.uid, next)
@@ -873,6 +1079,13 @@ export async function bindFlag(input: BindFlagInput): Promise<FlagOutcome> {
   const enrolled = spec ? await enrolWalkUp(spec, input.orgId, at) : null
   if (enrolled && !enrolled.ok) return { ok: false, error: enrolled.error }
 
+  // KNOWN LIMITATION, past this line. A failure below leaves the walk-up's
+  // record, party, booking and — past `redeem` — the spent Quest Experience
+  // standing, on a call that answers "not bound". The booth leaves the form
+  // filled in, so submitting it again mints a SECOND record, party, booking and
+  // Passage for the same family rather than retrying the first. Nothing here
+  // detects that or warns about it; closing it needs the enrolment and the
+  // claim to be one transaction.
   const holderId = enrolled ? enrolled.userId : input.holderId
   const holder = getUser(holderId)
   if (!holder) return { ok: false, error: 'That guest is not on the roll.' }
@@ -1014,6 +1227,11 @@ export async function bindFlag(input: BindFlagInput): Promise<FlagOutcome> {
         conflict: claimed.flag,
       }
     }
+    // 'refused' falls through with 'unavailable', deliberately. Both `redeem`
+    // and `recordCover` have already written by the time this claim is made, so
+    // neither REFUSED_COPY nor any other refusal wording here could be true
+    // about what was saved — and a false receipt at the counter is worse than
+    // the soft fall-through, which is the behaviour this path has always had.
     // 'unavailable' — bind on this machine; the write-through catches up.
   }
   return { ok: true, flag: writeFlag(next) }
@@ -1043,6 +1261,10 @@ export interface RackFlagOptions {
  * guests may be halfway round the park, and a safety board must not lose them.
  *
  * This is NOT how a day ends — see `completeFlag`.
+ *
+ * It CLAIMS the document, for the reason set out in the note below it: a
+ * release the server refused, written locally anyway, is the half of the
+ * compound failure that leaves a pole unbindable from this console forever.
  */
 export async function releaseFlag(rfidUid: string, opts: RackFlagOptions = {}): Promise<FlagOutcome> {
   const at = opts.at ?? Date.now()
@@ -1065,10 +1287,123 @@ export async function releaseFlag(rfidUid: string, opts: RackFlagOptions = {}): 
     tableAt: at,
     demo: flag.demo,
   })
-  const written = writeFlag(next)
+
+  let claimedFlag: Flag | null = null
+  if (isConfigured()) {
+    // The binding being taken back is the one this console can see, so the
+    // rack's own copy of it is what may be overwritten — and nothing else. A
+    // server copy out with a DIFFERENT party means this mirror is behind, and
+    // erasing that party's binding would take a pole off a group still carrying
+    // it. `flag.groupId` is therefore the compare-and-set key even though `next`
+    // deliberately carries none.
+    const claimed = await claimFlagDoc(next, flag.groupId ?? null)
+    if (claimed.ok) {
+      claimedFlag = claimed.flag
+    } else if (claimed.reason === 'conflict') {
+      // The rack is right and this console was stale. Adopt the server copy
+      // rather than leave a mirror that disagrees with the park.
+      upsertLocal(claimed.flag)
+      return {
+        ok: false,
+        error: `${flag.label} is out with ${claimed.flag.groupName ?? 'another party'} on the rack, not with the party shown here. Nothing was released.`,
+        conflict: claimed.flag,
+      }
+    } else if (claimed.reason === 'refused') {
+      // The binding STANDS, everywhere. Writing the release locally is the
+      // failure described in the note below this function — and `detachFlag`
+      // would compound it by taking the pole's label off presence rows for a
+      // binding the park still holds, sending a Warden looking for a party the
+      // board no longer names. Nothing is written, and repeating it is safe:
+      // every write in this function happens after this line.
+      return { ok: false, error: REFUSED_COPY }
+    }
+    // 'unavailable' — release on this machine; the write-through catches up.
+  }
+
+  // `upsertLocal` where the transaction already committed the document — the
+  // mirror takes the copy the rack agreed to, label and all, and pushing the
+  // local one back over it would undo that. `writeFlag` only where nothing was
+  // asked: no cloud configured, or nobody answered.
+  const written = claimedFlag ? upsertLocal(claimedFlag) : writeFlag(next)
   detachFlag(carried)
   return { ok: true, flag: written }
 }
+
+/**
+ * ── WHY RACKING A POLE IS CLAIMED AND STAMPING ONE IS NOT ────────────────────
+ *
+ * `releaseFlag` and `completeFlag` take the same server verdict as the binding
+ * paths. The stamps below them — `markSealed`, `markLost`, `markFound`,
+ * `retireFlag`, `noteTap` — deliberately do not. The line between them is not
+ * tidiness; it is which failure can be compounded into a pole nobody can use.
+ *
+ * THE COMPOUND FAILURE, which is what forced this:
+ *   the staff session dies; a party hands FLAG-01 back; `completeFlag` writes
+ *   locally and the refused push is swallowed, so this console shows FLAG-01
+ *   racked and free while the rack still holds it bound. The Warden binds it to
+ *   the next party. THAT path is claimed, so it reads the server copy, answers
+ *   'conflict', and `upsertLocal` writes the stale still-bound record over the
+ *   local mirror. The counter now reads "out with a party that went home", and
+ *   the pole is unbindable from this console for good — because the release that
+ *   would clear it is refused too, every time, silently.
+ *
+ * Note what did the damage: hardening the BIND while leaving the RACKING soft
+ * made this case worse than it was before either was hardened. A verdict is only
+ * worth reading if the writes it is read against are also being judged.
+ *
+ * The stamps carry none of that, and are left soft on purpose:
+ *
+ *  - They are SYNCHRONOUS and return `Flag | null`. `markSealed` and `noteTap`
+ *    are called from `tapService`, on the path a plinth in the woods takes when
+ *    a pole is tapped. Awaiting a ten-second round trip there would stall a
+ *    station on a dead link — and the whole point of the cached, versioned flag
+ *    table is that the woods keep working when the counter cannot be reached.
+ *    Making them async is a change to the tap pipeline's shape, not a line here.
+ *
+ *  - THREE OF THE FOUR only ever ADD a restriction. `markSealed`, `markLost` and
+ *    `retireFlag` all move the pole towards resolving to LESS: one of those
+ *    landing locally and not on the rack means this console is more cautious
+ *    than the park, never that it hands out a pole the park has already given to
+ *    somebody else. Nothing downstream reads them as free-to-bind —
+ *    `bindFlag`'s exemption turns on `isOut` and `groupId`, which they do not
+ *    touch.
+ *
+ *  - They are re-assertable. The status is a field, not an event: the next
+ *    `completeFlag` or `releaseFlag` on that pole is a full-document write that
+ *    carries the current status with it, and that write IS judged.
+ *
+ * ── `markFound` IS THE EXCEPTION, AND IT IS NOT COVERED BY THAT ARGUMENT ─────
+ *
+ * It is the one stamp that TAKES a restriction away: `lost` -> `racked`, or
+ * `lost` -> `bound` where the walk was still open. So the sentence above does
+ * not hold for it, and this note used to claim it did — with `markFound` listed
+ * among the very stamps it was exempting. What a swallowed one actually costs:
+ *
+ *   the park has FLAG-04 marked lost; a Guide finds it and taps "Mark found";
+ *   the write is refused and swallowed, so THIS console reads it racked and free
+ *   while every other console still reads it lost. The Warden binds it. That
+ *   path is claimed — but `isOut` is `bound || sealed`, so a server copy sitting
+ *   at `lost` with no groupId is not a conflict and the transaction writes the
+ *   binding straight over the park's lost mark. A restriction the park was
+ *   holding is erased on the strength of a write the server refused.
+ *
+ * It is left synchronous anyway, for the same reason as the others — but that is
+ * a judgement about cost, not a safety property, and it is written down here so
+ * nobody re-derives the wrong invariant from the list. The cost is bounded by
+ * the same thing that bounds the rest: an expired session announces itself
+ * loudly on the first bind, release or completion the Warden does, which at a
+ * counter is within the minute, and until then the only pole at risk is one a
+ * human has just physically picked up and declared found.
+ *
+ * Closing it properly means `markFound` claiming the document like
+ * `releaseFlag` does, which makes it async and changes `withPole` in BoothPanel
+ * — a change to the rack panel's shape, not a line in this file. Until that
+ * exists this is the honest description of it.
+ *
+ * The rest of the residual is smaller: a swallowed `markLost` leaves this
+ * console showing a pole lost while the stations still play for it.
+ */
+
 
 /**
  * Closes a walk — the guest handed the pole back at the booth.
@@ -1112,7 +1447,41 @@ export async function completeFlag(rfidUid: string, opts: RackFlagOptions = {}):
     // The wire state moves to 'returned', so this is a table write.
     tableAt: at,
   })
-  writeFlag(next)
+
+  let racked: Flag = next
+  if (isConfigured()) {
+    // Completion KEEPS the binding, so `next.groupId` is the party being closed
+    // out and the compare-and-set exempts exactly them. A server copy out with
+    // anybody else is a mirror that is behind, and racking off it would close a
+    // walk that is still happening.
+    const claimed = await claimFlagDoc(next, next.groupId ?? null)
+    if (claimed.ok) {
+      racked = upsertLocal(claimed.flag)
+    } else if (claimed.reason === 'conflict') {
+      upsertLocal(claimed.flag)
+      return {
+        ok: false,
+        error: `${flag.label} is out with ${claimed.flag.groupName ?? 'another party'} on the rack, not with the party shown here. Nothing was racked.`,
+        conflict: claimed.flag,
+      }
+    } else if (claimed.reason === 'refused') {
+      // The pole is NOT racked — this is the head of the compound failure
+      // written out below `releaseFlag`. Racking it locally tells the counter a
+      // pole is free while the park still has it out with a party who went
+      // home, and the next Warden to bind it gets a stale conflict written over
+      // the mirror and a pole this console can never let go of.
+      //
+      // "Repeat it" is exact here: everything this function writes — the
+      // document, and the presence rows below — happens after this line, and a
+      // second completion of the same pole is the same write again.
+      return { ok: false, error: REFUSED_COPY }
+    } else {
+      // 'unavailable' — rack it on this machine; the write-through catches up.
+      racked = writeFlag(next)
+    }
+  } else {
+    racked = writeFlag(next)
+  }
 
   // The roster on the binding is frozen at the counter; the party that walked may
   // have grown since. Every member is given a presence row by each check-in — the
@@ -1130,7 +1499,9 @@ export async function completeFlag(rfidUid: string, opts: RackFlagOptions = {}):
   clearPresenceFor(members)
   clearPresenceDocs(members)
 
-  return { ok: true, flag: next }
+  // `racked`, not `next`: where the transaction committed, the rack's copy is
+  // the one the mirror now holds, and the toast at the counter names its label.
+  return { ok: true, flag: racked }
 }
 
 // ── Status stamps ─────────────────────────────────────────────────────────────

@@ -364,6 +364,46 @@ a.card:hover,
   font-family: var(--font-display);
 }
 
+/* A long staff instruction must not push its own dismiss control off the
+   screen — the same failure the 52dvh cap on Dialog bodies exists to stop. */
+.toast__text {
+  min-width: 0;
+  max-height: 44dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Every toast can be sent away by hand — see Toast.tsx for why a long staff
+   instruction cannot live on a timer alone. Quiet at rest so it never competes
+   with the message; it lightens on hover and darkens on press like every other
+   control, and the focus ring comes from the global :focus-visible rule. */
+.toast__dismiss {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: var(--border-thin) solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition-control);
+}
+
+.toast__dismiss:hover {
+  color: var(--text-heading);
+  border-color: var(--border-hairline);
+}
+
+.toast__dismiss:active {
+  color: var(--text-muted);
+  box-shadow: var(--shadow-carve-in);
+}
+
 /* gate-opening intro reveal — see GateIntro.tsx / Shell.tsx */
 @keyframes qa-shield-off {
   to {

@@ -437,7 +437,10 @@ export default function StationsBoard() {
       <div className="row" style={{ gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
         <span className="row muted" style={{ gap: 6, fontSize: 13 }}>
           <Icon name="map-pin" size={14} />
-          {atStations} at stations
+          {/* "1 at stations" is the reading on a quiet morning. The other two
+              counts beside this one end in a phrase that does not turn ("en
+              route", "in the village"), so only this one needs it. */}
+          {atStations} at {atStations === 1 ? 'a station' : 'stations'}
         </span>
         <span className="row muted" style={{ gap: 6, fontSize: 13 }}>
           <Icon name="footprints" size={14} />
@@ -585,7 +588,16 @@ export default function StationsBoard() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          // `min(320px, 100%)` and not a bare 320px. `auto-fit` drops the
+          // SECOND column when 320 will not fit twice, but it never shrinks the
+          // first below the minimum it was given — so on a phone the one
+          // remaining track stayed a hard 320px inside a ~292px card and each
+          // row ran past the edge. The card clips rather than scrolls, so it
+          // did not even show up as page overflow: it just sliced "arrived 1
+          // min ago" off at the right, which is what the owner photographed.
+          // Above 320px of room the `min()` resolves to 320px and this is the
+          // same declaration it always was — the 1440 layout is untouched.
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))',
           // Wide, and load-bearing rather than decorative: each row's note is
           // right-aligned to its column's edge, so at 1440 the left list's
           // "left Riddlebridge · 26 min ago" ends a few pixels from the right

@@ -405,8 +405,9 @@ export default function BoothPanel({ staffUid }: Props) {
         // which is exactly when nothing should be passed.
         passBookingId: selectedPassage ? bookingId : undefined,
         // Read only when `holderId` is blank. `bindFlag` enrols them, sells the
-        // passage and binds the pole in one action, so a refusal anywhere in
-        // that chain leaves no party half-made at the counter.
+        // passage and binds the pole in one gesture, NOT in one transaction: a
+        // failure past the enrolment leaves the record, the party, the booking
+        // and the spent Passage standing. See the note on `bindFlag`.
         walkUp: walkReady
           ? { name: walkName.trim(), headcount: walkHeads, tierId: walkTier.id }
           : undefined,
@@ -977,8 +978,13 @@ export default function BoothPanel({ staffUid }: Props) {
               {/* Inline, like every other one-off in this panel: `.muted` sets a
                   14px face and a class of equal specificity cannot be relied on
                   to beat it once the two stylesheets are bundled. */}
+              {/* A booth that has enrolled exactly one pole is the ordinary
+                  first day, not an edge case, and "1 poles" is what an owner
+                  photographs and sends back. Only the counted NOUN turns —
+                  "out", "overdue" and "awaiting a tag" are states, and they
+                  read the same for one pole as for nine. */}
               <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
-                {rack.length} poles · {out.length} out
+                {rack.length} {rack.length === 1 ? 'pole' : 'poles'} · {out.length} out
                 {overdue.length > 0 ? ` · ${overdue.length} overdue` : ''}
                 {pending.length > 0 ? ` · ${pending.length} awaiting a tag` : ''}
               </p>
@@ -1075,8 +1081,22 @@ export default function BoothPanel({ staffUid }: Props) {
                 icon="undo-2"
                 onClick={() => {
                   const uid = openPole.uid
+                  const label = openPole.label
                   setOpenPole(null)
-                  void releaseFlag(uid).then(() => {
+                  void releaseFlag(uid).then((res) => {
+                    // The outcome is READ now. `releaseFlag` takes a server
+                    // verdict, and this button used to throw it away and toast
+                    // success either way — so a refused release announced itself
+                    // as "Binding taken back" while the park went on holding the
+                    // pole with the old party. The refusal that matters most is
+                    // the one an employee is told about.
+                    if (!res.ok) {
+                      // Still refreshed: a conflict adopted the rack's copy, and
+                      // the chip must show what the park actually holds.
+                      refresh()
+                      toast.show({ title: `${label} not released`, body: res.error, icon: 'circle-alert' })
+                      return
+                    }
                     // The pole now resolves to nobody. Tell the park, or every
                     // station keeps playing the released party's episode for it.
                     broadcastRow(uid)
