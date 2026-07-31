@@ -261,6 +261,74 @@ service cloud.firestore {
     match /sos/{id} {
       allow create: if ownsIncoming() || demoIncoming();
       allow read, update, delete: if isStaff() || ownsExisting() || demoExisting();
+
+      // The thread on that call — "chat with a Warden". One subcollection per
+      // call, so a dispatched emergency and a quiet question are the same
+      // machinery.
+      //
+      // ── WHY A SUBCOLLECTION AND NOT A FLAT `sosMessages` ──────────────────
+      //
+      // A flat collection would have to be read with
+      // where('sosId','==',x) — and a rule that gates on the DOCUMENT'S OWN
+      // fields refuses that query outright, because the filter does not prove
+      // every match qualifies. Same trap that shapes the `flags` rule above.
+      // Gating on the PARENT instead leaves the subcollection query unfiltered
+      // and therefore answerable: there is nothing about the individual
+      // documents left to prove.
+      //
+      // ── `from` IS CHECKED AGAINST WHO IS ASKING ───────────────────────────
+      //
+      // It decides which side of the thread a line renders on and, through the
+      // push sender, who gets woken by it. Left unchecked, a guest could post
+      // `from: 'warden'` into their own thread and produce an official-looking
+      // answer — "the bridge is safe to cross", in park livery, from nobody.
+      // A warden's line requires the roster; a guest's requires the call.
+      function call() {
+        return get(/databases/$(database)/documents/sos/$(id)).data;
+      }
+      function ownsCall() {
+        return isRealUser() && call().userId == request.auth.uid;
+      }
+      function demoCall() {
+        return isRealUser() && call().userId.matches('demo-.*');
+      }
+
+      match /messages/{msgId} {
+        allow read: if isStaff() || ownsCall() || demoCall();
+
+        allow create: if request.resource.data.sosId == id
+          && request.resource.data.body is string
+          && request.resource.data.body.size() > 0
+          && request.resource.data.body.size() <= 2000
+          && request.resource.data.createdAt is number
+          && (
+            (request.resource.data.from == 'warden' && isStaff())
+            || (request.resource.data.from == 'guest' && (ownsCall() || demoCall()))
+          );
+
+        // WRITTEN ONCE, like `legs`. What a Warden told a guest at eleven at
+        // night has to still mean that tomorrow — neither side may revise or
+        // unsay a line after it has been read. Closing a thread is a status on
+        // the parent call; it is not an edit to what was said in it.
+        allow update, delete: if false;
+      }
+    }
+
+    // Web push registrations — one row per device, id is the percent-encoded
+    // FCM token so a device re-registering overwrites its own row.
+    //
+    // Owner-scoped on both sides, and NOTHING IN THE APP QUERIES THIS
+    // COLLECTION: it is read only by the push sender, which runs as the project
+    // under the admin SDK and is not subject to these rules at all. That is why
+    // gating on the document's own `userId` is safe here where it would break a
+    // client listener.
+    //
+    // The `staff` field a client writes here is a CLAIM and is worth nothing on
+    // its own — the sender re-checks every claimed uid against `staff/{uid}`
+    // before it will deliver a guest's words to that device.
+    match /pushTokens/{tokenId} {
+      allow read, delete: if ownsExisting();
+      allow create, update: if ownsIncoming();
     }
 
     // A guest's own device writes its own notifications (bookings, lore,

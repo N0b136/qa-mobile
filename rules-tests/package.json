@@ -1,0 +1,14 @@
+{
+  "name": "questland-rules-tests",
+  "private": true,
+  "type": "module",
+  "description": "Firestore rules suite for the Calls for Aid chat lane. Deliberately its own package — see readme.md.",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project qa-mobile-rules-test \"node suite.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase": "^12.16.0",
+    "firebase-tools": "^14.0.0"
+  }
+}

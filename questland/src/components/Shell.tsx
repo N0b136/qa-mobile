@@ -6,6 +6,7 @@ import GateIntro from './GateIntro'
 import { currentUser } from '../services/authService'
 import { syncBookingReminders } from '../services/bookingService'
 import { startGuestSync } from '../services/cloudSync'
+import { enablePush, pushState } from '../services/pushService'
 
 // Chrome that fades in as the gate intro ends. TopBar/BottomNav are
 // `position: fixed` internally — their reveal wrapper must only ever set
@@ -35,6 +36,12 @@ export default function Shell() {
   useEffect(() => {
     if (!user) return
     syncBookingReminders(user.id)
+    // Re-mint the push token on every start. This prompts NOBODY — enablePush
+    // returns early unless permission was already granted — but it is the only
+    // thing that catches a token Google has rotated: the v9+ SDK dropped
+    // onTokenRefresh, so a device that is never re-registered silently stops
+    // receiving, with no error on either side.
+    if (pushState() === 'on') void enablePush(user.id)
     const stop = startGuestSync(user.id)
     return () => stop()
     // eslint-disable-next-line react-hooks/exhaustive-deps

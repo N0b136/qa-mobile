@@ -281,7 +281,16 @@ export interface Flag {
   demo?: true
 }
 
-export type SosKind = 'emergency' | 'quest-help'
+/**
+ * 'chat' is the quiet lane: a question that needs an answer, not a body walking
+ * out to a Station. It is a KIND and not a flag because the board sorts on it —
+ * an emergency outranks every chat on the console no matter how long it waited.
+ *
+ * Messages are NOT exclusive to it. A dispatched emergency can be talked through
+ * while the Warden walks, which is the whole reason `sosChatService` keys threads
+ * on the request id rather than on the kind.
+ */
+export type SosKind = 'emergency' | 'quest-help' | 'chat'
 export type SosStatus = 'open' | 'acknowledged' | 'resolved'
 
 export interface SosRequest {
@@ -294,6 +303,46 @@ export interface SosRequest {
   responder?: string
   createdAt: number
   updatedAt: number
+  /**
+   * Stamped by whichever side sent last, so the console can order and badge the
+   * board WITHOUT subscribing to every thread's messages. That subscription is
+   * the one way to make this feature expensive: it is
+   * readers x messages x threads, forever, against a board that only ever shows
+   * the last line. Keep the thread listener scoped to the thread on screen.
+   */
+  lastMessageAt?: number
+  lastMessageFrom?: SosMessageAuthor
+  /** First ~80 chars of the last message. A preview, never the record. */
+  lastMessagePreview?: string
+}
+
+export type SosMessageAuthor = 'guest' | 'warden'
+
+/**
+ * One line in a thread. WRITTEN ONCE — the rules refuse update and delete
+ * outright, same contract as `legs`: what a Warden told a guest at 11pm has to
+ * still mean that tomorrow.
+ */
+export interface SosMessage {
+  id: string
+  sosId: string
+  from: SosMessageAuthor
+  /** The Warden's persona name, or the guest's. Denormalized so an old thread still reads right. */
+  authorName: string
+  body: string
+  createdAt: number
+  /**
+   * LOCAL ONLY — never written to Firestore, never read back from it.
+   *
+   * This is the field that keeps the feature honest. Every other push in this
+   * app is fire-and-forget with a swallowed catch, which is the right call for a
+   * booking mirror and a LIE in a chat: the guest watches their message sit in
+   * the thread looking sent while it never left the phone. A message therefore
+   * lands 'pending', and only the server's answer moves it to 'sent' or
+   * 'failed'. Absent means it came down from the cloud, i.e. it is on the
+   * server by definition.
+   */
+  delivery?: 'pending' | 'sent' | 'failed'
 }
 
 /**

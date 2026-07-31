@@ -64,6 +64,17 @@ Orgs: **Rangers of Questia** (ranks Scout ep5, Watcher ep9), **Hearers of the Al
 - **`updateAnnouncement` takes `null` to CLEAR `image`/`expiresAt`; `undefined` leaves them alone.** Without that a removed hero quietly stands.
 - **A leg is written once** — the rules refuse `update` on `legs` entirely. Runs are DERIVED (`questRuns()`), never stored.
 
+**Chat / push (the SOS thread lane)**
+- **`catch { swallow }` is the right push everywhere EXCEPT a chat.** A message carries a LOCAL-ONLY `delivery` (`pending`/`sent`/`failed`); only the server clears it, and `pushSosMessage` is the one awaited write in `cloudSync`. Offline it stays `pending` forever ON PURPOSE — the SDK has it queued and nobody has received it. Never write `delivery` to Firestore.
+- **The thread listener is scoped to the thread ON SCREEN.** A `collectionGroup('messages')` listener is the one way to make this feature expensive (every warden's screen × every message in the park, forever). The board reads `lastMessage*` stamps on the parent `sos` doc instead.
+- **`from` is checked against the caller in the rules**, not trusted from the payload — a guest posting `from:'warden'` would produce an official-looking answer in park livery from nobody. Messages are write-once (update/delete refused, like `legs`).
+- **`pushTokens.staff` is a CLAIM, not a credential** — the collection is owner-writable. The Cloud Function re-checks every claimed uid against `staff/{uid}` before delivering. Do not "tighten" the rule believing the check lives there; `rules-tests/` asserts the split on purpose.
+- **TWO service workers, two scopes.** The push worker registers at `${BASE}fcm/` — a second registration at the ROOT scope REPLACES workbox's and takes offline support with it. It carries NO Firebase SDK (importScripts from a CDN is a live network dependency inside the delivery path) and is kept out of the precache (`globIgnores`), because a SW served cache-first is one you cannot ship a fix to.
+- **Sends are DATA-ONLY.** A `notification` payload renders in the background AND fires the foreground handler = two banners per message. Payload keys (`title/body/path/tag/sosId`) are a contract between `functions/src/index.ts` and `public/firebase-messaging-sw.js` — change one, change both.
+- **`FCM_VAPID_KEY` must stay OUT of `FIREBASE_CONFIG`** — `isConfigured()` scans that object for `PASTE_ME` and would take the entire cloud offline. See `docs/push-setup.md`.
+- **Re-mint the token on every app start** (`pushState()==='on' → enablePush`). The v9+ SDK dropped `onTokenRefresh`, so nothing else notices a rotated token and push dies silently.
+- **Rules suite: `cd rules-tests && npm install && npm test`** (emulator, needs Java; 33 cases). Reaches the staff cases the REST matrix structurally cannot, because `staff/{uid}` is unwritable by every client.
+
 **Build / tooling**
 - **PNG station masters are gitignored** — run `npm run stations` to regenerate the tracked webp. `park-map.png` (11 MB) is likewise optimized to webp before bundling; `vite.config.ts` `globIgnores` keeps the masters out of the 4 MB precache ceiling.
 - **VitePWA injects the guest manifest into EVERY html entry**, after every `transformIndexHtml` handler AND after `generateBundle` — the duplicate on `console.html` can only be stripped in `closeBundle`.

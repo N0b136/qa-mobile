@@ -23,6 +23,8 @@ import type {
   Presence,
   ProgressMap,
   QuestLeg,
+  SosMessage,
+  SosMessageAuthor,
   SosRequest,
   SosStatus,
   StationMap,
@@ -32,7 +34,7 @@ import { load, save } from './store'
 import { uid } from './ids'
 import type { PassUse } from './passService'
 import type { FirebaseHandle } from './firebase'
-import { ensureFirebase, ensureFirebaseWithin, setCloudState } from './firebase'
+import { ensureFirebase, ensureFirebaseWithin, isConfigured, setCloudState } from './firebase'
 import { totalXp, levelFor } from './progressService'
 import { getUserParty } from './partyService'
 import { getOrg } from '../content/orgs'
@@ -88,6 +90,41 @@ export type PartyResult<T> =
   | { ok: true; value: T }
   | { ok: false; reason: 'not-found' }
   | { ok: false; reason: 'unavailable' }
+
+/**
+ * Outcome of a write whose sender is WAITING ON THE VERDICT — currently only a
+ * chat message. Every other push in this module is fire-and-forget on purpose;
+ * see the header of `sosChatService` for why a conversation cannot be.
+ */
+export type PushResult =
+  | { ok: true }
+  | { ok: false; reason: 'refused' }
+  | { ok: false; reason: 'unavailable' }
+
+/**
+ * Codes where the request was ADJUDICATED rather than never answered. Mirrored
+ * from flagService's CLAIM_REFUSALS — same reasoning, same fail-soft rule:
+ * anything unreadable is 'unavailable', because calling a wifi blip a refusal
+ * tells a guest their message is lost when the SDK still has it queued.
+ */
+const PUSH_REFUSALS = new Set([
+  'permission-denied',
+  'unauthenticated',
+  'user-token-expired',
+  'user-disabled',
+  'user-not-found',
+  'invalid-user-token',
+])
+
+function pushError(err: unknown): PushResult {
+  if (err && typeof err === 'object' && 'code' in err) {
+    const code = (err as { code: unknown }).code
+    if (typeof code === 'string' && PUSH_REFUSALS.has(code.split('/').pop() ?? '')) {
+      return { ok: false, reason: 'refused' }
+    }
+  }
+  return { ok: false, reason: 'unavailable' }
+}
 
 // Local mirror keys
 const SOS_KEY = 'ql:sos'
@@ -1111,6 +1148,95 @@ export function pushSosPatch(
     } catch {
       // swallow
     }
+  })
+}
+
+/**
+ * The one push in this module that its caller AWAITS. Resolves only when the
+ * server has the message; see `sosChatService` for the contract.
+ *
+ * With the cloud switched off entirely there is no Warden to reach and no
+ * server that could ever acknowledge this, so the local write IS the delivery
+ * and it reports ok — otherwise a local-only build shows every message stuck
+ * pending forever. That is a different thing from configured-but-unreachable,
+ * which must stay honest and stay pending.
+ */
+export async function pushSosMessage(m: SosMessage): Promise<PushResult> {
+  if (!isConfigured()) return { ok: true }
+  const fb = await ensureFirebase()
+  if (!fb) return { ok: false, reason: 'unavailable' }
+  try {
+    const { collection, doc, setDoc } = await import('firebase/firestore')
+    // `delivery` is this device's private bookkeeping and must never be written:
+    // it would come straight back down on the snapshot and overwrite the real
+    // state of every OTHER reader of the thread.
+    const { delivery: _delivery, ...wire } = m
+    await setDoc(doc(collection(fb.db, 'sos', m.sosId, 'messages'), m.id), clean(wire))
+    return { ok: true }
+  } catch (err) {
+    return pushError(err)
+  }
+}
+
+/**
+ * Stamps the PARENT call with what was just said, so the console can order and
+ * badge the board without a listener on every thread's messages. Fire-and-forget
+ * on purpose: the message itself is the record, and this is only the board's
+ * summary of it — a stamp that fails to land costs a sort order, not a word.
+ */
+export function pushSosStamp(
+  sosId: string,
+  stamp: { lastMessageAt: number; lastMessageFrom: SosMessageAuthor; lastMessagePreview: string }
+): void {
+  void ensureFirebase().then(async (fb) => {
+    if (!fb) return
+    try {
+      const { doc, updateDoc } = await import('firebase/firestore')
+      await updateDoc(doc(fb.db, 'sos', sosId), { ...stamp, updatedAt: stamp.lastMessageAt })
+    } catch {
+      // swallow — see the note above
+    }
+  })
+}
+
+/**
+ * Live view of ONE thread, for exactly as long as it is on screen.
+ *
+ * Scope is the whole cost model of this feature. A `collectionGroup('messages')`
+ * listener would give the console every thread at once and charge every warden's
+ * screen a read for every message in the park, forever, to render a board that
+ * shows one line per call. The board reads the parent's `lastMessage*` stamps
+ * instead, and messages are only ever fetched for the thread somebody opened.
+ *
+ * The rule on the subcollection gates on the PARENT document rather than on
+ * these documents' own fields, which is what makes this listener legal: an
+ * unfiltered collection query cannot be refused for failing to prove something
+ * about each match (the sos/legs trap in the rules), because it is not being
+ * asked to.
+ */
+export function subscribeSosThread(sosId: string): () => void {
+  return subscribeWhenAuthed((fb, { collection, onSnapshot, query, orderBy }) => {
+    const unsub = onSnapshot(
+      query(collection(fb.db, 'sos', sosId, 'messages'), orderBy('createdAt', 'asc')),
+      { includeMetadataChanges: true },
+      (snap) => {
+        void (async () => {
+          const { reconcile } = await import('./sosChatService')
+          reconcile(
+            sosId,
+            snap.docs
+              // A local echo has not been acknowledged yet, so it is not proof of
+              // anything — dropping it here leaves the local 'pending' copy
+              // standing until the server's own version arrives.
+              .filter((d) => !d.metadata.hasPendingWrites)
+              .map((d) => d.data() as SosMessage)
+          )
+        })()
+        setCloudState(snap.metadata.fromCache ? 'offline' : 'live')
+      },
+      () => setCloudState('offline')
+    )
+    return [unsub]
   })
 }
 
