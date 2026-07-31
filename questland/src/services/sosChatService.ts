@@ -24,7 +24,7 @@
 // reload.
 
 import type { SosMessage, SosMessageAuthor } from '../types'
-import { load, save } from './store'
+import { load, remove, save } from './store'
 import { uid } from './ids'
 import * as cloudSync from './cloudSync'
 
@@ -70,22 +70,78 @@ function readMarks(): Record<string, number> {
   return load<Record<string, number>>(READ_KEY, {})
 }
 
-export function markThreadRead(sosId: string): void {
-  const last = lastMessage(sosId)
-  if (!last) return
-  const marks = readMarks()
-  if ((marks[sosId] ?? 0) >= last.createdAt) return
-  save(READ_KEY, { ...marks, [sosId]: last.createdAt })
+/**
+ * Keyed by VIEWER as well as thread. The guest app and the console are two
+ * documents on one origin sharing one localStorage, so a single key per thread
+ * would let a Warden reading the console mark the guest's own phone caught up.
+ */
+const markKey = (sosId: string, viewer: SosMessageAuthor) => `${sosId}:${viewer}`
+
+export function readMark(sosId: string, viewer: SosMessageAuthor): number {
+  return readMarks()[markKey(sosId, viewer)] ?? 0
 }
 
 /**
- * Messages from the OTHER side newer than this device's high-water mark.
- * `viewer` is who is looking, so the same thread badges independently on the
- * guest's phone and on the console.
+ * `floorAt` is the parent call's `lastMessageAt`, when the caller has it. The
+ * board badges off that stamp while the thread's messages are not mirrored, and
+ * the stamp is written a moment AFTER the message it describes — so marking read
+ * from messages alone would leave the badge lit on a thread just read.
+ */
+export function markThreadRead(
+  sosId: string,
+  viewer: SosMessageAuthor,
+  floorAt?: number
+): void {
+  // ONLY the other side's lines move the mark.
+  //
+  // Every timestamp here is `Date.now()` on whichever device sent, and the two
+  // clocks do not agree. Taking the max across BOTH sides let the Warden's own
+  // reply — stamped by the console — carry the mark past a guest message that a
+  // slow phone had stamped earlier, and that guest's next question then landed
+  // already-read and never badged. Counting only what the viewer has to read
+  // keeps one device's clock out of the other's arithmetic entirely.
+  const newestIncoming = listMessages(sosId)
+    .filter((m) => m.from !== viewer)
+    .reduce((max, m) => (m.createdAt > max ? m.createdAt : max), 0)
+
+  const next = Math.max(newestIncoming, floorAt ?? 0)
+  if (next === 0) return
+
+  const marks = readMarks()
+  const key = markKey(sosId, viewer)
+  if ((marks[key] ?? 0) >= next) return
+  save(READ_KEY, { ...marks, [key]: next })
+}
+
+/**
+ * Exact count, for a thread whose messages this device actually holds.
+ * The board cannot use this — see `hasUnread`.
  */
 export function unreadCount(sosId: string, viewer: SosMessageAuthor): number {
-  const mark = readMarks()[sosId] ?? 0
+  const mark = readMark(sosId, viewer)
   return listMessages(sosId).filter((m) => m.from !== viewer && m.createdAt > mark).length
+}
+
+/**
+ * "There is new word here", read off the PARENT call's stamps.
+ *
+ * This is the only unread signal the board can honestly show. `unreadCount`
+ * reads the message mirror, and that mirror is filled by the thread listener,
+ * which by design runs only while the thread is OPEN — so on the board it is
+ * empty for every thread that is not on screen, and the count it returns is
+ * structurally zero exactly when a Warden needs it. Worse, opening the thread to
+ * populate the mirror is the same gesture that marks it read.
+ *
+ * A boolean is the honest shape: the stamps say who spoke last and when, and
+ * nothing else. An exact count needs the messages, and the messages are what the
+ * board deliberately does not fetch.
+ */
+export function hasUnread(
+  call: { id: string; lastMessageAt?: number; lastMessageFrom?: SosMessageAuthor },
+  viewer: SosMessageAuthor
+): boolean {
+  if (!call.lastMessageAt || call.lastMessageFrom === viewer) return false
+  return call.lastMessageAt > readMark(call.id, viewer)
 }
 
 // ── Sending ──────────────────────────────────────────────────────────────────
@@ -194,12 +250,22 @@ function sameThread(a: SosMessage[], b: SosMessage[]): boolean {
   return true
 }
 
-/** Drops a thread's mirror — used by the demo reset alongside its sos rows. */
-export function clearThread(sosId: string): void {
-  save(threadKey(sosId), [])
-  const marks = readMarks()
-  if (marks[sosId] === undefined) return
-  const next = { ...marks }
-  delete next[sosId]
-  save(READ_KEY, next)
+/**
+ * Drops EVERY thread mirror and read mark on this device.
+ *
+ * Swept wholesale rather than per sos id, because a thread key is
+ * `ql:sosChat:${uid()}` — it carries no `demo-` marker and no link back to the
+ * row it belonged to, so a prefix sweep over the sos rows structurally cannot
+ * find it and a per-id clear misses any thread whose row is already gone.
+ * Called by the demo reset, which is the only thing in the app that claims to
+ * put a device back to nothing.
+ */
+export function clearAllThreads(): void {
+  const doomed: string[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key && key.startsWith('ql:sosChat:')) doomed.push(key)
+  }
+  doomed.forEach((k) => remove(k))
+  save(READ_KEY, {})
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { StaffPersona } from '../../content/staff'
 import type { SosRequest } from '../../types'
 import { listSos, acknowledgeSos, resolveSos } from '../../services/sosService'
-import { unreadCount } from '../../services/sosChatService'
+import { hasUnread } from '../../services/sosChatService'
 import { currentStaff, sosMeta } from '../../services/consoleService'
 import { enablePush, pushState } from '../../services/pushService'
 import { getZone } from '../../content/zones'
@@ -124,7 +124,11 @@ export default function CallsBoard({ persona }: Props) {
     const zoneName = meta[call.id]?.zoneName ?? (call.zoneId ? getZone(call.zoneId)?.name : undefined)
     const emergency = call.kind === 'emergency'
     const chat = call.kind === 'chat'
-    const unread = unreadCount(call.id, 'warden')
+    // Read off the parent call's stamps, NOT off the message mirror. The mirror
+    // is filled by the thread listener, which runs only while a thread is open —
+    // so a count taken here is structurally zero for every thread the Warden has
+    // not already got on screen, which is precisely when the badge matters.
+    const unread = hasUnread(call, 'warden')
     const threadOpen = openThread === call.id
     return (
       <div
@@ -144,9 +148,9 @@ export default function CallsBoard({ persona }: Props) {
             >
               {emergency ? 'Emergency' : chat ? 'Question' : 'Quest help'}
             </Badge>
-            {unread > 0 ? (
+            {unread ? (
               <Badge tone="valor" icon="message-circle">
-                {unread} unread
+                New word
               </Badge>
             ) : null}
           </div>
@@ -234,6 +238,7 @@ export default function CallsBoard({ persona }: Props) {
               readOnly={resolved}
               height={300}
               placeholder={`Answer ${guest}`}
+              readFloor={call.lastMessageAt}
               onSent={() => {
                 // The first reply IS the claim. A Warden who has started typing
                 // has taken the call, and making them press Dispatch as well

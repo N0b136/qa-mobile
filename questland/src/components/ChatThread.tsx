@@ -28,9 +28,23 @@ export interface ChatThreadProps {
   placeholder?: string
   /** Fired after a line is written locally — the console claims the call on its first reply. */
   onSent?: (body: string) => void
+  /**
+   * The parent call's `lastMessageAt`. The board badges off that stamp, and it
+   * is written a moment after the message it describes, so reading the thread
+   * has to clear it too or the badge stays lit on a thread just read.
+   */
+  readFloor?: number
 }
 
 const MAX_BODY = 2000
+
+/**
+ * True on a desk with a mouse, false on a touch screen. Read once at module
+ * load: nobody grows a keyboard mid-thread, and re-evaluating it per render
+ * would cost a media-query match on every incoming line.
+ */
+const finePointer =
+  typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: fine)').matches
 
 const scrollStyle: CSSProperties = {
   overflowY: 'auto',
@@ -49,6 +63,7 @@ export default function ChatThread({
   height = 260,
   placeholder = 'Write to the Warden',
   onSent,
+  readFloor,
 }: ChatThreadProps) {
   useAppTick()
   const [draft, setDraft] = useState('')
@@ -66,8 +81,8 @@ export default function ChatThread({
   // to ignore.
   const lastAt = messages.length ? messages[messages.length - 1].createdAt : 0
   useEffect(() => {
-    markThreadRead(sosId)
-  }, [sosId, lastAt])
+    markThreadRead(sosId, viewer, readFloor)
+  }, [sosId, viewer, readFloor, lastAt])
 
   // Pin to the newest line. Only when a line arrives, so a Warden scrolled up
   // reading history is not yanked back down mid-sentence by their own listener.
@@ -116,11 +131,18 @@ export default function ChatThread({
             placeholder={placeholder}
             rows={2}
             aria-label={placeholder}
+            enterKeyHint="enter"
             onKeyDown={(e) => {
-              // Enter sends, Shift+Enter breaks the line. On a phone the on-screen
-              // keyboard's return key inserts a newline instead, which is why the
-              // Send button is never hidden behind a keyboard shortcut.
-              if (e.key === 'Enter' && !e.shiftKey) {
+              // Enter sends ONLY where there is a physical keyboard.
+              //
+              // The touch keyboard's return key fires a real Enter keydown in a
+              // textarea on both Android and iOS — it does not quietly insert a
+              // newline, as this comment used to claim. Cancelling it there
+              // leaves a guest with no way to break a line at all: they press
+              // return to start a second sentence and the half-written question
+              // goes to a Warden instead. The Send button is always visible, so
+              // touch loses nothing by keeping its return key.
+              if (finePointer && e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
                 send()
               }
@@ -134,7 +156,10 @@ export default function ChatThread({
               color: 'var(--text-body)',
               background: 'var(--surface-inset)',
               border: '1px solid var(--border-hairline)',
-              borderRadius: 'var(--radius-sm)',
+              // Match the DS field treatment (ui/Input): carved into the stone,
+              // tight 2px radius. Every other field in the app reads that way.
+              borderRadius: 'var(--radius-xs)',
+              boxShadow: 'var(--shadow-carve-in)',
             }}
           />
           <Button icon="send" onClick={send} disabled={!canSend} aria-label="Send">
@@ -177,10 +202,18 @@ function Bubble({ message, viewer }: { message: SosMessage; viewer: SosMessageAu
           marginBottom: 3,
         }}
       >
-        {message.authorName}
+        {/*
+          Coerced, not trusted. The rules now type-check both of these on the
+          way in, but a line is WRITE-ONCE — nobody, staff included, can take a
+          bad one back — and there is no ErrorBoundary in this app, so a single
+          non-string that ever reached the collection would throw "Objects are
+          not valid as a React child" and unmount the entire console, on every
+          reload, forever. Two String() calls are a cheap second lock.
+        */}
+        {String(message.authorName ?? '')}
       </div>
       <div style={{ font: 'var(--body-base)', color: 'var(--text-body)', whiteSpace: 'pre-wrap' }}>
-        {message.body}
+        {String(message.body ?? '')}
       </div>
       <Delivery message={message} mine={mine} />
     </div>

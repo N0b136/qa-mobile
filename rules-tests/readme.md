@@ -36,17 +36,37 @@ ambiguity arises.
 
 ## What it covers
 
-33 cases over `sos/{id}/messages/{msgId}` and `pushTokens/{tokenId}`:
+44 cases over `sos/{id}`, `sos/{id}/messages/{msgId}` and `pushTokens/{tokenId}`:
 
 - **read** — owner yes, staff yes, a stranger no, anonymous no
 - **`from` spoofing** — the case the whole block exists for. A guest posting
   `from: 'warden'` into their own thread would produce an official-looking answer
   in park livery from nobody at all. Asserted refused, both directions.
-- **shape** — `sosId` must match the parent, body must be a non-empty string
-  under 2000 chars, `createdAt` must be present
+- **the parent call's `userId` is immutable** — see below
+- **shape** — `sosId` must match the parent; `body` a non-empty string under
+  2000 chars; `authorName` a string of 1..60; `id` a string; `createdAt` present
 - **written once** — neither the guest NOR staff may edit or delete a line
 - **demo cast parity** with the `sos` block above it
 - **`pushTokens`** — owner-scoped both sides, anonymous refused
+
+### The parent-document cases exist because their absence hid a real hole
+
+The first version of this suite had 33 cases and never wrote to a `sos`
+document at all — only to the subcollection under it. It was green, and the
+`sos` update rule was letting the owner of a call rewrite its `userId` to
+anybody's uid.
+
+That is not a defect confined to one document. The messages ACL derives
+*entirely* from `sos/{id}.userId` through `call()`, and the push sender reads
+the same field to decide whose phone to wake — so a guest could raise their own
+call, write what they liked into its thread, hand the call to a stranger, and
+have the next Warden reply banner that stranger's lock screen with a transcript
+they never wrote. Setting it to a `demo-` id instead made the whole thread
+world-readable.
+
+The lesson generalises: **when a rule derives from another document's field,
+test writes to that field.** A subcollection suite that never touches its parent
+is asserting the easy half.
 
 One case asserts something that looks like a hole and is not: a guest **may**
 write `staff: true` on their own token row. The rules do not adjudicate that

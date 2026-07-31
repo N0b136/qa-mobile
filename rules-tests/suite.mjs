@@ -132,6 +132,55 @@ await check('unknown `from` refused', 'deny', () =>
   setDoc(msg(asGuest, 'm13'), line({ from: 'admin' }))
 )
 
+// ── the parent call: userId is immutable ────────────────────────────────────
+//
+// The messages ACL above derives ENTIRELY from sos/{id}.userId via call(), and
+// so does the push sender's choice of recipient. If the owner can rewrite that
+// field, every guarantee in this file is one updateDoc away from belonging to
+// somebody else. These cases exist because the suite originally never wrote to
+// a parent sos document at all, and 33/33 green said nothing about it.
+const sos = (ctx, id) => doc(ctx.firestore(), 'sos', id)
+
+await check('owner may still stand down their own call', 'allow', () =>
+  updateDoc(sos(asGuest, 'call-1'), { status: 'resolved', updatedAt: 9 })
+)
+await check('OWNER CANNOT REASSIGN A CALL TO ANOTHER GUEST', 'deny', () =>
+  updateDoc(sos(asGuest, 'call-1'), { userId: OTHER })
+)
+await check('OWNER CANNOT RENAME A CALL TO A demo- ID', 'deny', () =>
+  updateDoc(sos(asGuest, 'call-1'), { userId: 'demo-anything' })
+)
+await check('staff cannot reassign a call either', 'deny', () =>
+  updateDoc(sos(asStaff, 'call-1'), { userId: OTHER })
+)
+await check('staff may still dispatch against a call', 'allow', () =>
+  updateDoc(sos(asStaff, 'call-1'), { status: 'acknowledged', responder: 'Warden Aldous' })
+)
+await check('stranger cannot touch the call', 'deny', () =>
+  updateDoc(sos(asOther, 'call-1'), { status: 'resolved' })
+)
+
+// ── every rendered field is type-checked, because a line is write-once ──────
+await check('object authorName refused', 'deny', () =>
+  setDoc(msg(asGuest, 'm14'), line({ authorName: { toxic: true } }))
+)
+await check('missing authorName refused', 'deny', () =>
+  setDoc(msg(asGuest, 'm15'), {
+    id: 'm15',
+    sosId: 'call-1',
+    from: 'guest',
+    body: 'no name on this one',
+    createdAt: 2,
+  })
+)
+await check('empty authorName refused', 'deny', () =>
+  setDoc(msg(asGuest, 'm16'), line({ authorName: '' }))
+)
+await check('oversized authorName refused', 'deny', () =>
+  setDoc(msg(asGuest, 'm17'), line({ authorName: 'x'.repeat(61) }))
+)
+await check('non-string id refused', 'deny', () => setDoc(msg(asGuest, 'm18'), line({ id: 7 })))
+
 // ── written once ────────────────────────────────────────────────────────────
 await check('owner cannot edit a line', 'deny', () =>
   updateDoc(msg(asGuest, 'm0'), { body: 'edited' })

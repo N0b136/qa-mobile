@@ -93,9 +93,18 @@ export async function enablePush(
     if (!(await isSupported())) return 'unsupported'
 
     const registration = await navigator.serviceWorker.register(swUrl(), { scope: swScope() })
-    // A worker that is still installing has no pushManager to subscribe with,
-    // and getToken() fails opaquely on it.
-    await navigator.serviceWorker.ready.catch(() => undefined)
+    // Wait for THIS registration to activate — `navigator.serviceWorker.ready`
+    // would be the wrong thing entirely. It resolves with the registration whose
+    // scope matches the DOCUMENT's url, which is workbox's ROOT one, already
+    // active from a previous load; it resolves in the same microtask and tells
+    // us nothing about the worker we just registered. And the SDK does not cover
+    // for us: given an explicit `serviceWorkerRegistration` it skips its own
+    // `waitForRegistrationActive` and goes straight to `pushManager.subscribe()`,
+    // which throws `InvalidStateError: no active Service Worker` on a
+    // registration still installing. That lands in the catch below, returns
+    // 'off', and re-renders an identical "Notify me" button — the guest taps it
+    // again and it works, which is exactly how a bug like this survives testing.
+    await activated(registration)
 
     const { getApp } = await import('firebase/app')
     const token = await getToken(getMessaging(getApp()), {
@@ -149,20 +158,59 @@ function tokenDocId(token: string): string {
   return encodeURIComponent(token)
 }
 
+/** Resolves once the given registration has an active worker (or we give up). */
+function activated(registration: ServiceWorkerRegistration): Promise<void> {
+  if (registration.active) return Promise.resolve()
+  const worker = registration.installing ?? registration.waiting
+  if (!worker) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      worker.removeEventListener('statechange', onChange)
+      clearTimeout(timer)
+      resolve()
+    }
+    const onChange = () => {
+      if (worker.state === 'activated' || worker.state === 'redundant') done()
+    }
+    // Never hang the button on this. Past the deadline we try getToken anyway —
+    // it either works or falls into the same catch it would have anyway.
+    const timer = setTimeout(done, 10_000)
+    worker.addEventListener('statechange', onChange)
+  })
+}
+
 async function fileToken(token: string, userId: string, staff: boolean): Promise<void> {
   const fb = await ensureFirebase()
   if (!fb) return
   const { doc, setDoc } = await import('firebase/firestore')
-  await setDoc(doc(fb.db, 'pushTokens', tokenDocId(token)), {
-    token,
-    userId,
-    // A CLAIM, not a credential. The sender re-checks staff/{userId} against the
-    // roster before it will send a guest's words to this device — see the note
-    // on `staffUids()` in the function. It is stored only so the sender can skip
-    // reading the roster for the overwhelming majority of tokens that are guests.
-    staff,
-    project: FIREBASE_CONFIG.projectId,
-    ua: navigator.userAgent.slice(0, 180),
-    updatedAt: Date.now(),
-  })
+  await setDoc(
+    doc(fb.db, 'pushTokens', tokenDocId(token)),
+    {
+      token,
+      userId,
+      // A CLAIM, not a credential. The sender re-checks staff/{userId} against
+      // the roster before it will send a guest's words to this device — see the
+      // note on `staffTokens()` in the function. It is stored only so the sender
+      // can skip reading the roster for the overwhelming majority of tokens that
+      // are guests.
+      //
+      // ── SET, NEVER CLEARED, AND THE WRITE MERGES ─────────────────────────
+      //
+      // The guest app and the console are two documents on ONE origin, so they
+      // mint the SAME FCM token and therefore share this one row. A plain
+      // setDoc from the guest side would overwrite the desk's row with
+      // `staff: false`, `staffTokens()` (a `where('staff','==',true)` query)
+      // would stop returning it, and the back office would go quiet — with the
+      // console still rendering nothing at all, because pushState() reads
+      // 'on' from the shared permission and the shared token marker.
+      //
+      // So the flag only ever goes up. A stale claim costs nothing: the roster
+      // check downstream is what actually decides delivery.
+      ...(staff ? { staff: true } : {}),
+      project: FIREBASE_CONFIG.projectId,
+      ua: navigator.userAgent.slice(0, 180),
+      updatedAt: Date.now(),
+    },
+    { merge: true }
+  )
 }

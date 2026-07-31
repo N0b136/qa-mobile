@@ -220,6 +220,7 @@ export default function HelpScreen() {
                   authorName={user.name}
                   height={240}
                   placeholder="Ask your question"
+                  readFloor={activeChat.lastMessageAt}
                 />
 
                 <PushNudge />

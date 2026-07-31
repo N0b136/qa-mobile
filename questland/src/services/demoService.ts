@@ -12,6 +12,7 @@ import * as notificationService from './notificationService'
 import { getEpisode } from '../content/quests'
 import { QUEST_START, VILLAGE_PLACE } from '../content/stationMap'
 import { createSos } from './sosService'
+import { clearAllThreads } from './sosChatService'
 import { clearPresenceFor, seedPresence } from './presenceService'
 import { clearUsesFor } from './passService'
 import { clearLegsFor, runIdFor, seedLegs } from './questLogService'
@@ -714,6 +715,13 @@ export function resetDemoData(currentUserId: string): void {
       localStorage.removeItem(k)
     }
   })
+
+  // Chat threads are swept WHOLESALE, not by the demo- prefix like everything
+  // above. A thread is keyed `ql:sosChat:${uid()}` off the call's random id, so
+  // it carries no marker saying whose it was and the prefix test cannot see it;
+  // the sos rows themselves are cleared just below, which would otherwise leave
+  // every transcript orphaned in localStorage with nothing able to reach it.
+  clearAllThreads()
 
   // Take everybody off the chart, cast and host alike, and wipe the passage
   // ledger with the bookings it draws on — otherwise a reseeded world would
