@@ -136,7 +136,10 @@ export default function StationRecords() {
           <div className="row" style={{ gap: 16, flexWrap: 'wrap', marginBottom: 10 }}>
             <Stat icon="scroll-text" text={`${runs.length} ${runs.length === 1 ? 'walk' : 'walks'}`} />
             <Stat icon="users" text={`${groups} ${groups === 1 ? 'group' : 'groups'}`} />
-            <Stat icon="map-pin" text={`${legs.length} check-ins`} />
+            {/* Turned like the two Stats before it. A day's first record is one
+                walk, one group and one check-in, so this line is read at 1
+                before it is ever read at 40. */}
+            <Stat icon="map-pin" text={`${legs.length} ${legs.length === 1 ? 'check-in' : 'check-ins'}`} />
             <Stat icon="badge-check" text={`${sealed} sealed`} />
           </div>
 

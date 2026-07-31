@@ -149,7 +149,12 @@ const CONDITION_GLYPH: Record<StationCondition, string> = {
 const CONDITION_NOTE: Record<StationCondition, string> = {
   live: 'Reporting, and holding the current flag table.',
   stale: 'Reporting, but holding an older flag table. A table push from this board clears it.',
-  fault: 'Reporting, but its SD card or audio player is not answering.',
+  // NAMES BOTH CAUSES, the same rule the hub hints follow. A plinth reports a
+  // fault three ways — dead card, dead player, or a non-zero error code with
+  // both of those fine — and a note that only mentions the hardware sends a
+  // Warden to check two cables on a station whose trouble is in its firmware,
+  // then leaves them doubting the board when it turns out both are seated.
+  fault: 'Reporting, but not well — an error code, or its SD card or audio player not answering. The pin says which.',
   silent: 'Was reporting and stopped. Somebody has to walk out to it.',
   unknown: 'Nothing heard since the console opened.',
 }
@@ -432,7 +437,10 @@ export default function StationsBoard() {
       <div className="row" style={{ gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
         <span className="row muted" style={{ gap: 6, fontSize: 13 }}>
           <Icon name="map-pin" size={14} />
-          {atStations} at stations
+          {/* "1 at stations" is the reading on a quiet morning. The other two
+              counts beside this one end in a phrase that does not turn ("en
+              route", "in the village"), so only this one needs it. */}
+          {atStations} at {atStations === 1 ? 'a station' : 'stations'}
         </span>
         <span className="row muted" style={{ gap: 6, fontSize: 13 }}>
           <Icon name="footprints" size={14} />
@@ -580,7 +588,16 @@ export default function StationsBoard() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          // `min(320px, 100%)` and not a bare 320px. `auto-fit` drops the
+          // SECOND column when 320 will not fit twice, but it never shrinks the
+          // first below the minimum it was given — so on a phone the one
+          // remaining track stayed a hard 320px inside a ~292px card and each
+          // row ran past the edge. The card clips rather than scrolls, so it
+          // did not even show up as page overflow: it just sliced "arrived 1
+          // min ago" off at the right, which is what the owner photographed.
+          // Above 320px of room the `min()` resolves to 320px and this is the
+          // same declaration it always was — the 1440 layout is untouched.
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))',
           // Wide, and load-bearing rather than decorative: each row's note is
           // right-aligned to its column's edge, so at 1440 the left list's
           // "left Riddlebridge · 26 min ago" ends a few pixels from the right
@@ -842,11 +859,19 @@ function HealthBlock({
           <Reading label="Unsent taps" value={String(health.queueDepth)} alarm={health.queueDepth > 0} />
           <Reading label="SD card" value={health.sdOk ? 'OK' : 'Not answering'} alarm={!health.sdOk} />
           <Reading label="Audio player" value={health.playerOk ? 'OK' : 'Not answering'} alarm={!health.playerOk} />
+          {/* THE THIRD FAULT CAUSE, AND IT SITS WITH THE OTHER TWO. These three
+              lines are the whole of what an ember fault ring can mean, and the
+              dialog is the only place a Warden can tell "the card is dead" from
+              "the board is throwing 5s" — the difference between a spare SD in
+              a pocket and a reflash. Left at the foot of the block, four
+              unchanging readings below Volume and Firmware, it reads as trivia
+              and gets scrolled past on exactly the plinth somebody was sent
+              out to fix. */}
+          {health.lastError ? <Reading label="Reported fault" value={health.lastError} alarm /> : null}
           <Reading label="Signal" value={`${health.rssi} dBm`} />
           <Reading label="Volume" value={`${health.volume} of 30`} />
           <Reading label="Uptime" value={duration(health.uptimeS)} />
           <Reading label="Firmware" value={`build ${health.fwBuild}`} />
-          {health.lastError ? <Reading label="Reported" value={health.lastError} alarm /> : null}
         </div>
       )}
     </div>

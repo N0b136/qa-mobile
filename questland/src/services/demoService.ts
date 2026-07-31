@@ -237,7 +237,7 @@ function demoFlags(now: number, hostId: string): Flag[] {
 
 // ── Staged station health ─────────────────────────────────────────────────────
 //
-// A park that is mostly well. Two plinths are not, because a board that only
+// A park that is mostly well. Three plinths are not, because a board that only
 // ever shows twenty-three green rings teaches a Warden nothing and proves
 // nothing on a stage: the whole argument for a cached flag table is that the
 // staleness is visible, so the pitch has to be able to point at it.
@@ -246,6 +246,17 @@ function demoFlags(now: number, hostId: string): Flag[] {
 const STALE_STATION_NO = 17
 /** Coolcreek Stone — was reporting, stopped half an hour ago. Somebody has to walk out. */
 const SILENT_STATION_NO = 5
+/**
+ * Story Willow — card and player both answering, and faulted anyway: it is
+ * reporting a non-zero `err`.
+ *
+ * Staged deliberately as the ONLY fault on the board, because a seed whose one
+ * ember-fault ring is a dead SD card teaches everybody watching that fault
+ * means hardware — and then the plinth that merely fails every play gets walked
+ * past in the park. Do not "tidy" this into an `sdOk: false` row: an error code
+ * alone lighting the ring is the thing this row exists to prove.
+ */
+const FAULT_STATION_NO = 9
 
 function demoHealth(now: number, parkVersion: number): Array<{ stationNo: number } & Partial<StationHealth>> {
   return allStationNos().map((stationNo) => {
@@ -257,6 +268,18 @@ function demoHealth(now: number, parkVersion: number): Array<{ stationNo: number
         lastTableSyncAt: now - 47 * MIN,
         rssi: -104,
         queueDepth: 2,
+      }
+    }
+    if (stationNo === FAULT_STATION_NO) {
+      return {
+        stationNo,
+        tableVersion: parkVersion,
+        lastTableSyncAt: now - 12 * MIN,
+        // Same string a real frame produces (`Error ${frame.err}`) — the dialog
+        // prints this verbatim, so a seed in any other shape stages a line no
+        // plinth in the park could ever send.
+        lastError: 'Error 5',
+        queueDepth: 3,
       }
     }
     if (stationNo === SILENT_STATION_NO) {

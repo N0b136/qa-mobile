@@ -133,7 +133,9 @@ export default function SendWord({ persona, prefillAudience }: Props) {
 
     if (when === 'now') {
       const count = await sendWord(audience, input)
-      toast.show({ title: `Word sent to ${count} guests`, icon: 'send' })
+      // Sending to one party or one guest is the common case at a counter, and
+      // "Word sent to 1 guests" is the receipt for it.
+      toast.show({ title: `Word sent to ${count} ${count === 1 ? 'guest' : 'guests'}`, icon: 'send' })
       return
     }
 
