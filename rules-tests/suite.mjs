@@ -180,6 +180,12 @@ await check('oversized authorName refused', 'deny', () =>
   setDoc(msg(asGuest, 'm17'), line({ authorName: 'x'.repeat(61) }))
 )
 await check('non-string id refused', 'deny', () => setDoc(msg(asGuest, 'm18'), line({ id: 7 })))
+// The cap is a backstop, not a trap: nothing limits an adventurer's name at
+// signup, so `sendMessage` clamps to exactly this length before writing. A
+// 60-char name must therefore still get through.
+await check('60-char authorName accepted', 'allow', () =>
+  setDoc(msg(asGuest, 'm19'), line({ authorName: 'x'.repeat(60) }))
+)
 
 // ── written once ────────────────────────────────────────────────────────────
 await check('owner cannot edit a line', 'deny', () =>

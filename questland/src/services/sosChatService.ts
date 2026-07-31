@@ -31,6 +31,17 @@ import * as cloudSync from './cloudSync'
 /** Trimmed into SosRequest.lastMessagePreview. A preview, never the record. */
 const PREVIEW_CAP = 80
 
+/**
+ * MUST match `authorName.size() <= 60` in the rules, and the sender's own slice.
+ *
+ * Nothing caps an adventurer's name at signup — `OnboardingScreen` takes whatever
+ * is typed — so without this clamp a guest who entered a very long one would have
+ * EVERY message they ever sent refused by the rule, and the thread would tell
+ * them so honestly and repeatedly while never working. The client controls what
+ * it writes, so it clamps; the rule stays as the backstop it was meant to be.
+ */
+const AUTHOR_CAP = 60
+
 /** Keeps one runaway thread from filling the origin's quota. Oldest fall off. */
 const THREAD_CAP = 400
 
@@ -158,11 +169,15 @@ export function sendMessage(
   const body = input.body.trim()
   if (!body) return null
 
+  // Never empty: the rule requires size() > 0, and a nameless line would be
+  // refused for a reason no guest could act on.
+  const authorName = input.authorName.trim().slice(0, AUTHOR_CAP) || 'A traveller'
+
   const message: SosMessage = {
     id: uid(),
     sosId,
     from: input.from,
-    authorName: input.authorName,
+    authorName,
     body,
     createdAt: Date.now(),
     delivery: 'pending',
