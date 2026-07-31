@@ -86,6 +86,31 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // The manager roster, provisioned BY HAND from the Firebase console exactly
+    // as staff are — no client may write here, so there is no self-promotion
+    // path from anywhere in the app.
+    //
+    // A manager ALSO needs a staff/{uid} doc: the console's front door is the
+    // staff gate, so a managers doc on its own opens nothing. Two docs, on
+    // purpose — granting somebody the manager view must never widen what
+    // isStaff() means for the fifteen-odd rules that hang off it.
+    //
+    // NOTHING IN THIS FILE READS THIS COLLECTION, and that is the honest state
+    // of it: no rule takes a manager into account, and there is deliberately no
+    // isManager() helper, because an unused predicate in a security file reads
+    // as a control that exists and is not one. The client reads its own doc to
+    // decide whether to DRAW the Manager tab. That is a UI gate, not a data
+    // gate — everything behind the tab (bookings above all) is already
+    // staff-readable, because the booth needs bookings to spend a Passage. It
+    // keeps the day's takings off a Guide's screen; it does not put them out of
+    // reach of somebody holding a staff credential and a REST client. Anything
+    // that must be manager-only has to be moved out of staff reach FIRST, and
+    // then gated here.
+    match /managers/{uid} {
+      allow read: if isSelf(uid);
+      allow write: if false;
+    }
+
     // ── Guest-owned data ────────────────────────────────────────────────────
 
     // Private profile — the only place an email is stored. Never readable by
@@ -282,6 +307,22 @@ service cloud.firestore {
     // in the village square is not addressed to anybody in particular.
     match /announcements/{id} {
       allow read: if signedIn();
+      allow write: if isStaff();
+    }
+
+    // ── Park status ─────────────────────────────────────────────────────────
+
+    // One rolled-up document ('current') saying which plinths are down. Written
+    // by the single console holding the LoRa hub on USB — it is the only client
+    // that can hear a station stop answering — and read by a manager who is not
+    // in the park and has no other way to know.
+    //
+    // This is the state of the MACHINERY, not park record, and it is staff-only
+    // on both sides. A guest has no business reading which stations are
+    // unattended; a guest who could WRITE it could mark a dead plinth healthy
+    // and hide it from the person whose job is to go and fix it.
+    match /parkStatus/{id} {
+      allow read:  if isStaff();
       allow write: if isStaff();
     }
 

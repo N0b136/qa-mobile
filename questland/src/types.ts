@@ -506,3 +506,46 @@ export type HubOutboundFrame = HubTableFrame | HubRowFrame | HubResolveFrame | H
 export type HubFrame = HubInboundFrame | HubOutboundFrame
 
 export type HubFrameType = HubFrame['t']
+
+// ── Park status (the booth console's report to everybody else) ───────────────
+//
+// Station health is read off a USB cable into ONE PC, so the console holding
+// that cable is the only machine in the park that knows whether anything is
+// broken. `parkStatus/current` is how it says so out loud: one document, one
+// writer, written whole. Everyone else — a manager at home, a Guide on a phone
+// — reads it and can answer "is anything broken" without standing at the booth.
+
+/**
+ * Deliberately a COPY of `stationHealthService.StationCondition`, not an import.
+ *
+ * types.ts has no imports at all and is the leaf every service reads from;
+ * importing back out of it into the services layer would invert that and put a
+ * cycle in the type graph for no gain. The two declarations are held together at
+ * compile time in parkStatusService, which imports both and assigns one to the
+ * other — add a condition on the health side and the build fails there.
+ */
+export type ParkStationCondition = 'live' | 'stale' | 'silent' | 'fault' | 'unknown'
+
+/** One station that is NOT well, flattened for a reader with no hub of its own. */
+export interface ParkStationStatus {
+  stationNo: number
+  placeId: string
+  name: string
+  condition: ParkStationCondition
+  lastHeartbeatAt: number
+  lastError?: string
+}
+
+export interface ParkStatus {
+  id: 'current'
+  /** When the booth console last wrote this. The manager view lives or dies on it. */
+  writtenAt: number
+  /** Staff uid of the console that wrote it, so two consoles can be told apart. */
+  writtenBy: string
+  /** The park's flag-table version at the time of writing, for context on 'stale'. */
+  tableVersion: number
+  /** Every condition, including the ones sitting at zero — see parkStatusService. */
+  counts: Record<string, number>
+  /** ONLY the stations that are not 'live'. An empty array means a well park. */
+  exceptions: ParkStationStatus[]
+}
