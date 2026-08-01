@@ -19,14 +19,21 @@
 // So this tab answers questions and the Back Office does the work. Anything that
 // needs doing from here is done by opening the console proper.
 //
-// The four sections are ordered as the triage, not by importance in the
-// abstract: somebody calling for help, then the day's money, then who is in the
-// park, then whether the hardware is well.
+// The sections are ordered as the triage, not by importance in the abstract:
+// somebody calling for help, then how the day's calls went, then the day's
+// money, then who is in the park, then whether the hardware is well.
+//
+// The aid retrospective sits directly under the waiting calls rather than at the
+// bottom with the other tallies, because it is the same subject read a second
+// way — what is outstanding, then what happened — and splitting the aid material
+// across the column would make a manager scroll past the takings to answer one
+// question about one lane.
 
 import { useEffect, useState } from 'react'
 import { managerFor } from '../../../services/managerAuth'
 import { Card } from '../../../ui'
 import CallsCard from './CallsCard'
+import AidCard from './AidCard'
 import TakingsCard from './TakingsCard'
 import PulseCard from './PulseCard'
 import PlinthsCard from './PlinthsCard'
@@ -113,12 +120,13 @@ export default function ManagerScreen({ staffUid }: { staffUid: string }) {
   }
 
   return (
-    // `now` goes to the two cards that print ages off a stored timestamp. The
-    // other two read their own clock at render, which is correct BECAUSE this
-    // component re-renders them every tick — they do not need the instant, only
-    // the repaint.
+    // `now` goes to the three cards that print ages, or a day boundary, off a
+    // stored timestamp. The other two read their own clock at render, which is
+    // correct BECAUSE this component re-renders them every tick — they do not
+    // need the instant, only the repaint.
     <div className="manager">
       <CallsCard now={now} />
+      <AidCard now={now} />
       <TakingsCard />
       <PulseCard />
       <PlinthsCard now={now} />
