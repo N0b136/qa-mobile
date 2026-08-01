@@ -341,3 +341,59 @@
   font: 400 var(--text-xs) / 1.4 var(--font-ui);
   color: var(--text-muted);
 }
+
+/* ── Phone (≤640px) ───────────────────────────────────────────────────────
+   The counter's own monitor is untouched — every rule here is inside the
+   query, and from 641px up the booth is the two-column panel it has always
+   been. See console.css for the contract these serve: the page never scrolls
+   sideways. */
+@media (max-width: 640px) {
+  /* At the counter the stage is a glyph, a verb and a note on one line. On a
+     phone the note takes its own line instead of squeezing the title down to
+     one word per row — the title is the half of it that says which of the two
+     gestures this is, and it must never be the part that gets crushed. */
+  .booth__stage {
+    flex-wrap: wrap;
+  }
+
+  .booth__stage-note {
+    flex-basis: 100%;
+    margin-left: 0;
+    text-align: left;
+  }
+
+  /* The count and its remedy stop sharing a line before "Enrol a pole" starts
+     eating the words that say why you would. */
+  .booth__rack-head {
+    flex-wrap: wrap;
+  }
+
+  /* The rack stays a wrapping field of chips and never a sideways scroller.
+     A pole is a fixed 96px at the counter; here each takes an equal share of
+     the row instead, so the poles that fit read as a rack rather than as a
+     ragged column with a dead gutter down the right. `min(96px, 100%)` for
+     the same reason the console gate uses it — a fixed track minimum can
+     exceed the room available, and then nothing shrinks it. */
+  .booth__rack {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(96px, 100%), 1fr));
+  }
+
+  .booth__pole {
+    width: auto;
+  }
+
+  /* 34px is a mouse target. The questline chips are the control a Guide hits
+     with a pole already in the other hand. */
+  .booth__chip {
+    height: auto;
+    min-height: 40px;
+  }
+
+  /* A search hit and a passage are rows of text with a glyph, so they take
+     the height a thumb needs rather than the height the words need. */
+  .booth__result,
+  .booth__pass {
+    min-height: 40px;
+  }
+}

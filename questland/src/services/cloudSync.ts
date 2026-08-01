@@ -19,6 +19,7 @@ import type {
   Booking,
   Flag,
   NotificationType,
+  ParkStatus,
   Party,
   Presence,
   ProgressMap,
@@ -37,6 +38,11 @@ import type { FirebaseHandle } from './firebase'
 import { ensureFirebase, ensureFirebaseWithin, isConfigured, setCloudState } from './firebase'
 import { totalXp, levelFor } from './progressService'
 import { getUserParty } from './partyService'
+// The mirror write for parkStatus/current. parkStatusService imports this module
+// back (for pushParkStatus) — the same two-way shape progressService and
+// partyService already have with it, and safe for the same reason: neither side
+// calls across the cycle at module scope.
+import { applyParkStatus } from './parkStatusService'
 import { getOrg } from '../content/orgs'
 
 /** Party writes happen behind a spinner, so they get the same deadline as auth. */
@@ -995,7 +1001,7 @@ export function startGuestSync(userId: string): () => void {
 }
 
 export function startConsoleSync(): () => void {
-  return subscribeWhenAuthed((fb, { collection, limit, onSnapshot, orderBy, query }) => {
+  return subscribeWhenAuthed((fb, { collection, doc, limit, onSnapshot, orderBy, query }) => {
     const unsubs: Array<() => void> = []
 
     unsubs.push(
@@ -1100,6 +1106,22 @@ export function startConsoleSync(): () => void {
       onSnapshot(
         query(collection(fb.db, 'legs'), orderBy('at', 'desc'), limit(LOG_CAP)),
         (snap) => mergeLegsSnapshot(snap),
+        () => setCloudState('offline')
+      )
+    )
+    // What the booth console with the hub cable says about the plinths. Read by
+    // every console, including the ones that will never write it — a manager
+    // opening this on a phone has no serial port and no readings of their own.
+    //
+    // The console that WRITES this document also receives its own write back
+    // here, so the handler must terminate: applyParkStatus writes the local
+    // mirror and calls nothing, which is what keeps the echo from arming another
+    // write. A missing document is applied as null rather than ignored — a park
+    // that has never reported is a real answer, and a stale mirror is not.
+    unsubs.push(
+      onSnapshot(
+        doc(fb.db, 'parkStatus', 'current'),
+        (snap) => applyParkStatus(snap.exists() ? (snap.data() as ParkStatus) : null),
         () => setCloudState('offline')
       )
     )
@@ -1305,6 +1327,29 @@ export function pushFlag(flag: Flag): void {
       await setDoc(doc(fb.db, 'flags', flag.uid), clean({ ...flag }))
     } catch {
       // swallow — the local mirror is already correct
+    }
+  })
+}
+
+/**
+ * The park's station-health summary, written WHOLE — `setDoc` with no `merge`.
+ *
+ * One document, and parkStatusService is its complete and only writer, so the
+ * object handed over is the entire truth about the park at that moment. A merge
+ * would strand yesterday's exceptions on the record: a plinth that was silent
+ * and has been fixed leaves no key behind to overwrite, so the manager's phone
+ * would keep reporting a fault that somebody already walked out and cleared.
+ * Same lesson as pushFlag, same scar as pushGuestProfile.
+ */
+export function pushParkStatus(status: ParkStatus): void {
+  void ensureFirebase().then(async (fb) => {
+    if (!fb) return
+    try {
+      const { doc, setDoc } = await import('firebase/firestore')
+      await setDoc(doc(fb.db, 'parkStatus', 'current'), clean({ ...status }))
+    } catch {
+      // swallow — the booth's own board is already correct, and the next
+      // heartbeat write is five minutes away at the outside.
     }
   })
 }

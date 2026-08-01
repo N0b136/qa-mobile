@@ -10,12 +10,17 @@ import {
   signOutStaff,
   fireDueSchedules,
 } from '../../services/consoleService'
+import type { ManagerDoc } from '../../services/managerAuth'
+import { clearManager, currentManager, revalidateManager } from '../../services/managerAuth'
+import { startParkStatusWriter } from '../../services/parkStatusService'
 import { personaFromStaff } from '../../content/staff'
 import * as hubLink from '../../services/hubLink'
 import { installHubSim, isSimRequested } from '../../services/hubSim'
 import { broadcastTable, startTapPipeline } from '../../services/tapService'
 import { recordHeartbeat } from '../../services/stationHealthService'
 import ConsoleHeader from './ConsoleHeader'
+import type { ConsoleView } from './ConsoleHeader'
+import ManagerScreen from './manager/ManagerScreen'
 import StaffGate from './StaffGate'
 import CallsBoard from './CallsBoard'
 import SendWord from './SendWord'
@@ -33,6 +38,11 @@ export default function ConsoleScreen() {
   useAppTick()
   const [staff, setStaff] = useState<StaffDoc | null>(() => currentStaff())
   const [prefillAudience, setPrefillAudience] = useState<Audience | null>(null)
+  const [view, setView] = useState<ConsoleView>('console')
+  // The cached grant, so the tab is on the first paint for a manager who has
+  // been here before. It is re-checked against Firestore below and it decides
+  // nothing on the server — see managerAuth.
+  const [manager, setManager] = useState<ManagerDoc | null>(() => currentManager())
 
   useEffect(() => {
     document.body.classList.add('console-mode')
@@ -47,13 +57,40 @@ export default function ConsoleScreen() {
   // Reading the calls board or the schedule queue as the anonymous bootstrap
   // session is refused outright, and a refused listener never recovers.
   useEffect(() => {
-    if (!staff) return
+    if (!staff) {
+      // No session, no manager surface. Resetting the view as well as the grant
+      // matters because this component is not remounted on sign-out: leaving
+      // `view` on 'manager' would drop the NEXT person to sign in straight onto
+      // the takings, and for a Guide with no grant onto a tab with no nav.
+      setManager(null)
+      setView('console')
+      return
+    }
     // Same re-mint-on-start contract as the guest Shell — prompts nobody, and is
     // the only thing that notices a rotated token. Filed with staff: true so the
     // sender can find this desk without scanning every guest's row; the claim is
     // re-checked against the roster before anything is delivered to it.
     if (pushState() === 'on') void enablePush(staff.uid, { staff: true })
     const stopSync = startConsoleSync()
+    // The manager roll, re-read on every session. Same posture as the staff
+    // revalidation above: only a definitive 'not-manager' takes the tab away, so
+    // a park with a flat connection does not demote its own manager.
+    //
+    // `live` because the lookup runs on a 10s deadline and the session can end
+    // inside it: cleanup runs, this effect re-runs on the !staff branch and
+    // resets the grant to null, and then the in-flight promise resolves and puts
+    // the previous account's doc straight back over that reset.
+    let live = true
+    void revalidateManager(staff.uid).then((next) => {
+      if (live) setManager(next)
+    })
+    // The park reporting on itself, for readers with no cable of their own.
+    // Unconditional on purpose: the writer self-gates on `isLive() &&
+    // !isSimulated()`, so this console publishes only while it holds a real hub.
+    // A manager's phone — which can never be live — sits silent and reads, and a
+    // simulated hub stays silent too: pushParkStatus is a whole-document setDoc,
+    // so a demo would REPLACE the booth's real report rather than sit beside it.
+    const stopParkStatus = startParkStatusWriter(staff.uid)
     // Fire anything already overdue the moment the console opens, then poll.
     void fireDueSchedules()
     const interval = window.setInterval(() => {
@@ -91,9 +128,11 @@ export default function ConsoleScreen() {
     }
 
     return () => {
+      live = false
       stopSync()
       stopTaps()
       stopHeartbeats()
+      stopParkStatus()
       if (simulated) hubLink.disconnect()
       window.clearInterval(interval)
     }
@@ -110,20 +149,36 @@ export default function ConsoleScreen() {
       <ConsoleHeader
         persona={persona}
         onSignOut={() => {
+          // The grant does not outlive the session that carried it. Cleared
+          // before the sign-out resolves so the tab cannot be drawn for the
+          // moment in between.
+          clearManager()
           void signOutStaff().then(() => setStaff(null))
         }}
+        view={view}
+        onView={setView}
+        canManage={!!manager}
       />
-      <div className="console-grid">
-        <StationsBoard />
-        {/* BELOW the chart, never above it: MapCanvas re-clamps its pan on every
-            ancestor resize, and the booth stage changes height on every scan. */}
-        <BoothPanel staffUid={staff.uid} />
-        <SendWord persona={persona} prefillAudience={prefillAudience} />
-        <CallsBoard persona={persona} />
-        <GuestsAfield onSend={setPrefillAudience} />
-        <NoticeBoard persona={persona} />
-        <StationRecords />
-      </div>
+      {/* UNMOUNTED, not hidden. StationsBoard sizes MapCanvas from a
+          ResizeObserver on its viewport element, and a `display: none` element
+          measures 0 — hiding the grid would clamp the park chart to nothing and
+          it would come back a sliver wide. Unmounting costs a re-measure on
+          return, which is the cheap failure. */}
+      {view === 'manager' ? (
+        <ManagerScreen staffUid={staff.uid} />
+      ) : (
+        <div className="console-grid">
+          <StationsBoard />
+          {/* BELOW the chart, never above it: MapCanvas re-clamps its pan on every
+              ancestor resize, and the booth stage changes height on every scan. */}
+          <BoothPanel staffUid={staff.uid} />
+          <SendWord persona={persona} prefillAudience={prefillAudience} />
+          <CallsBoard persona={persona} />
+          <GuestsAfield onSend={setPrefillAudience} />
+          <NoticeBoard persona={persona} />
+          <StationRecords />
+        </div>
+      )}
     </div>
   )
 }

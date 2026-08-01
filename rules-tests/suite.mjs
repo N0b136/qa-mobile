@@ -1,5 +1,6 @@
-// Rules suite for the chat lane. Runs against the Firestore emulator, so the
-// staff cases are reachable (staff/{uid} is unwritable by any client in prod).
+// Rules suite for the chat lane, the manager roll and the park roll-up. Runs
+// against the Firestore emulator, so the staff cases are reachable (staff/{uid}
+// is unwritable by any client in prod, and managers/{uid} likewise).
 import { readFileSync } from 'node:fs'
 import {
   initializeTestEnvironment,
@@ -19,6 +20,10 @@ import {
 const GUEST = 'guest-uid-1'
 const OTHER = 'guest-uid-2'
 const STAFF = 'staff-uid-1'
+// A real manager holds TWO hand-provisioned docs — staff AND managers — because
+// the console's front door is the staff gate and a managers row on its own opens
+// nothing. Seeded that way below so the manager cases assert the real shape.
+const MANAGER = 'manager-uid-1'
 
 const env = await initializeTestEnvironment({
   projectId: 'qa-mobile-rules-test',
@@ -34,11 +39,32 @@ const env = await initializeTestEnvironment({
 const asGuest = env.authenticatedContext(GUEST, { firebase: { sign_in_provider: 'password' } })
 const asOther = env.authenticatedContext(OTHER, { firebase: { sign_in_provider: 'password' } })
 const asStaff = env.authenticatedContext(STAFF, { firebase: { sign_in_provider: 'password' } })
+const asManager = env.authenticatedContext(MANAGER, { firebase: { sign_in_provider: 'password' } })
 const asAnon = env.authenticatedContext('anon-uid', { firebase: { sign_in_provider: 'anonymous' } })
 
 await env.withSecurityRulesDisabled(async (ctx) => {
   const db = ctx.firestore()
   await setDoc(doc(db, 'staff', STAFF), { name: 'Warden Aldous', role: 'warden' })
+  // The manager, provisioned the way a real one is: both docs, by hand.
+  await setDoc(doc(db, 'staff', MANAGER), { name: 'Warden Perrin', role: 'warden' })
+  await setDoc(doc(db, 'managers', MANAGER), { uid: MANAGER, name: 'Perrin' })
+  // The park roll-up as the booth console writes it — written whole, one doc.
+  await setDoc(doc(db, 'parkStatus', 'current'), {
+    id: 'current',
+    writtenAt: 1,
+    writtenBy: STAFF,
+    tableVersion: 1,
+    counts: { live: 20, silent: 1 },
+    exceptions: [
+      {
+        stationNo: 15,
+        placeId: 'st-15',
+        name: "Maker's Cave",
+        condition: 'silent',
+        lastHeartbeatAt: 1,
+      },
+    ],
+  })
   await setDoc(doc(db, 'sos', 'call-1'), {
     id: 'call-1',
     userId: GUEST,
@@ -226,6 +252,101 @@ await check('anonymous cannot file a token', 'deny', () =>
 await check('a guest MAY claim staff:true (sender re-checks it)', 'allow', () =>
   setDoc(tok(asGuest, 't-claim'), { token: 'abc', userId: GUEST, staff: true })
 )
+
+// ── managers: the grant cannot be self-issued ───────────────────────────────
+//
+// The Manager's tab is drawn off managers/{uid}, and the entire value of the
+// collection is that the only route onto it is a human typing a document into
+// the Firebase console. The write cases below are the load-bearing half, for the
+// same reason the staff roster's would be: if any client can file its own row,
+// the roll is not an allowlist at all, it is a claim.
+const mgr = (ctx, uid) => doc(ctx.firestore(), 'managers', uid)
+
+await check('manager reads own manager row', 'allow', () => getDoc(mgr(asManager, MANAGER)))
+await check('guest cannot read a manager row', 'deny', () => getDoc(mgr(asGuest, MANAGER)))
+await check('STAFF CANNOT READ ANOTHER USER MANAGER ROW', 'deny', () =>
+  getDoc(mgr(asStaff, MANAGER))
+)
+await check('anonymous cannot read a manager row', 'deny', () => getDoc(mgr(asAnon, MANAGER)))
+await check('anonymous cannot read even its own manager row', 'deny', () =>
+  getDoc(mgr(asAnon, 'anon-uid'))
+)
+await check('A GUEST CANNOT GRANT THEMSELVES MANAGER', 'deny', () =>
+  setDoc(mgr(asGuest, GUEST), { uid: GUEST, name: 'Me' })
+)
+await check('STAFF CANNOT GRANT THEMSELVES MANAGER', 'deny', () =>
+  setDoc(mgr(asStaff, STAFF), { uid: STAFF, name: 'Aldous' })
+)
+await check('staff cannot grant manager to anybody else', 'deny', () =>
+  setDoc(mgr(asStaff, OTHER), { uid: OTHER })
+)
+await check('a manager cannot rewrite their own row', 'deny', () =>
+  updateDoc(mgr(asManager, MANAGER), { name: 'Elevated' })
+)
+await check('a manager cannot delete their own row', 'deny', () =>
+  deleteDoc(mgr(asManager, MANAGER))
+)
+
+// Holding a staff doc confers NOTHING here, and the assertion has to look past
+// the verdict to prove it. The rule lets anybody read their OWN row, so a staff
+// account reading managers/{own uid} is an ALLOW — it simply comes back empty.
+// Same distinction the readme draws about a 404 in the REST matrix: the grant is
+// the DOCUMENT, not the permission to ask for it, so a case that only checked
+// "was it refused" would read this as a manager.
+await check('a staff doc alone does not confer a manager doc', 'allow', async () => {
+  const snap = await getDoc(mgr(asStaff, STAFF))
+  if (snap.exists()) throw new Error(`${STAFF} came with a managers row it was never given`)
+  return snap
+})
+// ...and the seeded manager really does hold both docs, or every case above is
+// asserting against a fiction.
+await check('the manager also holds a staff doc', 'allow', async () => {
+  const snap = await getDoc(doc(asManager.firestore(), 'staff', MANAGER))
+  if (!snap.exists()) throw new Error('the manager was seeded without a staff doc')
+  return snap
+})
+
+// ── parkStatus: staff both ways, closed to guests ───────────────────────────
+//
+// One rolled-up document, written whole by whichever console is holding the LoRa
+// hub on USB — the only machine in the park that can hear a plinth stop
+// answering. Staff on BOTH sides is the point: a guest has no business reading
+// which stations stand unattended, and a guest who could WRITE it could mark a
+// dead plinth healthy and hide it from the person whose job is to go and fix it.
+const park = (ctx, id = 'current') => doc(ctx.firestore(), 'parkStatus', id)
+const roll = (over = {}) => ({
+  id: 'current',
+  writtenAt: 2,
+  writtenBy: STAFF,
+  tableVersion: 1,
+  counts: { live: 21 },
+  exceptions: [],
+  ...over,
+})
+
+await check('staff reads the park roll-up', 'allow', () => getDoc(park(asStaff)))
+await check('staff writes the park roll-up', 'allow', () => setDoc(park(asStaff), roll()))
+// The Manager's tab reaches this on the staff doc it is provisioned alongside,
+// not on the managers row — no rule in the file reads the managers collection.
+await check('a manager reads the roll-up on their staff doc', 'allow', () => getDoc(park(asManager)))
+await check('guest cannot read the park roll-up', 'deny', () => getDoc(park(asGuest)))
+await check('A GUEST CANNOT MARK A DEAD PLINTH HEALTHY', 'deny', () =>
+  setDoc(park(asGuest), roll())
+)
+await check('guest cannot delete the park roll-up', 'deny', () => deleteDoc(park(asGuest)))
+await check('anonymous cannot read the park roll-up', 'deny', () => getDoc(park(asAnon)))
+await check('anonymous cannot write the park roll-up', 'deny', () => setDoc(park(asAnon), roll()))
+
+// Absence is not a refusal. The manager view has to tell "the park has never
+// reported" apart from "you may not ask" — parkStatusFreshness renders one as a
+// waiting park and the other would be a lie about a permission — so this case
+// asserts the rule PASSES on a document that is not there, and looks at the
+// snapshot to say so rather than at the verdict alone.
+await check('staff read of a roll-up that does not exist is an ALLOW', 'allow', async () => {
+  const snap = await getDoc(park(asStaff, 'no-such-roll-up'))
+  if (snap.exists()) throw new Error('the fixture leaked a document into parkStatus')
+  return snap
+})
 
 await env.cleanup()
 

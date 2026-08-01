@@ -137,3 +137,102 @@ body.console-mode #root {
   padding: var(--space-sm) 0;
   background: var(--surface-page, transparent);
 }
+
+/* ── Phone (≤640px) ───────────────────────────────────────────────────────
+   The Back Office is a ~1440 surface on a monitor at the counter, but it is
+   also its own installable app, and a Warden reads it one-handed walking out
+   to a plinth. Everything below is additive and lives inside this one query:
+   at 1440, 1776 and 1920 not a rule here applies.
+
+   The contract the whole block serves: THE PAGE NEVER SCROLLS SIDEWAYS.
+   Anything too wide to fit either wraps, collapses to one column, or scrolls
+   inside its own box (.console-x-scroll). */
+@media (max-width: 640px) {
+  /* At one column the gap is vertical space between cards, not a gutter, and
+     24px of grid padding on top of the card's own 24px leaves under 300px to
+     read in. Both drop a step. */
+  .console-grid {
+    padding: var(--space-md);
+    gap: var(--space-md);
+  }
+
+  /* The header keeps its two jobs on two lines: who this is (mark + title),
+     then what can be done (cloud state, the Guide, sign out). The spacer that
+     pushes the actions right at 1440 becomes the line break itself — a flex
+     item at 100% basis wraps everything after it onto its own row, so no rule
+     here has to know how many badges the header happens to be carrying. */
+  .console-header {
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .console-header__spacer {
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .console-header__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .console-gate {
+    padding: var(--space-xl) var(--space-md);
+  }
+
+  /* A hard 220px minimum is wider than the gate's content box on a 390px
+     phone, and `auto-fit` drops a column but never shrinks the remaining
+     track below the minimum it was given — the same trap StationsBoard's two
+     rosters fell into. `min()` caps the minimum at the room actually there;
+     with more than 220px it resolves to 220px and the desktop gate is the
+     declaration it always was. */
+  .console-gate__grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  }
+
+  /* A tag uid, an address off the guild roll, a party name typed without
+     spaces — one unbreakable string is the thing wrapping cannot absorb.
+     `anywhere` and not `break-word` on purpose: only `anywhere` lowers a flex
+     item's min-content contribution, and it is that min-content floor, not
+     the painted text, that pushes a row past the viewport. */
+  .console-root,
+  .console-gate {
+    overflow-wrap: anywhere;
+  }
+
+  /* Every .row in the console is a line of facts that reads fine stacked and
+     badly clipped. Most callers already pass an inline flexWrap; this covers
+     the ones that do not, rather than leaving it to each of them. */
+  .console-root .row {
+    flex-wrap: wrap;
+  }
+
+  /* The segmented tab pill is an inline-flex that does not wrap on its own,
+     so a longer count in a tab label would carry its whole card off-screen. */
+  .console-root [role='tablist'] {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  /* Tap targets. The DS `sm` control is 32px — right beside a mouse, too
+     small beside a thumb — so every console control takes a 40px floor here.
+     `min-height` and not `height`: Button carries its size as an INLINE
+     style, and min-height is applied AFTER height in the used-value pass, so
+     a class can win this and could win nothing else.
+
+     Two exclusions, both because the rule would move something rather than
+     grow it:
+     · the park chart's pins are absolutely positioned and pulled onto their
+       coordinate with translate(-50%, -100%), so a taller box grows UPWARD
+       and walks every pin off its station;
+     · a rack pole already stands at 78px and this would shorten it. */
+  .console-root button:not([style*='position: absolute']):not(.booth__pole),
+  .console-root a[href],
+  .console-root label:has(input[type='radio']),
+  .console-root label:has(input[type='checkbox']),
+  .console-gate button,
+  .console-gate a[href] {
+    min-height: 40px;
+  }
+}

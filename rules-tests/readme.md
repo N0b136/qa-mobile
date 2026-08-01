@@ -28,6 +28,12 @@ Under the emulator, `withSecurityRulesDisabled` seeds the roster directly, so
 "staff may post as a Warden" and "a guest may NOT" are both actually asserted
 rather than reasoned about. That pair is the point of the whole suite.
 
+`managers/{uid}` is unreachable from the REST matrix for exactly the same
+reason, and one collection further: a manager holds TWO hand-provisioned docs,
+so a live test account cannot be put into the state the manager cases assert
+without two console visits. Both blocks were reported as REASONED BUT UNPROVEN
+until they were seeded here.
+
 Two habits carried over from the REST matrix are still worth keeping in mind
 when reading results **there**, and are why they are not needed here: a 404 is an
 ALLOW (the rule passed, the document is simply absent), and a 5xx is not a
@@ -36,7 +42,8 @@ ambiguity arises.
 
 ## What it covers
 
-44 cases over `sos/{id}`, `sos/{id}/messages/{msgId}` and `pushTokens/{tokenId}`:
+66 cases over `sos/{id}`, `sos/{id}/messages/{msgId}`, `pushTokens/{tokenId}`,
+`managers/{uid}` and `parkStatus/{id}`:
 
 - **read** — owner yes, staff yes, a stranger no, anonymous no
 - **`from` spoofing** — the case the whole block exists for. A guest posting
@@ -48,6 +55,30 @@ ambiguity arises.
 - **written once** — neither the guest NOR staff may edit or delete a line
 - **demo cast parity** with the `sos` block above it
 - **`pushTokens`** — owner-scoped both sides, anonymous refused
+- **`managers`** — the grant cannot be self-issued. A guest filing their own
+  `managers/{uid}`, staff filing their own, and staff filing anybody else's are
+  all refused; so are edits and deletes by the manager themselves. Reads are own
+  row only — staff do not get to read one another's. See below for the case that
+  needed more than a verdict.
+- **`parkStatus`** — staff both ways, guests and anonymous refused on both. A
+  guest who could write it could mark a dead plinth healthy and hide it from the
+  person whose job is to go and fix it.
+
+### Two manager cases assert on the SNAPSHOT, not on the verdict
+
+`allow read: if isSelf(uid)` lets anybody read their own row whether or not a
+document is there, so "staff reading `managers/{own uid}`" is an ALLOW that
+comes back empty. A case that only asked "was it refused" would read that as a
+manager. Both cases therefore look at `snap.exists()` and throw on the wrong
+answer: the grant is the DOCUMENT, not permission to ask for it.
+
+That is the same distinction as the 404 note above, and it is why the seeded
+manager is also asserted to hold a staff doc — otherwise the manager cases are
+green against a fixture that is not shaped like a real manager.
+
+`parkStatus` carries the mirror-image case: a staff read of a roll-up that does
+not exist is an ALLOW. The manager view has to tell "the park has never
+reported" apart from "you may not ask".
 
 ### The parent-document cases exist because their absence hid a real hole
 
