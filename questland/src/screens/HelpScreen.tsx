@@ -221,6 +221,10 @@ export default function HelpScreen() {
                   height={240}
                   placeholder="Ask your question"
                   readFloor={activeChat.lastMessageAt}
+                  // startGuestSync already listens to this thread for the life
+                  // of the app, so replies are in the mirror before this screen
+                  // is even opened.
+                  selfSubscribe={false}
                 />
 
                 <PushNudge />

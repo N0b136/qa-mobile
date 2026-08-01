@@ -34,6 +34,16 @@ export interface ChatThreadProps {
    * has to clear it too or the badge stays lit on a thread just read.
    */
   readFloor?: number
+  /**
+   * Whether this component attaches its own thread listener.
+   *
+   * TRUE on the console, where a Warden may have dozens of calls and only the
+   * open one is worth listening to. FALSE on the guest, where `startGuestSync`
+   * already holds a listener on every one of their own calls for the life of the
+   * app — so a reply arrives wherever they are, and this screen only has to
+   * render a mirror that is already current.
+   */
+  selfSubscribe?: boolean
 }
 
 const MAX_BODY = 2000
@@ -64,17 +74,22 @@ export default function ChatThread({
   placeholder = 'Write to the Warden',
   onSent,
   readFloor,
+  selfSubscribe = true,
 }: ChatThreadProps) {
   useAppTick()
   const [draft, setDraft] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const messages = listMessages(sosId)
 
-  // The thread listener lives and dies with the thread being ON SCREEN. This is
-  // the whole cost model of the feature: a listener per open thread is a handful
-  // of documents, a collectionGroup listener over every thread in the park is
-  // every warden's screen paying for every message anybody sends, forever.
-  useEffect(() => subscribeSosThread(sosId), [sosId])
+  // On the console the listener lives and dies with the thread being ON SCREEN.
+  // That is the cost model: a listener per open thread is a handful of
+  // documents, while a collectionGroup listener over every thread in the park
+  // would charge every warden's screen for every message anybody sends, forever.
+  // The guest opts out — startGuestSync holds their threads app-wide instead.
+  useEffect(() => {
+    if (!selfSubscribe) return
+    return subscribeSosThread(sosId)
+  }, [sosId, selfSubscribe])
 
   // Reading it is what marks it read — there is no separate "mark as read", and
   // an unread badge that outlives the thread being open is a badge people learn
