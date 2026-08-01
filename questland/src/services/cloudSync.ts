@@ -326,6 +326,15 @@ function mergeSosSnapshot(snap: QuerySnapshot<DocumentData>): void {
   const winners = new Map<string, SosRequest>()
   snap.forEach((docSnap) => {
     const data = docSnap.data() as SosRequest & { guestName?: string; zoneName?: string }
+    // Everything except the two denormalized display fields rides through
+    // untouched — there is no allowlist here, so the manager counters
+    // (`messageCount`, `wardenReplies`, the `replyBy` map, `acknowledgedAt`,
+    // `resolvedAt`) arrive without this function knowing they exist. The merge
+    // below is whole-object last-write-wins on `updatedAt`, which is the right
+    // shape for a map field: a call is a small document written by two devices,
+    // and every write that touches a counter also moves `updatedAt`, so the
+    // loser of a race is a strictly older view of the same document rather
+    // than a half-merged one.
     const { guestName, zoneName, ...rest } = data
     const incoming = rest as SosRequest
     const existing = localById.get(incoming.id)
@@ -1210,7 +1219,16 @@ export function pushSos(
 
 export function pushSosPatch(
   id: string,
-  patch: { status: SosStatus; responder?: string; updatedAt: number }
+  patch: {
+    status: SosStatus
+    responder?: string
+    updatedAt: number
+    /** Both optional and both stripped by clean() when absent — a patch that
+     *  does not carry one must not blank the field the other side already
+     *  wrote, and `undefined` is how updateDoc is told to leave it alone. */
+    acknowledgedAt?: number
+    resolvedAt?: number
+  }
 ): void {
   void ensureFirebase().then(async (fb) => {
     if (!fb) return
@@ -1220,6 +1238,8 @@ export function pushSosPatch(
         status: patch.status,
         updatedAt: patch.updatedAt,
         responder: patch.responder,
+        acknowledgedAt: patch.acknowledgedAt,
+        resolvedAt: patch.resolvedAt,
       })
       await updateDoc(doc(fb.db, 'sos', id), fields)
     } catch {
@@ -1260,16 +1280,54 @@ export async function pushSosMessage(m: SosMessage): Promise<PushResult> {
  * badge the board without a listener on every thread's messages. Fire-and-forget
  * on purpose: the message itself is the record, and this is only the board's
  * summary of it — a stamp that fails to land costs a sort order, not a word.
+ *
+ * It also carries the manager counters, as `increment()`s rather than as read
+ * numbers: two devices stamping the same call in the same second must both be
+ * counted, and a client that computed `count + 1` from its own mirror would
+ * overwrite the other's line instead. This is the only place in the module that
+ * needs a server-side operator, which is why `increment` joins the existing
+ * dynamic import rather than getting one of its own.
  */
+
+/**
+ * A staff uid, as Firebase mints them. Anything outside this alphabet is not a
+ * uid we issued and does not get built into a field path — see below.
+ */
+const UID_PATH_SAFE = /^[A-Za-z0-9_-]{1,128}$/
+
 export function pushSosStamp(
   sosId: string,
-  stamp: { lastMessageAt: number; lastMessageFrom: SosMessageAuthor; lastMessagePreview: string }
+  stamp: { lastMessageAt: number; lastMessageFrom: SosMessageAuthor; lastMessagePreview: string },
+  byUid?: string
 ): void {
   void ensureFirebase().then(async (fb) => {
     if (!fb) return
     try {
-      const { doc, updateDoc } = await import('firebase/firestore')
-      await updateDoc(doc(fb.db, 'sos', sosId), { ...stamp, updatedAt: stamp.lastMessageAt })
+      const { doc, updateDoc, increment } = await import('firebase/firestore')
+      const warden = stamp.lastMessageFrom === 'warden'
+      const fields: Record<string, unknown> = {
+        ...stamp,
+        updatedAt: stamp.lastMessageAt,
+        messageCount: increment(1),
+      }
+      if (warden) {
+        fields.wardenReplies = increment(1)
+        // ── THE DOTTED KEY IS A PATH, NOT A NAME ──────────────────────────
+        //
+        // `updateDoc` reads a `.` in a key as a descent into nested fields and
+        // a `/` as a segment break, so a uid carrying either does not write
+        // `replyBy['a.b']` — it writes `replyBy.a.b`, quietly landing the
+        // count on a field nobody asked for and, with the right string,
+        // somewhere outside `replyBy` altogether. Only a value matching the
+        // uid alphabet is allowed to become a path.
+        //
+        // Rejected, never repaired: this codebase does not sanitise an id into
+        // something that looks close enough, because the repaired string would
+        // then be attributed to a Warden who does not exist. If it is not a
+        // uid, the reply is counted in the total and against nobody.
+        if (byUid && UID_PATH_SAFE.test(byUid)) fields[`replyBy.${byUid}`] = increment(1)
+      }
+      await updateDoc(doc(fb.db, 'sos', sosId), fields)
     } catch {
       // swallow — see the note above
     }

@@ -186,6 +186,39 @@ await check('stranger cannot touch the call', 'deny', () =>
   updateDoc(sos(asOther, 'call-1'), { status: 'resolved' })
 )
 
+// ── replyBy attributes work to a named employee ─────────────────────────────
+//
+// The manager card's counters ride on this document, and the guest is a
+// legitimate writer of it — their own messages stamp lastMessage* here, which
+// is how the board badges without reading a thread. So the ability to write the
+// document had to stop short of the one field that credits a person. Both
+// shapes are covered because the client writes the DOTTED path, and a rule that
+// only caught the whole-map form would let the real write straight through.
+await check('a guest may still stamp their own message onto the call', 'allow', () =>
+  updateDoc(sos(asGuest, 'call-1'), {
+    lastMessageAt: 10,
+    lastMessageFrom: 'guest',
+    lastMessagePreview: 'is the bridge safe',
+    updatedAt: 10,
+    messageCount: 1,
+  })
+)
+await check('A GUEST CANNOT INFLATE A WARDEN TALLY', 'deny', () =>
+  updateDoc(sos(asGuest, 'call-1'), { replyBy: { [STAFF]: 99 } })
+)
+await check('A GUEST CANNOT INFLATE A TALLY BY FIELD PATH EITHER', 'deny', () =>
+  updateDoc(sos(asGuest, 'call-1'), { [`replyBy.${STAFF}`]: 99 })
+)
+await check('staff may credit their own reply', 'allow', () =>
+  updateDoc(sos(asStaff, 'call-1'), {
+    lastMessageAt: 11,
+    lastMessageFrom: 'warden',
+    updatedAt: 11,
+    wardenReplies: 1,
+    [`replyBy.${STAFF}`]: 1,
+  })
+)
+
 // ── every rendered field is type-checked, because a line is write-once ──────
 await check('object authorName refused', 'deny', () =>
   setDoc(msg(asGuest, 'm14'), line({ authorName: { toxic: true } }))

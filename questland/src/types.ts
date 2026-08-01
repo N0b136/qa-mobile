@@ -314,6 +314,34 @@ export interface SosRequest {
   lastMessageFrom?: SosMessageAuthor
   /** First ~80 chars of the last message. A preview, never the record. */
   lastMessagePreview?: string
+
+  // ── Manager figures, carried on the PARENT so the card costs nothing ────────
+  //
+  // Everything below exists so per-day aid numbers are derivable from the sos
+  // documents the console already reads — no message fetch, no extra write, no
+  // counter doc. The board pays for these in the same updates it was already
+  // making.
+  //
+  // EVERY ONE OF THEM IS OPTIONAL AND MUST STAY THAT WAY. Every call raised
+  // before this shipped has none of them, and a missing field is not a zero: a
+  // call with no `acknowledgedAt` was not answered instantly, and one with no
+  // `messageCount` did not have an empty thread. The card renders absent as
+  // UNMEASURED and leaves it out of its averages. Defaulting them to 0 anywhere
+  // — here with a non-optional type, or downstream with `?? 0` — silently
+  // folds the whole pre-launch back catalogue into the figures as perfect
+  // scores.
+
+  /** When a Warden first claimed it. Write-once — never overwritten by a later
+   *  reply or resolve, which is exactly what `updatedAt` cannot promise. */
+  acknowledgedAt?: number
+  /** When the call was closed. */
+  resolvedAt?: number
+  /** Lines in the thread, tallied as they are SENT. */
+  messageCount?: number
+  /** Of those, lines from the Warden side. */
+  wardenReplies?: number
+  /** Warden lines per staff uid. Staff-written only — the rules refuse it to a guest. */
+  replyBy?: Record<string, number>
 }
 
 export type SosMessageAuthor = 'guest' | 'warden'

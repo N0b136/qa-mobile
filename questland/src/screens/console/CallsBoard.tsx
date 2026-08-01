@@ -235,6 +235,12 @@ export default function CallsBoard({ persona }: Props) {
               sosId={call.id}
               viewer="warden"
               authorName={persona.name}
+              // The persona is a costume — more than one Warden wears it over a
+              // season — so the tally of who answered has to key on the signed-in
+              // account instead. Undefined when the console is somehow rendering
+              // without a staff row, in which case the reply still counts toward
+              // the call's total and simply goes unattributed.
+              byUid={currentStaff()?.uid}
               readOnly={resolved}
               height={300}
               placeholder={`Answer ${guest}`}
