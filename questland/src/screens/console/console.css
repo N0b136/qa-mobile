@@ -10,14 +10,42 @@ body.console-mode #root {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  /* Home indicator. console.html is viewport-fit=cover, so the installed app
+     owns the bottom inset too; the console has nothing anchored to the bottom
+     edge, but this is where its scrolling content ends. One declaration on the
+     flow root, re-declared nowhere, so no child rule can lose it. */
+  padding-bottom: var(--safe-bottom);
 }
 
 /* ── Header ─────────────────────────────────────────────────────────────── */
+/* SAFE-AREA CONTRACT (console.html sets viewport-fit=cover AND
+   apple-mobile-web-app-status-bar-style: black-translucent). Installed on
+   iPhone the web view extends UNDER the status bar, so the app — not iOS —
+   owns the inset; without it the mark and the title paint beneath the clock
+   and the 5G/battery glyphs. The guest app does the same thing with
+   --chrome-safe-top in TopBar/global.css.
+   PADDING and not margin/top: the header is sticky at top:0 and its surface
+   must keep painting up behind the status bar, so the system icons sit on the
+   header's own card colour rather than on whatever is scrolling under it.
+   --safe-top/--safe-bottom (tokens.css) and the env() left/right pair below
+   are DEVICE concepts, not DS spacing — never substitute a --space-* step.
+   The padding shorthand is declared ONCE, here. The phone breakpoint tunes
+   --console-header-pad-{y,x} instead of re-declaring padding, which is how a
+   future spacing tweak is stopped from silently dropping the inset again. */
 .console-header {
+  --console-header-pad-y: var(--space-md);
+  --console-header-pad-x: var(--space-lg);
   display: flex;
   align-items: center;
   gap: var(--space-md);
-  padding: var(--space-md) var(--space-lg);
+  /* Landscape: safe-area-inset-left/right are the sideways pair of --safe-top
+     — held sideways on a notched iPhone one of them is non-zero, and without
+     it the notch clips the header's end controls. No token exists for these
+     two, so env() is used directly. */
+  padding: calc(var(--console-header-pad-y) + var(--safe-top))
+    calc(var(--console-header-pad-x) + env(safe-area-inset-right, 0px))
+    var(--console-header-pad-y)
+    calc(var(--console-header-pad-x) + env(safe-area-inset-left, 0px));
   border-bottom: 1px solid var(--border-hairline);
   background: var(--surface-card);
   position: sticky;
@@ -60,14 +88,25 @@ body.console-mode #root {
 }
 
 /* ── Persona gate (full-screen) ─────────────────────────────────────────── */
+/* Same safe-area contract as the header, and this is the first screen a fresh
+   install shows: its heading starts at the top of the viewport, so under a
+   black-translucent status bar it wears the clock. Padding again — the gate is
+   the full-bleed surface. Padding is declared once; the phone breakpoint moves
+   --console-gate-pad-{y,x} so the insets cannot be dropped by a spacing tweak. */
 .console-gate {
+  --console-gate-pad-y: var(--space-2xl);
+  --console-gate-pad-x: var(--space-lg);
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--space-xl);
-  padding: var(--space-2xl) var(--space-lg);
+  /* left/right are the landscape pair of --safe-top (no token for them). */
+  padding: calc(var(--console-gate-pad-y) + var(--safe-top))
+    calc(var(--console-gate-pad-x) + env(safe-area-inset-right, 0px))
+    calc(var(--console-gate-pad-y) + var(--safe-bottom))
+    calc(var(--console-gate-pad-x) + env(safe-area-inset-left, 0px));
   text-align: center;
 }
 
@@ -160,11 +199,16 @@ body.console-mode #root {
      then what can be done (cloud state, the Guide, sign out). The spacer that
      pushes the actions right at 1440 becomes the line break itself — a flex
      item at 100% basis wraps everything after it onto its own row, so no rule
-     here has to know how many badges the header happens to be carrying. */
+     here has to know how many badges the header happens to be carrying.
+
+     Tuning the two pad vars and NOT the padding shorthand is deliberate: this
+     is the breakpoint the notched phone actually matches, so a `padding:` here
+     would be exactly the declaration that throws the status-bar inset away. */
   .console-header {
     flex-wrap: wrap;
     gap: var(--space-sm);
-    padding: var(--space-sm) var(--space-md);
+    --console-header-pad-y: var(--space-sm);
+    --console-header-pad-x: var(--space-md);
   }
 
   .console-header__spacer {
@@ -177,8 +221,10 @@ body.console-mode #root {
     justify-content: flex-start;
   }
 
+  /* Same reason as the header: vars, not `padding` — the inset survives. */
   .console-gate {
-    padding: var(--space-xl) var(--space-md);
+    --console-gate-pad-y: var(--space-xl);
+    --console-gate-pad-x: var(--space-md);
   }
 
   /* A hard 220px minimum is wider than the gate's content box on a 390px
