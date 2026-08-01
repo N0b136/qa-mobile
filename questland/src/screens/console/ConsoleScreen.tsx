@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAppTick } from '../../hooks/useAppTick'
 import { startConsoleSync } from '../../services/cloudSync'
+import { enablePush, pushState } from '../../services/pushService'
 import type { Audience } from '../../services/cloudSync'
 import type { StaffDoc } from '../../services/cloudAuth'
 import {
@@ -47,6 +48,11 @@ export default function ConsoleScreen() {
   // session is refused outright, and a refused listener never recovers.
   useEffect(() => {
     if (!staff) return
+    // Same re-mint-on-start contract as the guest Shell — prompts nobody, and is
+    // the only thing that notices a rotated token. Filed with staff: true so the
+    // sender can find this desk without scanning every guest's row; the claim is
+    // re-checked against the roster before anything is delivered to it.
+    if (pushState() === 'on') void enablePush(staff.uid, { staff: true })
     const stopSync = startConsoleSync()
     // Fire anything already overdue the moment the console opens, then poll.
     void fireDueSchedules()

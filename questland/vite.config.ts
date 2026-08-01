@@ -102,7 +102,13 @@ export default defineConfig({
         // Station card master PNGs (public/assets/stations/*.png) are source
         // art only — the app requests the optimized .webp siblings at
         // runtime, so keep the multi-MB masters out of the precache glob.
-        globIgnores: ['**/assets/stations/*.png'],
+        // The push worker must never be precached. Workbox would serve it
+        // cache-first from the ROOT worker's precache, so a fixed push worker
+        // could go on being served from a stale entry — and a service worker
+        // that updates only when another service worker feels like it is a
+        // worker you cannot ship a fix to. The browser revalidates it on its
+        // own schedule; leave that alone.
+        globIgnores: ['**/assets/stations/*.png', '**/firebase-messaging-sw.js'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         navigateFallbackDenylist: [/^\/api\//],
       },
