@@ -1,13 +1,12 @@
 // Icons for the Back Office console, which installs as its own home-screen app
 // and therefore needs a mark you can tell apart from the guest app at a glance.
 //
-// It deliberately does NOT reuse or redraw the Questland brand lockup (DS rule:
-// brand marks are raster assets, never redrawn). Instead it follows the DS the
-// same way any other staff surface does — the master icon's own slate ground,
-// with the Warden's shield from the Lucide glyph vocabulary struck in guild
-// gold. Placeholder-grade on purpose: swap in real art by replacing this.
+// Art is the user-supplied flame variant of the Questland lockup — a raster
+// master used as-is (DS rule: brand marks are raster assets, never redrawn).
+// It reads apart from the guest icon by its fire ring; the two otherwise share
+// the same gemstone-Q lockup and the same slate ground.
 //
-// Ground: sampled from content-intake/icon-rock-bg.png corners (same family)
+// Master: content-intake/brand/icon-questland-flame.png (1024², full-bleed)
 // Output: public/icons/console-*
 import sharp from 'sharp'
 import { mkdirSync } from 'node:fs'
@@ -15,17 +14,22 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const masterPath = path.resolve(__dirname, '../../content-intake/icon-rock-bg.png')
+const masterPath = path.resolve(__dirname, '../../content-intake/brand/icon-questland-flame.png')
 const outDir = path.resolve(__dirname, '../public/icons')
 
 mkdirSync(outDir, { recursive: true })
 
-const GOLD = '#D0AC6E' // --gold-400, the brighter step — small sizes need the contrast
-const SHIELD =
-  'M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z'
+// Maskable icons are cropped to an unknown shape; only the centre ~80% is
+// guaranteed to survive. The master is full-bleed art whose banner runs close
+// to the bottom edge, so it is inset rather than cropped — nothing is lost, and
+// the gap is filled with the master's own corner rock so the seam disappears.
+const SAFE = 0.8
 
-// Same corner-sampling the main generator uses, so both icons sit on identical
-// slate and read as one family.
+// The emblem alone, banner cropped off, for the browser tab. At 32px the
+// wordmark is an unreadable smear; the fire ring still reads as the brand.
+const EMBLEM = { left: 172, top: 12, width: 780, height: 780 }
+
+/** Mean of the master's four corners — the flat rock the art already sits on. */
 async function sampleCornerFill() {
   const { width, height } = await sharp(masterPath).metadata()
   const size = 60
@@ -37,6 +41,9 @@ async function sampleCornerFill() {
   ]
   const sums = [0, 0, 0]
   for (const { left, top } of corners) {
+    // NB: sharp's stats() reads the INPUT image, not the extracted region —
+    // it would return the whole-image mean (warm, from the flames). Average
+    // the raw pixels instead.
     const { data } = await sharp(masterPath)
       .extract({ left, top, width: size, height: size })
       .removeAlpha()
@@ -58,45 +65,37 @@ async function sampleCornerFill() {
   return sums.map((s) => Math.round(s / corners.length))
 }
 
-/**
- * @param size    output edge in px
- * @param cover   fraction of the edge the shield spans. Maskable icons keep it
- *                inside the ~80% safe zone so a circular mask cannot clip it.
- */
-function iconSvg(size, [r, g, b], cover) {
-  const glyph = size * cover
-  const offset = (size - glyph) / 2
-  const scale = glyph / 24
-  // Constant visual stroke weight regardless of output size. Heavier than a DS
-  // hairline on purpose — a home-screen icon renders around 48px, where a true
-  // hairline disappears.
-  const stroke = 2.1 / scale
-  return Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-      <rect width="${size}" height="${size}" fill="rgb(${r},${g},${b})"/>
-      <g transform="translate(${offset} ${offset}) scale(${scale})">
-        <path d="${SHIELD}" fill="none" stroke="${GOLD}" stroke-width="${stroke}"
-              stroke-linecap="round" stroke-linejoin="round"/>
-      </g>
-    </svg>`
-  )
-}
+// Palette PNG: ~4x smaller than truecolour on this art and indistinguishable at
+// icon scale. These ship inside the guest precache (`includeAssets: icons/*`),
+// so weight here is weight on every install.
+const png = (pipeline, name) =>
+  pipeline.png({ compressionLevel: 9, palette: true }).toFile(path.join(outDir, name))
 
-const write = (name, svg) =>
-  sharp(svg).png({ compressionLevel: 9 }).toFile(path.join(outDir, name))
+/** Full-bleed art. iOS and Android both mask this themselves. */
+const full = (size) => sharp(masterPath).resize(size, size)
+
+/** Art inset into the maskable safe zone, gap filled with the ground. */
+async function maskable(size, [r, g, b]) {
+  const inner = Math.round(size * SAFE)
+  const offset = Math.round((size - inner) / 2)
+  const art = await sharp(masterPath).resize(inner, inner).toBuffer()
+  return sharp({
+    create: { width: size, height: size, channels: 3, background: { r, g, b } },
+  }).composite([{ input: art, left: offset, top: offset }])
+}
 
 const fill = await sampleCornerFill()
 const written = []
 
 for (const size of [192, 512]) {
-  await write(`console-${size}.png`, iconSvg(size, fill, 0.56))
+  await png(full(size), `console-${size}.png`)
   written.push(`console-${size}.png`)
-  await write(`console-maskable-${size}.png`, iconSvg(size, fill, 0.42))
+  await png(await maskable(size, fill), `console-maskable-${size}.png`)
   written.push(`console-maskable-${size}.png`)
 }
-await write('console-apple-touch-icon.png', iconSvg(180, fill, 0.56))
+await png(full(180), 'console-apple-touch-icon.png')
 written.push('console-apple-touch-icon.png')
-await write('console-favicon-32.png', iconSvg(32, fill, 0.66))
+await png(sharp(masterPath).extract(EMBLEM).resize(32, 32), 'console-favicon-32.png')
 written.push('console-favicon-32.png')
 
 console.log(`ground rgb(${fill.join(',')}) — wrote ${written.length} files:`)
