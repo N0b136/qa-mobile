@@ -3,6 +3,8 @@ import type { CSSProperties } from 'react'
 import { useAppTick } from '../hooks/useAppTick'
 import { currentUser } from '../services/authService'
 import { activeSosFor, createSos, resolveSos } from '../services/sosService'
+import { enablePush, pushState } from '../services/pushService'
+import ChatThread from '../components/ChatThread'
 import { ZONES, getZone } from '../content/zones'
 import { Badge, Button, Card, Icon, Input, Select } from '../ui'
 
@@ -45,6 +47,18 @@ export default function HelpScreen() {
 
   const activeEmergency = activeSosFor(user.id, 'emergency')
   const activeHint = activeSosFor(user.id, 'quest-help')
+  const activeChat = activeSosFor(user.id, 'chat')
+
+  function handleOpenChat() {
+    createSos(user!.id, 'chat')
+    refresh()
+  }
+
+  function handleCloseChat() {
+    if (!activeChat) return
+    resolveSos(activeChat.id)
+    refresh()
+  }
 
   function handleSendSos() {
     createSos(user!.id, 'emergency', { zoneId, message: message.trim() || undefined })
@@ -168,7 +182,112 @@ export default function HelpScreen() {
             )}
           </div>
         </Card>
+
+        {/*
+          The quiet lane, and LAST on the page on purpose. A chat window is the
+          most inviting control here — it costs nothing, commits to nothing and
+          asks no one to walk anywhere — so putting it above the red button
+          would route people mid-emergency into a text queue. Emergency stays
+          first and stays red; this reads as the option for a question.
+        */}
+        <Card eyebrow="A question" title="Chat with a Warden">
+          <div className="stack" style={{ gap: 12 }}>
+            {!activeChat ? (
+              <>
+                <p className="muted">
+                  Opening times, a lost water bottle, where the nearest privy is — ask here and a
+                  Warden answers by text. No one is dispatched.
+                </p>
+                <Button variant="secondary" icon="message-circle" onClick={handleOpenChat}>
+                  Start a chat
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="row row--between">
+                  <span className="muted row" style={{ gap: 6, fontSize: 13 }}>
+                    <Icon name={activeChat.status === 'acknowledged' ? 'message-circle' : 'clock'} size={14} />
+                    {activeChat.status === 'acknowledged' && activeChat.responder
+                      ? `${activeChat.responder} is answering`
+                      : 'Waiting for a Warden'}
+                  </span>
+                  <Badge tone="gold">{activeChat.status}</Badge>
+                </div>
+
+                <ChatThread
+                  sosId={activeChat.id}
+                  viewer="guest"
+                  authorName={user.name}
+                  height={240}
+                  placeholder="Ask your question"
+                  readFloor={activeChat.lastMessageAt}
+                />
+
+                <PushNudge />
+
+                <Button variant="ghost" onClick={handleCloseChat}>
+                  Close this chat
+                </Button>
+              </>
+            )}
+
+            <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+              Not for emergencies — use Summon a Warden above, or call the line.
+            </p>
+          </div>
+        </Card>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Offered inside the thread and nowhere else.
+ *
+ * A permission prompt fired on app start is the one people refuse on reflex, and
+ * a refusal is permanent from our side — only the guest can undo it, in browser
+ * settings we cannot link to. Asking at the moment they are waiting on an answer
+ * is the one moment the ask makes obvious sense.
+ */
+function PushNudge() {
+  const [state, setState] = useState(() => pushState())
+
+  if (state === 'on' || state === 'unconfigured' || state === 'unsupported') return null
+
+  if (state === 'blocked') {
+    return (
+      <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+        Notifications are blocked for this site, so replies will only appear while this page is
+        open. Your browser&apos;s site settings can turn them back on.
+      </p>
+    )
+  }
+
+  return (
+    <div
+      className="row row--between"
+      style={{
+        gap: 10,
+        padding: '8px 10px',
+        border: '1px dashed var(--border-hairline)',
+        borderRadius: 'var(--radius-sm)',
+      }}
+    >
+      <span className="muted" style={{ fontSize: 12 }}>
+        Get the reply on your lock screen.
+      </span>
+      <Button
+        size="sm"
+        variant="secondary"
+        icon="bell"
+        onClick={() => {
+          const user = currentUser()
+          if (!user) return
+          void enablePush(user.id).then(setState)
+        }}
+      >
+        Notify me
+      </Button>
     </div>
   )
 }

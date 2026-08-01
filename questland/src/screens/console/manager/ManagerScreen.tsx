@@ -24,7 +24,7 @@
 // park, then whether the hardware is well.
 
 import { useEffect, useState } from 'react'
-import { currentManager } from '../../../services/managerAuth'
+import { managerFor } from '../../../services/managerAuth'
 import { Card } from '../../../ui'
 import CallsCard from './CallsCard'
 import TakingsCard from './TakingsCard'
@@ -32,8 +32,13 @@ import PulseCard from './PulseCard'
 import PlinthsCard from './PlinthsCard'
 import './manager.css'
 
-export default function ManagerScreen() {
-  const manager = currentManager()
+export default function ManagerScreen({ staffUid }: { staffUid: string }) {
+  // KEYED TO THE SIGNED-IN uid, and that is what makes the guard below its own
+  // opinion. The mirror is one un-keyed slot on a booth several people sign into
+  // in a day, so an un-keyed read here would answer the same question the gate
+  // upstream already answered off the same byte — an echo, not a second check,
+  // worth nothing more than the upstream clear that may never have run.
+  const manager = managerFor(staffUid)
 
   // ── THE SURFACE'S CLOCK, AND IT IS NOT DECORATION ──────────────────────────
   //

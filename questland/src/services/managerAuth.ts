@@ -68,9 +68,28 @@ export async function fetchManager(uid: string): Promise<ManagerLookup> {
   }
 }
 
-/** The cached mirror. Rendering only — see the note on MANAGER_KEY above. */
+/**
+ * The cached mirror, WHOEVER IT BELONGS TO. Rendering only — see the note on
+ * MANAGER_KEY above. Prefer managerFor(uid) anywhere the caller knows whose
+ * console it is: this one cannot tell you that the cached doc is the person
+ * sitting at the machine.
+ */
 export function currentManager(): ManagerDoc | null {
   return load<ManagerDoc | null>(MANAGER_KEY, null)
+}
+
+/**
+ * The cached mirror, but only when it belongs to `uid`.
+ *
+ * MANAGER_KEY is ONE un-keyed slot on a booth console several people sign into
+ * in a day, so "a manager doc is cached" and "the person here is a manager" are
+ * different statements and only this function answers the second. Rendering
+ * only, exactly like currentManager — it grants nothing, the rules still
+ * adjudicate every read on the server.
+ */
+export function managerFor(uid: string): ManagerDoc | null {
+  const cached = currentManager()
+  return cached && cached.uid === uid ? cached : null
 }
 
 /** What sign-out calls. Signed out means the tab is gone on the next paint. */
@@ -81,12 +100,36 @@ export function clearManager(): void {
 /**
  * Re-checks the cached grant against Firestore, same posture as revalidateStaff:
  * ONLY a definitive 'not-manager' clears the mirror. An unreachable roll leaves
- * the cached copy exactly where it is and hands it back, so the console stays
- * usable on its warm mirrors instead of demoting a manager every time the park's
- * connection drops.
+ * the cached copy exactly where it is and hands it back — provided it is THIS
+ * uid's copy — so the console stays usable on its warm mirrors instead of
+ * demoting a manager every time the park's connection drops.
  */
 export async function revalidateManager(uid: string): Promise<ManagerDoc | null> {
-  const cached = currentManager()
+  // WHOSE grant is cached is load-bearing here, and the key does not record it.
+  // DO NOT DELETE THIS uid COMPARISON as one that can never fail — the sequence
+  // it exists for is the ordinary one on a shared booth: manager Perrin closes
+  // the tab or lets the token expire (no sign-out click, so clearManager() —
+  // which has exactly one caller in the app — never runs), Guide Bob signs in,
+  // the park's connection is flat, and the 'unavailable' branch at the bottom
+  // hands Bob PERRIN'S doc. Manager tab drawn, day's takings on a Guide's
+  // screen. revalidateStaff() cannot go wrong this way because it takes no uid
+  // and reads one OUT of the cache; this one is handed a uid by its caller and
+  // must therefore check the cache against it.
+  //
+  // The mismatch CLEARS rather than only declining to hand the doc back. Argued
+  // both ways: leaving it costs nothing at THIS call site, since the comparison
+  // has already refused to hand it back, and the original owner keeps a warm
+  // grant for the next flat-connection shift — which is the whole reason the
+  // 'unavailable' branch exists. Against that, every OTHER reader of the mirror
+  // would then have to be right about ownership on its own — ManagerScreen now
+  // reads through managerFor() too, but that is a habit to protect rather than
+  // a guarantee to lean on — and a second account signing in on this machine is
+  // itself the proof that the first session ended without the sign-out that
+  // would have cleared it — so clearing here is the call that never came. The
+  // gate takes the cost: Perrin needs one reachable lookup at the start of the
+  // next shift to get the tab back.
+  const cached = managerFor(uid)
+  if (!cached && currentManager()) clearManager()
   const lookup = await fetchManager(uid)
   if (lookup.ok) {
     save<ManagerDoc | null>(MANAGER_KEY, lookup.manager)

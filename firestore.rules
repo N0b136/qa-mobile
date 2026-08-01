@@ -285,7 +285,32 @@ service cloud.firestore {
     // board and dispatch against it.
     match /sos/{id} {
       allow create: if ownsIncoming() || demoIncoming();
-      allow read, update, delete: if isStaff() || ownsExisting() || demoExisting();
+      allow read, delete: if isStaff() || ownsExisting() || demoExisting();
+
+      // ── userId IS IMMUTABLE, AND THAT CLAUSE IS LOAD-BEARING ─────────────
+      //
+      // `ownsExisting()` reads resource.data — the doc BEFORE the write — so on
+      // its own it happily permits the owner to rewrite `userId` to somebody
+      // else's uid. That was survivable when this document was only a call for
+      // aid. It is not survivable now: the messages subcollection below derives
+      // its ENTIRE ACL from this field via call(), and the push sender reads it
+      // to decide whose phone to wake.
+      //
+      // Without this clause a guest can raise their own call, write whatever
+      // they like into its thread, then hand the call to a stranger — and the
+      // next Warden reply banners that stranger's lock screen, their phone
+      // renders a transcript they never wrote, and the console attributes an
+      // attacker-authored EMERGENCY to them, sending a Warden into the woods
+      // for somebody who never called. Setting it to a `demo-` id instead makes
+      // the whole thread world-readable through demoExisting()/demoCall().
+      //
+      // Verified on the emulator, and covered in rules-tests. The sender's own
+      // hardening cannot save this — functions/src/index.ts deliberately reads
+      // the recipient from the SERVER's copy of this document precisely so a
+      // client cannot name it, which is defeated by rewriting the field it
+      // trusts.
+      allow update: if (isStaff() || ownsExisting() || demoExisting())
+        && request.resource.data.userId == resource.data.userId;
 
       // The thread on that call — "chat with a Warden". One subcollection per
       // call, so a dispatched emergency and a quiet question are the same
@@ -321,10 +346,21 @@ service cloud.firestore {
       match /messages/{msgId} {
         allow read: if isStaff() || ownsCall() || demoCall();
 
+        // EVERY rendered field is type-checked, not just the body. A line is
+        // WRITE-ONCE, so a malformed one can never be taken back by anybody —
+        // and `authorName` is rendered straight into the thread as a React
+        // child. An object there throws "Objects are not valid as a React
+        // child", there is no ErrorBoundary in the app, so the throw unmounts
+        // the whole console tree: white screen, calls board gone, and every
+        // Warden who opens that call loses the console again on reload.
         allow create: if request.resource.data.sosId == id
+          && request.resource.data.id is string
           && request.resource.data.body is string
           && request.resource.data.body.size() > 0
           && request.resource.data.body.size() <= 2000
+          && request.resource.data.authorName is string
+          && request.resource.data.authorName.size() > 0
+          && request.resource.data.authorName.size() <= 60
           && request.resource.data.createdAt is number
           && (
             (request.resource.data.from == 'warden' && isStaff())

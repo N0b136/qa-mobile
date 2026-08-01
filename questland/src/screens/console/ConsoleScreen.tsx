@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAppTick } from '../../hooks/useAppTick'
 import { startConsoleSync } from '../../services/cloudSync'
+import { enablePush, pushState } from '../../services/pushService'
 import type { Audience } from '../../services/cloudSync'
 import type { StaffDoc } from '../../services/cloudAuth'
 import {
@@ -65,11 +66,24 @@ export default function ConsoleScreen() {
       setView('console')
       return
     }
+    // Same re-mint-on-start contract as the guest Shell — prompts nobody, and is
+    // the only thing that notices a rotated token. Filed with staff: true so the
+    // sender can find this desk without scanning every guest's row; the claim is
+    // re-checked against the roster before anything is delivered to it.
+    if (pushState() === 'on') void enablePush(staff.uid, { staff: true })
     const stopSync = startConsoleSync()
     // The manager roll, re-read on every session. Same posture as the staff
     // revalidation above: only a definitive 'not-manager' takes the tab away, so
     // a park with a flat connection does not demote its own manager.
-    void revalidateManager(staff.uid).then(setManager)
+    //
+    // `live` because the lookup runs on a 10s deadline and the session can end
+    // inside it: cleanup runs, this effect re-runs on the !staff branch and
+    // resets the grant to null, and then the in-flight promise resolves and puts
+    // the previous account's doc straight back over that reset.
+    let live = true
+    void revalidateManager(staff.uid).then((next) => {
+      if (live) setManager(next)
+    })
     // The park reporting on itself, for readers with no cable of their own.
     // Unconditional on purpose: the writer self-gates on `isLive() &&
     // !isSimulated()`, so this console publishes only while it holds a real hub.
@@ -114,6 +128,7 @@ export default function ConsoleScreen() {
     }
 
     return () => {
+      live = false
       stopSync()
       stopTaps()
       stopHeartbeats()
@@ -150,7 +165,7 @@ export default function ConsoleScreen() {
           it would come back a sliver wide. Unmounting costs a re-measure on
           return, which is the cheap failure. */}
       {view === 'manager' ? (
-        <ManagerScreen />
+        <ManagerScreen staffUid={staff.uid} />
       ) : (
         <div className="console-grid">
           <StationsBoard />
