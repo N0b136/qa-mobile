@@ -197,9 +197,12 @@ function canPublish(): boolean {
  * corrupt the document: the phone has no serial port, `isLive()` is false there
  * forever, and this writer sits silent while the read side below works normally.
  *
- * The local `applyParkStatus()` is deliberately NOT gated the same way. A
- * presenter running the simulator should still see a populated Manager tab —
- * it is the Firestore publish, and only that, which must never leave a demo tab.
+ * The LOCAL path is deliberately NOT gated the same way: the change detector, the
+ * hub edge trigger and `applyParkStatus()` all run on `isLive()`, for any
+ * transport. A presenter running the simulator should see a populated Manager tab
+ * that keeps up with the simulator driving it — it is the Firestore publish, and
+ * only that, which must never leave a demo tab, and it is the single
+ * `canPublish()` in `write()` that decides it.
  *
  * Returns a stop function that clears every timer and drops every subscription.
  */
@@ -209,7 +212,7 @@ export function startParkStatusWriter(staffUid: string): () => void {
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null
   let checkTimer: ReturnType<typeof setInterval> | null = null
   let lastSignature: string | null = null
-  let wasPublishing = false
+  let wasLive = false
 
   const write = (): void => {
     if (stopped) return
@@ -246,21 +249,31 @@ export function startParkStatusWriter(staffUid: string): () => void {
    * same mistake `tableAt` avoids by never being bumped on a tap.
    */
   const check = (): void => {
-    if (stopped || !canPublish()) return
+    // `isLive()`, NOT `canPublish()`. The local mirror and the published document
+    // are two different questions and only the second one needs a cable. Gating
+    // the change DETECTOR on the cable meant a simulated hub never armed the
+    // debounce at all, so the Manager tab refreshed only on the unconditional
+    // five-minute heartbeat — a demo or a bench test on `?hub=sim` that takes five
+    // minutes to notice the station the operator just silenced is worth nothing.
+    // The publish decision is unchanged and stays where it belongs, in `write()`.
+    if (stopped || !isLive()) return
     if (signatureOf(buildParkStatus(staffUid)) !== lastSignature) armDebounce()
   }
 
   const stopHub = subscribeHub(() => {
     if (stopped) return
-    const publishing = canPublish()
+    const live = isLive()
     // A console that has just taken the cable is the newly authoritative one and
-    // should say so promptly rather than at the next five-minute mark. Attaching
-    // the SIMULATOR is not taking the cable, so it arms nothing.
-    if (publishing && !wasPublishing) armDebounce()
-    wasPublishing = publishing
+    // should say so promptly rather than at the next five-minute mark. Tracked on
+    // `isLive()` for the same reason `check()` is: attaching the simulator is not
+    // taking the cable, but it IS a new set of readings for this tab's own mirror,
+    // and the first render of a demo should not wait out a heartbeat either. What
+    // this arms is a `write()`, which still asks `canPublish()` before Firestore.
+    if (live && !wasLive) armDebounce()
+    wasLive = live
   })
 
-  wasPublishing = canPublish()
+  wasLive = isLive()
   // First write immediately: the document may be carrying a closed console's
   // last word, and until this one lands the manager's view is suppressed.
   write()
