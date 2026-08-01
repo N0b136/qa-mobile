@@ -48,6 +48,13 @@ import { getOrg } from '../content/orgs'
 /** Party writes happen behind a spinner, so they get the same deadline as auth. */
 const PARTY_TIMEOUT_MS = 10_000
 
+/**
+ * How many of a guest's own threads stay live at once. A guest can have an
+ * emergency, a hint and a chat open together and no more; the cap is a backstop
+ * against a device that has somehow accumulated open calls, not a real limit.
+ */
+const GUEST_THREAD_CAP = 4
+
 // ── Shared / pure types (console layer imports these from here) ───────────────
 
 export interface GuestDoc {
@@ -865,19 +872,67 @@ function subscribeWhenAuthed(
 }
 
 export function startGuestSync(userId: string): () => void {
-  return subscribeWhenAuthed((fb, { collection, doc, query, where, onSnapshot }) => {
+  return subscribeWhenAuthed((fb, fs) => {
+    const { collection, doc, query, where, onSnapshot } = fs
     const unsubs: Array<() => void> = []
+
+    // ── THE GUEST'S OWN THREADS LISTEN FOR THE LIFE OF THE APP ──────────────
+    //
+    // Not per screen, which is how the console does it. Three reasons, and the
+    // first is the one that matters:
+    //
+    // 1. A reply must land in the mirror wherever the guest happens to be. Tied
+    //    to a mounted ChatThread, the only live view of a conversation existed
+    //    while that one screen was open — so a guest reading the map missed
+    //    every word until they walked back to it, and the thread then filled in
+    //    a beat later rather than being already current.
+    // 2. Attaching is ASYNCHRONOUS (ensureFirebase, two dynamic imports, an auth
+    //    callback). Per mount, a screen can be on display with no listener
+    //    behind it yet; done once at sign-in, that window happens once.
+    // 3. It is what makes a push-woken tap honest: the banner says a Warden
+    //    replied, so the thread it opens onto had better already say so.
+    //
+    // A guest has at most a couple of open calls, so this costs about what
+    // their own sos listener costs — nothing like the park-wide fan-out the
+    // console would incur doing the same.
+    const threads = new Map<string, () => void>()
+    const syncThreads = () => {
+      const wanted = new Set(
+        load<SosRequest[]>(SOS_KEY, [])
+          .filter((r) => r.userId === userId && r.status !== 'resolved')
+          .slice(0, GUEST_THREAD_CAP)
+          .map((r) => r.id)
+      )
+      threads.forEach((stop, id) => {
+        if (wanted.has(id)) return
+        stop()
+        threads.delete(id)
+      })
+      wanted.forEach((id) => {
+        if (!threads.has(id)) threads.set(id, attachThread(fb, fs, id))
+      })
+    }
+    unsubs.push(() => {
+      threads.forEach((stop) => stop())
+      threads.clear()
+    })
 
     const sosUnsub = onSnapshot(
       query(collection(fb.db, 'sos'), where('userId', '==', userId)),
       { includeMetadataChanges: true },
       (snap) => {
         mergeSosSnapshot(snap)
+        // The guest's calls just moved, so the set of threads worth listening to
+        // may have changed — a chat opened, an old one stood down.
+        syncThreads()
         setCloudState(snap.metadata.fromCache ? 'offline' : 'live')
       },
       () => setCloudState('offline')
     )
     unsubs.push(sosUnsub)
+    // Calls already in the mirror from a previous session get their listener now
+    // rather than waiting for the first sos snapshot to come back.
+    syncThreads()
 
     const syncStartTs = Date.now()
     const preMergeLocalIds = new Set(
@@ -1236,30 +1291,40 @@ export function pushSosStamp(
  * about each match (the sos/legs trap in the rules), because it is not being
  * asked to.
  */
+/** One thread's live view. Assumes the caller is already inside an authed attach. */
+function attachThread(fb: FirebaseHandle, fs: FirestoreApi, sosId: string): () => void {
+  const { collection, onSnapshot, orderBy, query } = fs
+  return onSnapshot(
+    query(collection(fb.db, 'sos', sosId, 'messages'), orderBy('createdAt', 'asc')),
+    { includeMetadataChanges: true },
+    (snap) => {
+      void (async () => {
+        const { reconcile } = await import('./sosChatService')
+        reconcile(
+          sosId,
+          snap.docs
+            // A local echo has not been acknowledged yet, so it is not proof of
+            // anything — dropping it here leaves the local 'pending' copy
+            // standing until the server's own version arrives.
+            .filter((d) => !d.metadata.hasPendingWrites)
+            .map((d) => d.data() as SosMessage)
+        )
+      })()
+      setCloudState(snap.metadata.fromCache ? 'offline' : 'live')
+    },
+    () => setCloudState('offline')
+  )
+}
+
+/**
+ * A thread listener for the lifetime of ONE SCREEN. The console's, because a
+ * Warden may have dozens of calls on the board and listening to every thread in
+ * the park is the one way to make this feature expensive.
+ *
+ * The guest does NOT use this — see `startGuestSync`.
+ */
 export function subscribeSosThread(sosId: string): () => void {
-  return subscribeWhenAuthed((fb, { collection, onSnapshot, query, orderBy }) => {
-    const unsub = onSnapshot(
-      query(collection(fb.db, 'sos', sosId, 'messages'), orderBy('createdAt', 'asc')),
-      { includeMetadataChanges: true },
-      (snap) => {
-        void (async () => {
-          const { reconcile } = await import('./sosChatService')
-          reconcile(
-            sosId,
-            snap.docs
-              // A local echo has not been acknowledged yet, so it is not proof of
-              // anything — dropping it here leaves the local 'pending' copy
-              // standing until the server's own version arrives.
-              .filter((d) => !d.metadata.hasPendingWrites)
-              .map((d) => d.data() as SosMessage)
-          )
-        })()
-        setCloudState(snap.metadata.fromCache ? 'offline' : 'live')
-      },
-      () => setCloudState('offline')
-    )
-    return [unsub]
-  })
+  return subscribeWhenAuthed((fb, fs) => [attachThread(fb, fs, sosId)])
 }
 
 export function pushNotification(userId: string, n: AppNotification, demo?: boolean): void {

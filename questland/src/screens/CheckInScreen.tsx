@@ -169,13 +169,60 @@ export default function CheckInScreen() {
         </div>
       </div>
 
+      {/*
+        THE ONE CONTROL ON THIS SCREEN THAT HAS TO BE FOUND IN A HURRY.
+
+        It was a 13px muted text link, which is the treatment this app uses for
+        things that do not matter — and this is the screen a guest has open while
+        standing in the woods, which makes it the likeliest place in the whole app
+        for somebody to go looking for help. Now a full-width bordered row at the
+        DS control height, with a gold hairline and gold label so it reads as an
+        affordance rather than a caption.
+
+        Gold stays metal: a hairline edge and a label, never a flat fill — a solid
+        gold block here would outrank the primary action on the screen (checking
+        in) and pull every tap.
+
+        The second line names the two ways through deliberately. Half the guests
+        who need something have a question, not an emergency, and the old wording
+        offered only "aid" — which reads as "for emergencies", so they don't tap
+        it, and the quiet lane the chat was built for goes unused.
+      */}
       <Link
         to="/help"
+        aria-label="Need aid? Reach a Warden by call or chat"
         className="row"
-        style={{ gap: 4, marginTop: 4, color: 'var(--text-muted)', fontSize: 13, fontWeight: 700 }}
+        style={{
+          gap: 12,
+          marginTop: 14,
+          padding: '10px 14px',
+          minHeight: 56,
+          textDecoration: 'none',
+          border: '1px solid var(--border-strong)',
+          borderRadius: 'var(--radius-sm)',
+          boxShadow: 'var(--shadow-xs)',
+        }}
       >
-        <Icon name="shield" size={16} />
-        Need aid?
+        <span style={{ color: 'var(--text-gold)', display: 'inline-flex', flexShrink: 0 }}>
+          <Icon name="shield" size={22} />
+        </span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span
+            style={{
+              display: 'block',
+              font: 'var(--button-ui)',
+              letterSpacing: 'var(--tracking-label)',
+              textTransform: 'uppercase',
+              color: 'var(--text-gold)',
+            }}
+          >
+            Need aid?
+          </span>
+          <span style={{ display: 'block', marginTop: 2, fontSize: 13, color: 'var(--text-muted)' }}>
+            Summon a Warden, or ask a question by chat
+          </span>
+        </span>
+        <Icon name="chevron-right" size={18} style={{ color: 'var(--text-muted)' }} />
       </Link>
 
       <Card tone="parchment" eyebrow="The quest brief">
