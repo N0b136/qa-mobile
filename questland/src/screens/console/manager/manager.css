@@ -72,3 +72,60 @@
   text-align: right;
   white-space: nowrap;
 }
+
+/* ── The aid tally: name | taken | replies ────────────────────────────────
+   Three columns and not a <table>, so the name can shrink and ellipsize on a
+   375px phone while the two figures keep their width. `minmax(0, 1fr)` for the
+   same reason the strip above uses it: a long Warden name must shorten the
+   cell, never widen the card. */
+.manager-tally {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-md);
+}
+
+.manager-tally__figure {
+  text-align: right;
+  white-space: nowrap;
+  /* Figures in a column line up on the digit, not on the glyph width. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The by-hour strip ────────────────────────────────────────────────────
+   Twenty-four bars sharing whatever width the card has — `flex: 1 1 0` with
+   `min-width: 0` so they divide the row evenly at 375px instead of forcing it
+   wider. The baseline hairline is the axis: an hour with no calls still reads
+   as an hour, rather than as a gap in the strip. */
+.manager-hours {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 38px;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.manager-hours__slot {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+/* Gold is the only metal on this surface. The bars are a figure, not a track,
+   so they never take a questline colour. Height is set inline as the hour's
+   share of the busiest hour. */
+.manager-hours__bar {
+  width: 100%;
+  background: var(--gold-600);
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+}
+
+/* Five marks rather than twenty-four labels — the shape of the day is the
+   signal, and an axis legible at 11px beats one that is complete. */
+.manager-hours__axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-2xs);
+}

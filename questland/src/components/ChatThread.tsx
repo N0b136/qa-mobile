@@ -21,6 +21,16 @@ export interface ChatThreadProps {
   viewer: SosMessageAuthor
   /** Name stamped onto lines sent from here — the Warden's persona, or the guest's name. */
   authorName: string
+  /**
+   * The signed-in STAFF uid, for the manager tally of who answered what.
+   *
+   * Console only. The guest passes nothing and must keep passing nothing: the
+   * uid is what attributes a reply to a named employee, the rules refuse
+   * `replyBy` to anyone off the staff roll, and the persona name above is a
+   * costume — several Wardens can wear one. Passing it as a prop rather than
+   * having sosService look it up keeps consoleService out of the guest bundle.
+   */
+  byUid?: string
   /** Closed threads keep their transcript and lose the composer. */
   readOnly?: boolean
   /** Scroll region height. The console has room; a phone does not. */
@@ -69,6 +79,7 @@ export default function ChatThread({
   sosId,
   viewer,
   authorName,
+  byUid,
   readOnly = false,
   height = 260,
   placeholder = 'Write to the Warden',
@@ -114,8 +125,10 @@ export default function ChatThread({
     const sent = sendMessage(sosId, { from: viewer, authorName, body })
     if (!sent) return
     // Summarize onto the parent so the console board can order and badge itself
-    // without a listener on every thread.
-    stampLastMessage(sosId, viewer, body)
+    // without a listener on every thread. The same write carries the manager
+    // counters, which is why they cost nothing: no second round trip, and the
+    // figures come off documents the board already holds.
+    stampLastMessage(sosId, viewer, body, byUid)
     setDraft('')
     onSent?.(body)
   }

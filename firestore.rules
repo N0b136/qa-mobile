@@ -309,8 +309,30 @@ service cloud.firestore {
       // the recipient from the SERVER's copy of this document precisely so a
       // client cannot name it, which is defeated by rewriting the field it
       // trusts.
+      // ── `replyBy` NAMES AN EMPLOYEE, SO ONLY STAFF MAY TOUCH IT ──────────
+      //
+      // The manager card's figures ride on this document because the console
+      // already reads it — message counts, the acknowledge and resolve stamps,
+      // and `replyBy`, a map of staff uid to how many lines that Warden wrote.
+      // Every other field here describes the CALL. `replyBy` describes a named
+      // person's work, and it is the only one that does.
+      //
+      // The guest is a legitimate writer of this document — their own messages
+      // stamp `lastMessage*` onto it, which is the whole reason the board can
+      // badge without reading a thread — so "can write the doc" cannot be
+      // allowed to mean "can write this field". Without the clause below a
+      // guest can run any Warden's tally to a thousand, or invent a uid that
+      // was never on shift, and the figure a manager reads at the end of the
+      // week is whatever the phones felt like reporting.
+      //
+      // Same principle as `from` on the messages below: the field that decides
+      // who is credited is checked against WHO IS ASKING, never trusted from
+      // the payload. A guest's own writes are untouched by this — they carry no
+      // `replyBy` key, so the diff does not name it and the clause passes.
       allow update: if (isStaff() || ownsExisting() || demoExisting())
-        && request.resource.data.userId == resource.data.userId;
+        && request.resource.data.userId == resource.data.userId
+        && (isStaff()
+          || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['replyBy']));
 
       // The thread on that call — "chat with a Warden". One subcollection per
       // call, so a dispatched emergency and a quiet question are the same
