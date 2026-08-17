@@ -23,6 +23,7 @@ import PartyScreen from './screens/PartyScreen'
 import LeaderboardScreen from './screens/LeaderboardScreen'
 import HelpScreen from './screens/HelpScreen'
 import DemoConsoleScreen from './screens/DemoConsoleScreen'
+import RadioSpikeScreen from './screens/RadioSpikeScreen'
 /**
  * /console is kept for old bookmarks, but it hands over to console.html — the
  * separate document that carries the Back Office manifest. Installing from
@@ -89,6 +90,8 @@ export default function App() {
           <Route path="leaderboard" element={<LeaderboardScreen />} />
           <Route path="help" element={<HelpScreen />} />
           <Route path="demo" element={<DemoConsoleScreen />} />
+          {/* Disposable lock-screen audio spike — URL-only, no nav link. */}
+          <Route path="radio-test" element={<RadioSpikeScreen />} />
           <Route path="bookings" element={<BookingsScreen />} />
           <Route path="notifications" element={<NotificationsScreen />} />
           <Route path="more" element={<MoreScreen />} />
