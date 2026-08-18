@@ -12,16 +12,18 @@
 // seekforward) handlers, setPositionState throttled to one push a second off
 // timeupdate, playbackState mirrored, and a full teardown in stop().
 //
-// IMPORTS ARE DELIBERATELY LEAF-ONLY (store, firebase, content) — authService
-// calls radioService.stop() on sign-out, so a static import back into
-// authService/notificationService would close a cycle.
+// IMPORTS ARE DELIBERATELY LEAF-ONLY (store, firebase, content, and the
+// offline vault) — authService calls radioService.stop() on sign-out, so a
+// static import back into authService/notificationService would close a cycle.
+// offlineAudioService is imported one way only; what it needs to tell this
+// module (bytes it deleted) comes back through its onRemoved callback.
 
 import type { Booking } from '../types'
 import { load, save } from './store'
-import { ensureFirebase, hasRealAuth } from './firebase'
 import { isMembershipTier } from '../content/bookingTiers'
 import { getPlaylist, getTrack, tracksFor } from '../content/soundtrack'
 import type { RadioTrack } from '../content/soundtrack'
+import * as offlineAudio from './offlineAudioService'
 
 export type RadioStatus = 'idle' | 'loading' | 'playing' | 'paused'
 
@@ -325,11 +327,24 @@ function storageError(err: unknown): string {
   const code =
     err && typeof err === 'object' && 'code' in err ? String((err as { code: unknown }).code) : ''
   if (code === 'storage/unauthorized' || code === 'storage/unauthenticated') {
-    return 'This song is kept for passage-holders. Book a visit and the vault opens.'
+    return 'This song is kept for Citizens. A membership opens the vault.'
   }
   return 'The song stumbled during playback. Check your connection and try again.'
 }
 
+/**
+ * A playable src for a track. Three layers, in this order:
+ *
+ *   1. this session's object-URL memo (below) — bytes already materialized,
+ *      so a repeat play never mints a second URL for the same song;
+ *   2. the offline vault — IndexedDB first, which is what lets a KEPT song
+ *      play with the radio off and guarantees it is never re-fetched;
+ *   3. the cloud, through the vault's ONE shared in-flight map, so a download
+ *      already running for this song is ridden rather than duplicated.
+ *
+ * Layers 2 and 3 both live in offlineAudioService.fetchBlob — this module only
+ * turns the bytes it hands back into an object URL and manages that URL's life.
+ */
 async function resolveSource(track: RadioTrack): Promise<string> {
   if (track.source.kind === 'asset') return import.meta.env.BASE_URL + track.source.path
 
@@ -337,23 +352,17 @@ async function resolveSource(track: RadioTrack): Promise<string> {
   const cached = cacheGet(path)
   if (cached) return cached
 
-  // One fetch per path at a time — the second caller rides the first's promise.
+  // One URL per path at a time — the second caller rides the first's promise.
   const pending = inflight.get(path)
   if (pending) return pending
-  const fetching = fetchStorageUrl(path).finally(() => inflight.delete(path))
+  const fetching = materialize(track, path).finally(() => inflight.delete(path))
   inflight.set(path, fetching)
   return fetching
 }
 
-async function fetchStorageUrl(path: string): Promise<string> {
-  const fb = await ensureFirebase()
-  if (!fb || !hasRealAuth()) {
-    throw new Error('You are signed out. Sign in and the radio comes to life.')
-  }
+async function materialize(track: RadioTrack, path: string): Promise<string> {
   try {
-    // Lazy, matching firebase.ts — the storage chunk is only ever fetched here.
-    const { getStorage, ref, getBlob } = await import('firebase/storage')
-    const blob = await getBlob(ref(getStorage(fb.auth.app), path))
+    const blob = await offlineAudio.fetchBlob(track)
     const url = URL.createObjectURL(blob)
     cachePut(path, url)
     return url
@@ -361,6 +370,18 @@ async function fetchStorageUrl(path: string): Promise<string> {
     throw new Error(storageError(err))
   }
 }
+
+// A song deleted from the vault must not go on being served from a stale object
+// URL. The one currently sounding is spared by safeRevoke's deferral, which is
+// deliberate: a delete tidies storage, it does not cut the music off mid-verse.
+offlineAudio.onRemoved((paths) => {
+  for (const path of paths) {
+    const url = blobCache.get(path)
+    if (!url) continue
+    blobCache.delete(path)
+    safeRevoke(url)
+  }
+})
 
 /** Warm the NEXT queue entry's bytes once the current track is rolling. */
 function prefetchNext(): void {

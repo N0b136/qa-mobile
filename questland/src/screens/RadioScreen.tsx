@@ -1,14 +1,29 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppTick } from '../hooks/useAppTick'
 import { useRadio } from '../hooks/useRadio'
+import { useOfflineAudio } from '../hooks/useOfflineAudio'
 import { currentUser } from '../services/authService'
 import { isEntitled, playPlaylist, seekTo, toggle, next, prev } from '../services/radioService'
+import {
+  cancelPlaylist,
+  formatBytes,
+  forgetAll,
+  isBusy,
+  isKept,
+  isPlaylistKept,
+  keepPlaylist,
+  playlistProgress,
+  refresh as refreshOffline,
+  retryPlaylist,
+  unkeepPlaylist,
+} from '../services/offlineAudioService'
 import { PLAYLISTS, getPlaylist, getTrack, tracksFor } from '../content/soundtrack'
 import type { RadioPlaylist, RadioTrack } from '../content/soundtrack'
 import { getOrg } from '../content/orgs'
-import { ArchCard, Button, Card, Icon, IconButton } from '../ui'
+import ProgressBar from '../components/ProgressBar'
+import { ArchCard, Badge, Button, Card, Icon, IconButton } from '../ui'
 
 const capsHeadingStyle: CSSProperties = {
   textTransform: 'uppercase',
@@ -121,9 +136,151 @@ function NowPlaying() {
   )
 }
 
+
+/**
+ * "Keep on this device" for one playlist.
+ *
+ * Four honest states, and no fifth: the bundled demo loops are already on the
+ * device (there is nothing to download), a keepable playlist is either offered,
+ * coming down, or kept. Progress counts SONGS COMPLETED — the Storage SDK
+ * reports no byte-level progress, so a percentage bar would be invented.
+ */
+function KeepRow({ playlist }: { playlist: RadioPlaylist }) {
+  useOfflineAudio()
+  const progress = playlistProgress(playlist.id)
+  const wanted = isPlaylistKept(playlist.id)
+
+  // Songs that ship inside the app bundle. Offering to download one would be
+  // theatre — say plainly that it is already with you.
+  if (progress.total === 0) {
+    return (
+      <Card>
+        <div className="row" style={{ gap: 10 }}>
+          <Icon name="check" size={18} style={{ color: 'var(--text-gold)', flexShrink: 0 }} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-ui)', fontWeight: 700 }}>Always with you</div>
+            <p className="muted" style={{ margin: '2px 0 0', fontSize: 12 }}>
+              These songs ride inside the app. They play with no signal at all.
+            </p>
+          </div>
+        </div>
+      </Card>
+    )
+  }
+
+  const working = progress.working > 0
+
+  return (
+    <Card>
+      <div className="stack" style={{ gap: 12 }}>
+        <div className="row row--between" style={{ gap: 10 }}>
+          <span className="row" style={{ gap: 10, minWidth: 0 }}>
+            <Icon
+              name={progress.complete ? 'check' : working ? 'cloud-download' : 'download'}
+              size={18}
+              style={{ color: progress.complete ? 'var(--text-gold)' : 'var(--text-muted)', flexShrink: 0 }}
+            />
+            <span style={{ minWidth: 0 }}>
+              <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, display: 'block' }}>
+                {progress.complete ? 'Kept on this device' : working ? 'Keeping your songs' : 'Keep on this device'}
+              </span>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {working
+                  ? `${progress.kept} of ${progress.total} songs · ${progress.working} coming down`
+                  : progress.complete
+                    ? `${progress.total} ${progress.total === 1 ? 'song' : 'songs'} · ${formatBytes(progress.bytes)}`
+                    : 'Play them in the car, out of signal, on no data at all.'}
+              </span>
+            </span>
+          </span>
+          {progress.complete ? (
+            <IconButton
+              icon="trash-2"
+              label="Remove these downloads"
+              onClick={() => unkeepPlaylist(playlist.id)}
+            />
+          ) : null}
+        </div>
+
+        {working ? (
+          <>
+            <ProgressBar value={progress.kept} max={progress.total} />
+            <Button variant="ghost" icon="x" onClick={() => cancelPlaylist(playlist.id)}>
+              Stop keeping
+            </Button>
+          </>
+        ) : null}
+
+        {!working && !progress.complete ? (
+          <Button variant="secondary" icon="download" onClick={() => keepPlaylist(playlist.id)}>
+            {wanted ? 'Finish keeping' : 'Keep on this device'}
+          </Button>
+        ) : null}
+
+        {progress.failed > 0 ? (
+          <div className="row row--between" style={{ gap: 10 }}>
+            <span className="muted" style={{ fontSize: 12, color: 'var(--status-danger)' }}>
+              {progress.failed} {progress.failed === 1 ? 'song' : 'songs'} did not come down.
+            </span>
+            <Button variant="ghost" icon="rotate-cw" onClick={() => retryPlaylist(playlist.id)}>
+              Try again
+            </Button>
+          </div>
+        ) : null}
+
+        {progress.complete ? (
+          <p className="muted" style={{ margin: 0, fontSize: 12 }}>
+            Your device may reclaim the space when it runs low. The radio keeps them again next
+            time you open it.
+          </p>
+        ) : null}
+      </div>
+    </Card>
+  )
+}
+
+/** What the radio is holding on this device, and the way to hand it back. */
+function StorageRow() {
+  const offline = useOfflineAudio()
+  const count = Object.keys(offline.kept).length
+
+  return (
+    <Card eyebrow="On this device" title="Kept Songs">
+      <div className="stack" style={{ gap: 12 }}>
+        <div className="row row--between" style={{ gap: 10 }}>
+          <span className="row" style={{ gap: 10, minWidth: 0 }}>
+            <Icon name="hard-drive" size={18} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+            <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 700 }}>
+              {count > 0
+                ? `${formatBytes(offline.totalBytes)} · ${count} ${count === 1 ? 'song' : 'songs'}`
+                : 'Nothing kept yet'}
+            </span>
+          </span>
+          {count > 0 ? (
+            <Button
+              variant="ghost"
+              icon="trash-2"
+              style={{ color: 'var(--status-danger)' }}
+              onClick={() => void forgetAll()}
+            >
+              Remove all
+            </Button>
+          ) : null}
+        </div>
+        <p className="muted" style={{ margin: 0, fontSize: 12 }}>
+          {count > 0
+            ? 'Kept songs play with no signal. Your device may reclaim the space when it runs low.'
+            : 'Open a playlist to keep its songs here for the road.'}
+        </p>
+      </div>
+    </Card>
+  )
+}
+
 /** One playlist opened into its songs. */
 function TrackList({ playlist, onBack }: { playlist: RadioPlaylist; onBack: () => void }) {
   const radio = useRadio()
+  useOfflineAudio() // kept/coming-down badges follow the vault
   const tracks = tracksFor(playlist.id)
 
   return (
@@ -136,6 +293,8 @@ function TrackList({ playlist, onBack }: { playlist: RadioPlaylist; onBack: () =
       </div>
 
       <NowPlaying />
+
+      <KeepRow playlist={playlist} />
 
       <div className="stack" style={{ gap: 10 }}>
         {tracks.map((trk, i) => {
@@ -194,6 +353,21 @@ function TrackList({ playlist, onBack }: { playlist: RadioPlaylist; onBack: () =
                 >
                   {trk.title}
                 </span>
+                {isKept(trk.id) ? (
+                  <Icon
+                    name="check"
+                    size={16}
+                    aria-label="Kept on this device"
+                    style={{ color: 'var(--text-gold)', flexShrink: 0 }}
+                  />
+                ) : isBusy(trk.id) ? (
+                  <Icon
+                    name="cloud-download"
+                    size={16}
+                    aria-label="Coming down"
+                    style={{ color: 'var(--text-muted)', flexShrink: 0 }}
+                  />
+                ) : null}
                 <span className="muted" style={{ fontSize: 12, flexShrink: 0 }}>
                   {fmt(trk.duration)}
                 </span>
@@ -211,6 +385,14 @@ export default function RadioScreen() {
   const navigate = useNavigate()
   const [openId, setOpenId] = useState<string | null>(null)
   const user = currentUser()
+
+  // Downloads are a LEASE: the browser may have reclaimed songs since this
+  // screen was last open, so read what is really on the device rather than
+  // trusting a remembered answer.
+  useEffect(() => {
+    void refreshOffline()
+  }, [])
+
   if (!user) return null
 
   const entitled = isEntitled(user.id)
@@ -258,6 +440,7 @@ export default function RadioScreen() {
                 />
               ))}
             </div>
+            {entitled ? <StorageRow /> : null}
           </div>
         )}
       </div>
