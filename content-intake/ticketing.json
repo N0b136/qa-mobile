@@ -45,7 +45,7 @@
         {
           "name": "Group / Adventurer Pass",
           "subtitle_as_written": null,
-          "price": "$90",
+          "price": "$100",
           "price_unit": "per group (up to 6 guests)",
           "included": [
             "Admission for up to 6 guests",
@@ -93,7 +93,7 @@
         {
           "name": "Adventurer Membership",
           "subtitle_as_written": null,
-          "price": "$30",
+          "price": "$35",
           "price_unit": "per month",
           "included": [
             "One visit per week",
@@ -104,7 +104,7 @@
         {
           "name": "Hero Membership",
           "subtitle_as_written": null,
-          "price": "$35",
+          "price": "$45",
           "price_unit": "per month",
           "included": [
             "Unlimited visits",
@@ -114,7 +114,7 @@
         {
           "name": "Family Hero Membership",
           "subtitle_as_written": null,
-          "price": "$45",
+          "price": "$65",
           "price_unit": "per month",
           "included": [
             "Unlimited visits for up to six family members",
@@ -194,6 +194,7 @@
   ],
   "transcription_notes": [
     "'All options form the adventurer package PLUS' in the source table had a typo ('form' for 'from'); corrected to 'from' here for readability, flagged here for traceability.",
-    "Table cell text in the source occasionally had inconsistent line-break placement (e.g. price appearing on its own sub-line within a merged-looking cell); prices and inclusion lists were reconciled to the tier they visually belong to based on row position."
+    "Table cell text in the source occasionally had inconsistent line-break placement (e.g. price appearing on its own sub-line within a merged-looking cell); prices and inclusion lists were reconciled to the tier they visually belong to based on row position.",
+    "REVISED 2026-08-18 (user-supplied pricing sheet + explicit membership override): Group Adventurer Pass $90 -> $100 per the updated sheet; Citizen of Questia membership tiers set by the user to $35 (Adventurer) / $45 (Hero) / $65 (Family Hero), superseding the $30/$35/$45 on the sheet. All other prices, inclusions and notes unchanged from the source doc."
   ]
 }

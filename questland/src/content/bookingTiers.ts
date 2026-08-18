@@ -49,7 +49,7 @@ export const TIERS: BookingTier[] = [
     name: 'Group Adventurer Pass',
     tagline: 'Bring the crew — one Quest Experience each.',
     icon: 'users',
-    flatPrice: 90,
+    flatPrice: 100,
     maxParty: 6,
     perPersonOver: { included: 6, price: 5 },
     // Group rate on the Adventurer terms: one Quest Experience, that day,
@@ -90,7 +90,7 @@ export const TIERS: BookingTier[] = [
     tagline: 'One visit a week, all season long.',
     icon: 'badge',
     monthly: true,
-    flatPrice: 30,
+    flatPrice: 35,
     // "One visit per week ... 1 Quest Experience per visit" — the allowance
     // refreshes weekly and the membership runs a month from its start date.
     pass: { validFor: 'month', quests: 1, per: 'week' },
@@ -108,7 +108,7 @@ export const TIERS: BookingTier[] = [
     tagline: 'Unlimited visits, unlimited quests.',
     icon: 'badge-check',
     monthly: true,
-    flatPrice: 35,
+    flatPrice: 45,
     // "Unlimited visits, unlimited access to ALL 3 Quests", all month.
     pass: { validFor: 'month', quests: null, per: 'month' },
     perks: [
@@ -129,7 +129,7 @@ export const TIERS: BookingTier[] = [
     tagline: 'Unlimited visits for the whole crew.',
     icon: 'users-round',
     monthly: true,
-    flatPrice: 45,
+    flatPrice: 65,
     maxParty: 6,
     perPersonOver: { included: 6, price: 5 },
     // Unlimited, all month, for the whole household.
@@ -139,6 +139,7 @@ export const TIERS: BookingTier[] = [
       'Unlimited access to ALL 3 Quests',
       '+$5 per additional family member, per month',
       'Two guest passes per month',
+      'Households of 10+: call for a discounted membership rate',
       'Discounts on select experiences and merchandise',
       'Early access to Night Quests, Holiday Adventures & the End-of-Year Raid',
       'Early ticket access to special events',
