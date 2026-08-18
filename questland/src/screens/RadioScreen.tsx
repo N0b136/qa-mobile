@@ -23,7 +23,7 @@ import { PLAYLISTS, getPlaylist, getTrack, tracksFor } from '../content/soundtra
 import type { RadioPlaylist, RadioTrack } from '../content/soundtrack'
 import { getOrg } from '../content/orgs'
 import ProgressBar from '../components/ProgressBar'
-import { ArchCard, Badge, Button, Card, Icon, IconButton } from '../ui'
+import { ArchCard, Button, Card, Icon, IconButton } from '../ui'
 
 const capsHeadingStyle: CSSProperties = {
   textTransform: 'uppercase',
@@ -250,7 +250,7 @@ function StorageRow() {
         <div className="row row--between" style={{ gap: 10 }}>
           <span className="row" style={{ gap: 10, minWidth: 0 }}>
             <Icon name="hard-drive" size={18} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-            <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 700 }}>
+            <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, whiteSpace: 'nowrap' }}>
               {count > 0
                 ? `${formatBytes(offline.totalBytes)} · ${count} ${count === 1 ? 'song' : 'songs'}`
                 : 'Nothing kept yet'}
@@ -259,8 +259,9 @@ function StorageRow() {
           {count > 0 ? (
             <Button
               variant="ghost"
+              size="sm"
               icon="trash-2"
-              style={{ color: 'var(--status-danger)' }}
+              style={{ color: 'var(--status-danger)', flexShrink: 0 }}
               onClick={() => void forgetAll()}
             >
               Remove all

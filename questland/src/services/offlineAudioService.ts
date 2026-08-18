@@ -524,22 +524,34 @@ export function keepPlaylist(playlistId: string): void {
   void ensureReady().then(() => enqueue(tracks.map((t) => t.id)))
 }
 
+/** Forgets the member's intent to keep a playlist. Touches no bytes. */
+function dropIntent(playlistId: string): void {
+  if (!state.keptPlaylistIds.includes(playlistId)) return
+  const keptPlaylistIds = state.keptPlaylistIds.filter((id) => id !== playlistId)
+  save(KEPT_PLAYLISTS_KEY, keptPlaylistIds)
+  setState({ keptPlaylistIds })
+}
+
 /** Stop keeping a playlist: queue cleared, in-flight discarded, blobs deleted. */
 export function unkeepPlaylist(playlistId: string): void {
   const ids = downloadableTracks(playlistId).map((t) => t.id)
   cancelPlaylist(playlistId)
-  const keptPlaylistIds = state.keptPlaylistIds.filter((id) => id !== playlistId)
-  save(KEPT_PLAYLISTS_KEY, keptPlaylistIds)
-  setState({ keptPlaylistIds })
   // Songs on more than one shelf stay as long as another kept playlist wants
   // them — the full playlist and an order's playlist share tracks.
   const spokenFor = new Set(
-    keptPlaylistIds.flatMap((id) => downloadableTracks(id).map((t) => t.id))
+    state.keptPlaylistIds.flatMap((id) => downloadableTracks(id).map((t) => t.id))
   )
   void forget(ids.filter((id) => !spokenFor.has(id)))
 }
 
-/** Empties the queue for one playlist without touching what is already kept. */
+/**
+ * Empties the queue for one playlist without touching what is already kept.
+ *
+ * It also drops the INTENT, and that is the load-bearing half: `reconcile()`
+ * re-queues whatever a kept playlist is missing every time the screen opens,
+ * so a cancel that left the intent standing would quietly start the download
+ * again on the next visit — a stop button that does not stop.
+ */
 export function cancelPlaylist(playlistId: string): void {
   const ids = new Set(downloadableTracks(playlistId).map((t) => t.id))
   const queued = state.queued.filter((id) => !ids.has(id))
@@ -549,6 +561,7 @@ export function cancelPlaylist(playlistId: string): void {
   const failed = { ...state.failed }
   ids.forEach((id) => delete failed[id])
   setState({ queued, failed })
+  dropIntent(playlistId)
 }
 
 /** Re-attempts every failed song of a playlist. */
