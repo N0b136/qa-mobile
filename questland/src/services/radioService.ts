@@ -284,7 +284,7 @@ function storageError(err: unknown): string {
   if (code === 'storage/unauthorized' || code === 'storage/unauthenticated') {
     return 'This song is kept for passage-holders. Book a visit and the vault opens.'
   }
-  return 'The song would not load. Check your connection and try again.'
+  return 'The song stumbled during playback. Check your connection and try again.'
 }
 
 async function resolveSource(track: RadioTrack): Promise<string> {
@@ -295,7 +295,7 @@ async function resolveSource(track: RadioTrack): Promise<string> {
 
   const fb = await ensureFirebase()
   if (!fb || !hasRealAuth()) {
-    throw new Error('The radio needs your account signed in to the cloud.')
+    throw new Error('You are signed out. Sign in and the radio comes to life.')
   }
   try {
     // Lazy, matching firebase.ts — the storage chunk is only ever fetched here.
@@ -345,7 +345,7 @@ async function loadAndPlay(track: RadioTrack, startAt: number): Promise<void> {
     if (seq === loadSeq) prefetchNext()
   } catch {
     if (seq !== loadSeq) return
-    setState({ status: 'paused', error: 'The song would not start. Tap play to try again.' })
+    setState({ status: 'paused', error: 'The song stumbled at the start. Tap play when you are ready.' })
   }
 }
 
@@ -380,7 +380,7 @@ export function play(): void {
     return
   }
   void audio.play().catch(() => {
-    setState({ status: 'paused', error: 'The song would not start. Tap play to try again.' })
+    setState({ status: 'paused', error: 'The song stumbled at the start. Tap play when you are ready.' })
   })
 }
 

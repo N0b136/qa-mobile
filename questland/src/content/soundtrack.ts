@@ -63,13 +63,13 @@ export const PLAYLISTS: RadioPlaylist[] = [
   {
     id: 'pl-woods',
     name: 'The Whispering Woods',
-    blurb: 'Every song of the park, gathered under one canopy.',
+    blurb: 'Gather every song of the park under one canopy.',
     trackIds: ['trk-woods', 'trk-valor', 'trk-wilds', 'trk-lore'],
   },
   {
     id: 'pl-valor',
     name: 'Songs of Valor',
-    blurb: 'Marching airs for the Rangers of Questia.',
+    blurb: 'The Rangers of Questia march to these airs.',
     orgId: 'rangers',
     art: 'assets/badge-compass-sword.png',
     trackIds: ['trk-valor'],
@@ -77,7 +77,7 @@ export const PLAYLISTS: RadioPlaylist[] = [
   {
     id: 'pl-wilds',
     name: 'Airs of the Wilds',
-    blurb: 'Quiet melodies the Hearers of the Alehiim keep.',
+    blurb: 'The Hearers of the Alehiim hold these melodies close.',
     orgId: 'alehiim',
     art: 'assets/relief-pomegranate-tree-stone.png',
     trackIds: ['trk-wilds'],
@@ -85,7 +85,7 @@ export const PLAYLISTS: RadioPlaylist[] = [
   {
     id: 'pl-lore',
     name: 'Hymns of Lore',
-    blurb: 'Old measures sworn to the Order of the Elm.',
+    blurb: 'Measures the Order of the Elm keeps sworn.',
     orgId: 'elm',
     art: 'assets/badge-crowned-tree-gold.png',
     trackIds: ['trk-lore'],
