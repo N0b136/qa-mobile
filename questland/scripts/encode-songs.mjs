@@ -316,10 +316,28 @@ function main() {
     console.log(`Total size     : ${formatBytes(totalBytes)}`)
     console.log(`Average bitrate: ~${avgBitrateKbps} kbps`)
 
+    // Slugs (and therefore the naive 'trk-<slug>' id) can collide across a
+    // real batch — e.g. "Theme (Reprise)" and "Theme [Reprise]" both slugify
+    // to "theme-reprise". The NN index is already unique, so on collision we
+    // suffix every entry sharing that slug with its index to keep ids unique.
+    const slugCounts = {}
+    for (const r of results) slugCounts[r.slug] = (slugCounts[r.slug] || 0) + 1
+    const idFor = (r) => (slugCounts[r.slug] > 1 ? `trk-${r.slug}-${r.index}` : `trk-${r.slug}`)
+
+    const collidedSlugs = Object.keys(slugCounts).filter((s) => slugCounts[s] > 1)
+    if (collidedSlugs.length > 0) {
+      for (const slug of collidedSlugs) {
+        const files = results.filter((r) => r.slug === slug).map((r) => r.srcFile)
+        console.log(
+          `NOTE: ${files.length} files slugified to "${slug}" (${files.join(', ')}) — ids disambiguated with an index suffix; consider clearer titles.`,
+        )
+      }
+    }
+
     const entries = results
       .map(
         (r) =>
-          `  {\n    id: 'trk-${r.slug}',\n    title: '${r.title.replace(/'/g, "\\'")}',\n    duration: ${r.duration},\n    source: { kind: 'storage', path: 'radio/${r.outFile}' },\n  },`,
+          `  {\n    id: '${idFor(r)}',\n    title: '${r.title.replace(/'/g, "\\'")}',\n    duration: ${r.duration},\n    source: { kind: 'storage', path: 'radio/${r.outFile}' },\n  },`,
       )
       .join('\n')
     const tsBlock =
