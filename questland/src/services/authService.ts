@@ -21,6 +21,7 @@ import {
 } from './cloudAuth'
 import { ensureFirebase, hasRealAuth, isConfigured } from './firebase'
 import { disablePush } from './pushService'
+import { stop as stopRadio } from './radioService'
 
 const USERS_KEY = 'ql:users'
 const SESSION_KEY = 'ql:session'
@@ -325,6 +326,9 @@ function signInLocally(user: User): User {
 
 export function signOut(): void {
   save<string | null>(SESSION_KEY, null)
+  // Silence the radio and clear its lock-screen session — a booth phone left
+  // signed out must not keep playing the last guest's soundtrack.
+  stopRadio()
   // Hand the push token back BEFORE Firebase auth goes, and SEQUENCED, not
   // merely started first: a phone left signed out at the booth must not keep
   // buzzing with the last guest's thread, and the token row is owner-scoped, so

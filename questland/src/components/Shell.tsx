@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom'
 import TopBar from './TopBar'
 import BottomNav from './BottomNav'
 import GateIntro from './GateIntro'
+import MiniPlayer from './MiniPlayer'
 import { currentUser } from '../services/authService'
 import { syncBookingReminders } from '../services/bookingService'
 import { startGuestSync } from '../services/cloudSync'
@@ -73,6 +74,9 @@ export default function Shell() {
         <Outlet />
       </div>
       <div style={fadeInStyle}>
+        {/* Fixed like the nav and stacked in the same z-50 band, so it lives in
+            this wrapper's stacking context alongside it. */}
+        <MiniPlayer />
         <BottomNav />
       </div>
     </>

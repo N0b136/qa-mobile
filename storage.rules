@@ -1,0 +1,39 @@
+rules_version = '2';
+
+// Questland Cloud Storage rules — the Questland Radio track vault.
+// Songs live under radio/ and are readable ONLY by a validated account that
+// holds a passage or membership, proven against Firestore. There are no public
+// URLs: the client fetches bytes via the SDK (getBlob) on its auth token, and
+// getDownloadURL is never called anywhere in the app.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Mirrors firestore.rules isRealUser(): no anonymous session may hold data.
+    function isRealUser() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    // Holds a passage: either a pass has been spent/covered for this account
+    // (passUses/{uid} exists — written at the gate), or their guest-directory
+    // row carries the passage stamp the booking sync writes on purchase.
+    // ORDER MATTERS: exists() first — firestore.get() on a missing guests doc
+    // errors the expression into a deny, which the short-circuit avoids for
+    // every guest the first arm already admits.
+    function holdsPassage() {
+      return firestore.exists(/databases/(default)/documents/passUses/$(request.auth.uid))
+        || firestore.get(/databases/(default)/documents/guests/$(request.auth.uid)).data.passage == true;
+    }
+
+    match /radio/{track} {
+      allow read: if isRealUser() && holdsPassage();
+      // Uploads happen from the Firebase console / gsutil by the park alone.
+      allow write: if false;
+    }
+
+    // Everything else in the bucket is closed to clients.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -108,7 +108,10 @@ export default defineConfig({
         // that updates only when another service worker feels like it is a
         // worker you cannot ship a fix to. The browser revalidates it on its
         // own schedule; leave that alone.
-        globIgnores: ['**/assets/stations/*.png', '**/firebase-messaging-sw.js'],
+        // Radio demo loops (public/assets/audio/*.wav) stay out too — .wav is
+        // already outside globPatterns, but the guard is explicit: ~8 MB of
+        // placeholder audio must never ride into the 4 MB precache budget.
+        globIgnores: ['**/assets/stations/*.png', '**/assets/audio/**', '**/firebase-messaging-sw.js'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         navigateFallbackDenylist: [/^\/api\//],
       },

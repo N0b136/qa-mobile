@@ -64,7 +64,7 @@ a {
 
 .screen {
   padding: calc(var(--install-banner-height) + var(--topbar-height) + var(--chrome-safe-top) + 12px) 16px
-    calc(var(--nav-height) + var(--safe-bottom) + 24px);
+    calc(var(--nav-height) + var(--miniplayer-height) + var(--safe-bottom) + 24px);
   min-height: 100dvh;
 }
 
@@ -442,6 +442,21 @@ a.card:hover,
   }
   to {
     opacity: 1;
+  }
+}
+
+/* MiniPlayer entrance — fade + bottom nudge. The nudge rides on margin-bottom
+   (on a bottom-anchored fixed element a negative bottom margin shifts it DOWN),
+   never transform: the bar sits in the fixed-bars band, where a transform
+   would become the containing block for fixed descendants (see qa-ui-rise). */
+@keyframes qa-miniplayer-in {
+  from {
+    opacity: 0;
+    margin-bottom: -8px;
+  }
+  to {
+    opacity: 1;
+    margin-bottom: 0;
   }
 }
 

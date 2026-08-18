@@ -5,6 +5,7 @@ import { load, save } from './store'
 import { uid, shortCode } from './ids'
 import * as notificationService from './notificationService'
 import * as cloudSync from './cloudSync'
+import { getUser } from './authService'
 
 function key(userId: string): string {
   return `ql:bookings:${userId}`
@@ -87,6 +88,10 @@ export function createBooking(userId: string, input: CreateBookingInput): Bookin
 
   save(key(userId), [...listBookings(userId), booking])
   cloudSync.pushBooking(booking)
+  // Re-push the profile so the radio's passage stamp (derived inside
+  // buildGuestDoc from the mirrors just written) lands immediately.
+  const owner = getUser(userId)
+  if (owner) cloudSync.pushGuestProfile(owner)
 
   notificationService.add(userId, {
     type: 'booking',
@@ -109,6 +114,9 @@ export function cancelBooking(userId: string, bookingId: string): void {
   save(key(userId), next)
   const cancelled = next.find((b) => b.id === bookingId)
   if (cancelled) cloudSync.pushBooking(cancelled)
+  // A cancellation can take the last passage with it — re-derive the stamp.
+  const owner = getUser(userId)
+  if (owner) cloudSync.pushGuestProfile(owner)
 }
 
 export function getTier(tierId: string): BookingTier | undefined {
