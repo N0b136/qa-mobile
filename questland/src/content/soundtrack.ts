@@ -53,7 +53,7 @@ export const TRACKS: RadioTrack[] = [
   },
   {
     id: 'trk-lore',
-    title: 'The Elm Remembers',
+    title: 'The Realm Remembers',
     duration: 46,
     source: { kind: 'asset', path: 'assets/audio/demo-lore.wav' },
   },
@@ -69,7 +69,7 @@ export const PLAYLISTS: RadioPlaylist[] = [
   {
     id: 'pl-valor',
     name: 'Songs of Valor',
-    blurb: 'The Rangers of Questia march to these airs.',
+    blurb: 'The Rangers of the Kingdom march to these airs.',
     orgId: 'rangers',
     art: 'assets/badge-compass-sword.png',
     trackIds: ['trk-valor'],
@@ -85,9 +85,9 @@ export const PLAYLISTS: RadioPlaylist[] = [
   {
     id: 'pl-lore',
     name: 'Hymns of Lore',
-    blurb: 'Measures the Order of the Elm keeps sworn.',
+    blurb: 'Measures the Order of the Realm keeps sworn.',
     orgId: 'elm',
-    art: 'assets/badge-crowned-tree-gold.png',
+    art: 'assets/badge-crowned-realm-gold.png',
     trackIds: ['trk-lore'],
   },
 ]

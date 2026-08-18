@@ -96,7 +96,7 @@ export default function GateScreen() {
         <Card eyebrow="Arrival" title="Step through the gate">
           <p style={{ font: 'var(--body-base)', color: 'var(--text-body)' }}>
             Checking in costs nothing. It puts you and your whole party on the roll for the day, so
-            the Wardens know you are in the Wilds of Questia and can reach you.
+            the Wardens know you are in the Wilds of the Kingdom and can reach you.
           </p>
           {error ? (
             <p

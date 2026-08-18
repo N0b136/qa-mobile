@@ -160,7 +160,7 @@ export default function GateArrival({ userId, orgId, onClose, onTaken }: Props) 
                   </span>
                   {/* A basis rather than flex:1 — an order's name in Cinzel caps
                       needs about this much room, and below it the badge drops to
-                      its own line instead of crushing "Rangers of Questia" into
+                      its own line instead of crushing "Rangers of the Kingdom" into
                       three stacked words. */}
                   <div style={{ flex: '1 1 150px', minWidth: 0 }}>
                     <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700 }}>

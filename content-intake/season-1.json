@@ -10,11 +10,11 @@
       "purpose": "Audit trail documenting how episodes were renumbered from an original order to the v2 order, and a 'shared stations' metric per organization used to validate the reorder."
     }
   ],
-  "structure_note": "The 'Season 1 Quest Lineup' sheet does NOT separate questlines into distinct blocks/sheets. Instead, each of the 10 episode rows (rows 3-12, Episode 1-10) contains THREE parallel columns-sets, one per organization (Rangers of Questia, Hearers of the Alehiim, Order of the Elm), each with its own Title, 7 Stations (physical/thematic locations), and Notes/Story text. Row-1 org labels are merged across only part of each org's actual column range (visual-only merge; see merged_ranges), so column ownership was determined from the row-2 header labels instead.",
+  "structure_note": "The 'Season 1 Quest Lineup' sheet does NOT separate questlines into distinct blocks/sheets. Instead, each of the 10 episode rows (rows 3-12, Episode 1-10) contains THREE parallel columns-sets, one per organization (Rangers of the Kingdom, Hearers of the Alehiim, Order of the Realm), each with its own Title, 7 Stations (physical/thematic locations), and Notes/Story text. Row-1 org labels are merged across only part of each org's actual column range (visual-only merge; see merged_ranges), so column ownership was determined from the row-2 header labels instead.",
   "organizations": [
     {
-      "organization": "Rangers of Questia",
-      "questline_name": "Rangers of Questia",
+      "organization": "Rangers of the Kingdom",
+      "questline_name": "Rangers of the Kingdom",
       "episode_count": 10,
       "columns_present": [
         "Episode (shared col A)",
@@ -41,7 +41,7 @@
             "2. Maker's Tent",
             "6. Brigand's Hideout"
           ],
-          "story_notes": "Find Aldric's Key, be inducted into the Rangers of Questia"
+          "story_notes": "Find Aldric's Key, be inducted into the Rangers of the Kingdom"
         },
         {
           "episode": 2,
@@ -312,7 +312,7 @@
             "20. Hearer's Hollow",
             "17. Silverhoard Mine"
           ],
-          "notes": "The Alehiim learned the secret places of Questia long ago, but only the very few take the secret places with them. Craft the leaf cloak of the Alehiim and rise to the rank of the Hidden."
+          "notes": "The Alehiim learned the secret places of the Kingdom long ago, but only the very few take the secret places with them. Craft the leaf cloak of the Alehiim and rise to the rank of the Hidden."
         },
         {
           "episode": 10,
@@ -331,8 +331,8 @@
       ]
     },
     {
-      "organization": "Order of the Elm",
-      "questline_name": "Order of the Elm",
+      "organization": "Order of the Realm",
+      "questline_name": "Order of the Realm",
       "episode_count": 10,
       "columns_present": [
         "Episode (shared col A)",
@@ -355,19 +355,19 @@
             "4. Riddlebridge",
             "8. Songhollow Cave",
             "17. Silverhoard Mine",
-            "21. ElmRoot",
+            "21. Realmhold",
             "16. Story Oak",
             "13. Path's Cross",
             "1. Hidden in Plain Sight"
           ],
-          "notes": "The adventure that started it all. Princess Ellowyn and Able sneak out of the castle for a night of adventure in the wilds of Questia, founding the Order of the Elm along the way. Families retrace the pair's footsteps across Riddlebridge, Songhollow Cave, Silverhoard Mine, Story Oak, and Path's Cross, piecing together the riddle that leads them to the hiding spot of the princess's lost signet ring — only to discover that the ring was never lost at all. The royal messenger meets the party at the end and officially commissions them as the first members of the Order of the Elm.",
+          "notes": "The adventure that started it all. Princess Ellowyn and Able sneak out of the castle for a night of adventure in the wilds of the Kingdom, founding the Order of the Realm along the way. Families retrace the pair's footsteps across Riddlebridge, Songhollow Cave, Silverhoard Mine, Story Oak, and Path's Cross, piecing together the riddle that leads them to the hiding spot of the princess's lost signet ring — only to discover that the ring was never lost at all. The royal messenger meets the party at the end and officially commissions them as the first members of the Order of the Realm.",
           "unlabeled_column_AC_duplicate_of_title": "The Order Begins"
         },
         {
           "episode": 2,
           "title": "A Call to Order",
           "stations": [
-            "21. ElmRoot",
+            "21. Realmhold",
             "1. Hidden in Plain Sight",
             "7. Abbey Hill Ruins",
             "12. Shadetree Hollow",
@@ -375,7 +375,7 @@
             "3. Songcircle",
             "6. Brigand's Hideout"
           ],
-          "notes": "Ellowyn has decided that the Order of the Elm needs an official ally within Questia's leadership, and sets her sights on the Captain of the Guard. She sends word through the Order that she intends to bring him in on the secret and ask him to give the Order its first real mission — something that will prove to him that the Order is a trustworthy and capable organization worth taking seriously. The Captain, amused but intrigued, agrees to give them a chance. The mission he assigns them will test their cleverness, their teamwork, and their discretion, and will establish the Order's first official relationship with the authority of Questia.",
+          "notes": "Ellowyn has decided that the Order of the Realm needs an official ally within the Kingdom's leadership, and sets her sights on the Captain of the Guard. She sends word through the Order that she intends to bring him in on the secret and ask him to give the Order its first real mission — something that will prove to him that the Order is a trustworthy and capable organization worth taking seriously. The Captain, amused but intrigued, agrees to give them a chance. The mission he assigns them will test their cleverness, their teamwork, and their discretion, and will establish the Order's first official relationship with the authority of the Kingdom.",
           "unlabeled_column_AC_duplicate_of_title": "A Call to Order"
         },
         {
@@ -388,9 +388,9 @@
             "17. Silverhoard Mine",
             "14. Wonder's Hut",
             "10. Southfork",
-            "21. ElmRoot"
+            "21. Realmhold"
           ],
-          "notes": "Ellowyn has decided that a great order needs great tales of heroism. She has been keeping a record of the Order's noble deeds — saving a helpless creature in dire peril, rescuing a stranded merchant from certain disaster, and delivering a message of the utmost urgency across the whole of Questia. Families will act out each of these heroic missions in full, while Able's increasingly exasperated commentary makes painfully clear that the reality of each adventure was considerably more ordinary than the Potentate Prime's official account would suggest. A lighthearted, hilarious episode that celebrates the Order's growing spirit while poking gentle fun at Ellowyn's gift for dramatic embellishment.",
+          "notes": "Ellowyn has decided that a great order needs great tales of heroism. She has been keeping a record of the Order's noble deeds — saving a helpless creature in dire peril, rescuing a stranded merchant from certain disaster, and delivering a message of the utmost urgency across the whole of the Kingdom. Families will act out each of these heroic missions in full, while Able's increasingly exasperated commentary makes painfully clear that the reality of each adventure was considerably more ordinary than the Potentate Prime's official account would suggest. A lighthearted, hilarious episode that celebrates the Order's growing spirit while poking gentle fun at Ellowyn's gift for dramatic embellishment.",
           "unlabeled_column_AC_duplicate_of_title": "THE TALES OF THE ORDER"
         },
         {
@@ -400,7 +400,7 @@
             "13. Path's Cross",
             "12. Shadetree Hollow",
             "8. Songhollow Cave",
-            "21. ElmRoot",
+            "21. Realmhold",
             "15. Maker's Cave",
             "5. Coolcreek Stone",
             "16. Story Oak"
@@ -418,16 +418,16 @@
             "4. Riddlebridge",
             "2. Maker's Tent",
             "6. Brigand's Hideout",
-            "21. ElmRoot"
+            "21. Realmhold"
           ],
-          "notes": "A representative of the king arrives in Queston — officially to assess the progress of the settlement, but the Order notices almost immediately that his attention keeps drifting to the northern forest where the people of the leaves are quietly returning. Ellowyn recognizes him as one of her father's closest and most calculating advisors, and is deeply unsettled by his presence and his questions. The Order must gather information discreetly, navigate the politics of the settlement without revealing their hand, and Ellowyn must grapple for the first time with the deeply uncomfortable possibility that her father's ambitions may not align with the values of the Order she founded. Families who complete this episode earn the rank of Sworn of the Elm, recognizing that they have proven their oath means something when it is tested.",
+          "notes": "A representative of the king arrives in Queston — officially to assess the progress of the settlement, but the Order notices almost immediately that his attention keeps drifting to the northern forest where the people of the leaves are quietly returning. Ellowyn recognizes him as one of her father's closest and most calculating advisors, and is deeply unsettled by his presence and his questions. The Order must gather information discreetly, navigate the politics of the settlement without revealing their hand, and Ellowyn must grapple for the first time with the deeply uncomfortable possibility that her father's ambitions may not align with the values of the Order she founded. Families who complete this episode earn the rank of Sworn of the Realm, recognizing that they have proven their oath means something when it is tested.",
           "unlabeled_column_AC_duplicate_of_title": "THE KING'S EYES"
         },
         {
           "episode": 6,
           "title": "THE SONG OF THE STONES",
           "stations": [
-            "21. ElmRoot",
+            "21. Realmhold",
             "14. Wonder's Hut",
             "11. Hillward Outpost",
             "15. Maker's Cave",
@@ -448,16 +448,16 @@
             "10. Southfork",
             "17. Silverhoard Mine",
             "18. Etzhyii Village Ruins",
-            "21. ElmRoot"
+            "21. Realmhold"
           ],
-          "notes": "The king's counsel has been watching Able for some time, and they have seen enough. They approach him privately with an offer — elevation to minor nobility, a title, land, and a real future, all in exchange for one thing: loyalty to the crown and regular reports on the activities of the Order of the Elm. For the first time in his life Able is forced to reckon with what he has always pushed aside — that as a commoner, no matter how clever or capable or faithful, certain doors will always be closed to him. The offer opens those doors. And Able knows what walking through them might mean for his future. He confides in no one, wrestling alone with the weight of it, and in a quiet moment at the Story Oak speaks his struggle aloud to the empty clearing as though Devorah might hear. In the end Able refuses — but not before families walk through every agonizing step of his deliberation with him. He never tells Ellowyn what he was offered. But she notices that something has changed in him, and cannot figure out what.",
+          "notes": "The king's counsel has been watching Able for some time, and they have seen enough. They approach him privately with an offer — elevation to minor nobility, a title, land, and a real future, all in exchange for one thing: loyalty to the crown and regular reports on the activities of the Order of the Realm. For the first time in his life Able is forced to reckon with what he has always pushed aside — that as a commoner, no matter how clever or capable or faithful, certain doors will always be closed to him. The offer opens those doors. And Able knows what walking through them might mean for his future. He confides in no one, wrestling alone with the weight of it, and in a quiet moment at the Story Oak speaks his struggle aloud to the empty clearing as though Devorah might hear. In the end Able refuses — but not before families walk through every agonizing step of his deliberation with him. He never tells Ellowyn what he was offered. But she notices that something has changed in him, and cannot figure out what.",
           "unlabeled_column_AC_duplicate_of_title": "ABLE'S TRIAL"
         },
         {
           "episode": 8,
           "title": "NORDAD'S SHADOW",
           "stations": [
-            "21. ElmRoot",
+            "21. Realmhold",
             "4. Riddlebridge",
             "16. Story Oak",
             "3. Songcircle",
@@ -465,7 +465,7 @@
             "2. Maker's Tent",
             "1. Hidden in Plain Sight"
           ],
-          "notes": "The first hard evidence arrives that the brigands are not merely scattered stragglers but a reorganizing force with deliberate intent. A ranger patrol has found the remains of a camp on the far edge of Questia — too disciplined, too purposeful to be accidental. The Captain of the Guard asks the Order to quietly investigate a secondary location without alarming the settlement. What the families find is more than a camp. It is a message, deliberately left for whoever might come looking — a crude carving of a broken elm tree. Nordad knows about the Order of the Elm. This is the episode where the stakes become undeniably real, and Ellowyn's response to fear reveals exactly who she is becoming. When some members of the Order begin to whisper about disbanding for safety, Ellowyn refuses — quietly, firmly, and without flinching.",
+          "notes": "The first hard evidence arrives that the brigands are not merely scattered stragglers but a reorganizing force with deliberate intent. A ranger patrol has found the remains of a camp on the far edge of the Kingdom — too disciplined, too purposeful to be accidental. The Captain of the Guard asks the Order to quietly investigate a secondary location without alarming the settlement. What the families find is more than a camp. It is a message, deliberately left for whoever might come looking — a crude carving of a broken elm tree. Nordad knows about the Order of the Realm. This is the episode where the stakes become undeniably real, and Ellowyn's response to fear reveals exactly who she is becoming. When some members of the Order begin to whisper about disbanding for safety, Ellowyn refuses — quietly, firmly, and without flinching.",
           "unlabeled_column_AC_duplicate_of_title": "NORDAD'S SHADOW"
         },
         {
@@ -477,10 +477,10 @@
             "8. Songhollow Cave",
             "10. Southfork",
             "15. Maker's Cave",
-            "21. ElmRoot",
+            "21. Realmhold",
             "9. Story Willow"
           ],
-          "notes": "Devorah sends word through the forest requesting a meeting with Ellowyn. Able insists on coming and Devorah allows it. In a long, quiet conversation under the Story Oak, Devorah tells them what she has known since the beginning — that Nordad's return was foreseen, that his claim on the silver of Questia is rooted in something old and false and dangerous, and that Ellowyn herself was seen in the ancient carvings of the people of the leaves, standing at the center of the conflict to come. She tells Ellowyn that when the moment arrives she will face a choice between being a princess and being the Potentate Prime, and that only she can decide which she is first. She also tells Able, looking at him with steady and unhurried eyes, that she knows what he was offered and what he chose, and that the Most High does not forget faithfulness. Able is shaken to his core. Families who complete this episode earn the rank of Guardian of the Elm, recognizing that they have been faithful through real darkness and are ready for what comes next.",
+          "notes": "Devorah sends word through the forest requesting a meeting with Ellowyn. Able insists on coming and Devorah allows it. In a long, quiet conversation under the Story Oak, Devorah tells them what she has known since the beginning — that Nordad's return was foreseen, that his claim on the silver of the Kingdom is rooted in something old and false and dangerous, and that Ellowyn herself was seen in the ancient carvings of the people of the leaves, standing at the center of the conflict to come. She tells Ellowyn that when the moment arrives she will face a choice between being a princess and being the Potentate Prime, and that only she can decide which she is first. She also tells Able, looking at him with steady and unhurried eyes, that she knows what he was offered and what he chose, and that the Most High does not forget faithfulness. Able is shaken to his core. Families who complete this episode earn the rank of Guardian of the Realm, recognizing that they have been faithful through real darkness and are ready for what comes next.",
           "unlabeled_column_AC_duplicate_of_title": "DEVORAH'S WARNING"
         },
         {
@@ -493,9 +493,9 @@
             "13. Path's Cross",
             "2. Maker's Tent",
             "16. Story Oak",
-            "21. ElmRoot"
+            "21. Realmhold"
           ],
-          "notes": "The brigand army is confirmed and Questia is preparing for what is coming. The Rangers are mobilizing. The Hearers of the Alehiim have sent word through the forest. And Ellowyn has made her decision — the Order of the Elm will play its part in the defense of Questia, and she will be standing right beside every member when they do. Able refuses. Not out of disloyalty, not out of cowardice, but out of a fierce and immovable protectiveness that has been the bedrock of everything he is. The confrontation between them is the most painful moment of the entire season — Ellowyn finally delivering the ultimatum that if the members of the Order are going into this, she will be beside them, and if Able will not go with her then he can leave the Order. The silence that follows is a gutpunch to both of them. And then, quietly, Able chooses her. He chooses the Order. He voices his fears one final time — that when this is over, when the king finds out what his daughter did and where she stood, there will be consequences none of them are ready for. Ellowyn hears him. Really hears him. And they walk forward anyway, together, into whatever is coming.",
+          "notes": "The brigand army is confirmed and the Kingdom is preparing for what is coming. The Rangers are mobilizing. The Hearers of the Alehiim have sent word through the forest. And Ellowyn has made her decision — the Order of the Realm will play its part in the defense of the Kingdom, and she will be standing right beside every member when they do. Able refuses. Not out of disloyalty, not out of cowardice, but out of a fierce and immovable protectiveness that has been the bedrock of everything he is. The confrontation between them is the most painful moment of the entire season — Ellowyn finally delivering the ultimatum that if the members of the Order are going into this, she will be beside them, and if Able will not go with her then he can leave the Order. The silence that follows is a gutpunch to both of them. And then, quietly, Able chooses her. He chooses the Order. He voices his fears one final time — that when this is over, when the king finds out what his daughter did and where she stood, there will be consequences none of them are ready for. Ellowyn hears him. Really hears him. And they walk forward anyway, together, into whatever is coming.",
           "unlabeled_column_AC_duplicate_of_title": "THE BREAKING POINT"
         }
       ]
@@ -504,15 +504,15 @@
   "finale_event": {
     "title": "RAID: Brigand's Return",
     "merged_range_note": "B13:Z13 merged row containing only the finale title",
-    "event_context": "The massive one day event final climax of all three stories. Instead of individual groups, players will choose one of the three organizations, and all te members of the organization will act as one large grou that will go through different areas/stations to prepare for the coming battle. We will seek cosplay/actor/volunteer help acting as the brigand army of Nordad, as well as several key characters on the Questian side (Aldric, The Keeper, Devorah, Ellowyn, Able).",
+    "event_context": "The massive one day event final climax of all three stories. Instead of individual groups, players will choose one of the three organizations, and all te members of the organization will act as one large grou that will go through different areas/stations to prepare for the coming battle. We will seek cosplay/actor/volunteer help acting as the brigand army of Nordad, as well as several key characters on the Kingdom's side (Aldric, The Keeper, Devorah, Ellowyn, Able).",
     "phases": [
       {
         "phase": 1,
-        "text": "PHASE 1:The event begins with each group starting at their base, the leader/hero of that group explains to that Nordad has returned, and that we all have a duty to defend Questia. The King's army is still deployed to the east, so tis time they will not be able to come as they did before. It is up to the Rangers/Order/Hearers to defend Questia. The Rangers are then sent through a series of battle preparation stations, as they will be the main fighting force: construct a defensive line/trench, Archery practice/Hitting \"Brigand scouts\" pop up targets, A sword figthting drill/rules overview for the coming battle. The Hearers prepare in a different way, They set up traps and obstacles to catch any would be brigand deserters and prevent the rangers from being surrounded, They learn the Battle Song of the Most High and are given horns to be able to blow the warning, and finally they gather \"healing leaves\" an ae taught how to act as combat medics for the big battle. The Order of the Elm first goes to sabbotage the siege tower Nordad's forces have constructed, Ellowyn then brings them back to Queston where she reveals that she bribed the castle armorer into sending an entire cartload of spears and pole arms to Queston; which she distributes to the Order of the Elm members and the captain of the guard teaches them how to use them, then finally the order moves to the Story Oak where they meet up with Devorah and a secret small army of the People of the Leaves, who have been training in exile to prepare for coming back."
+        "text": "PHASE 1:The event begins with each group starting at their base, the leader/hero of that group explains to that Nordad has returned, and that we all have a duty to defend the Kingdom. The King's army is still deployed to the east, so tis time they will not be able to come as they did before. It is up to the Rangers/Order/Hearers to defend the Kingdom. The Rangers are then sent through a series of battle preparation stations, as they will be the main fighting force: construct a defensive line/trench, Archery practice/Hitting \"Brigand scouts\" pop up targets, A sword figthting drill/rules overview for the coming battle. The Hearers prepare in a different way, They set up traps and obstacles to catch any would be brigand deserters and prevent the rangers from being surrounded, They learn the Battle Song of the Most High and are given horns to be able to blow the warning, and finally they gather \"healing leaves\" an ae taught how to act as combat medics for the big battle. The Order of the Realm first goes to sabbotage the siege tower Nordad's forces have constructed, Ellowyn then brings them back to Queston where she reveals that she bribed the castle armorer into sending an entire cartload of spears and pole arms to Queston; which she distributes to the Order of the Realm members and the captain of the guard teaches them how to use them, then finally the order moves to the Story Oak where they meet up with Devorah and a secret small army of the People of the Leaves, who have been training in exile to prepare for coming back."
       },
       {
         "phase": 2,
-        "text": "PHASE 2: The battle, Nordad's army approaches the battle line. The rangers are in place, with the Hearers behind them, but the Order of the Elm is nowhere to be seen. Nordad steps forward to deliver his speach of fear. Aldric and the Keeper answer and give their own seaches to bolster the defenders. Secretly Ellowyn and Able get the Order in position for a flanking attack opposite from the Alehiim warriors. The bttle is joined, with the brigands charging the battle line, the rangers will fight back for several long minutes with the Hearers coming up to pull \"wounded\" fighters back and \"heal\" them so they can get back to the fight. Nordad and Alric have a rematch showdown, and just as it looks like Nordad is going to win, there is a loud shout and the Order of the Elm charges in from one side, with the Warriors of the Alehiim charging in from the ther side. The Brigands are all defeated to the last man, except for Nordad, who is surrounded by his bodyguards and they escape. Alric forstalls any pursuit."
+        "text": "PHASE 2: The battle, Nordad's army approaches the battle line. The rangers are in place, with the Hearers behind them, but the Order of the Realm is nowhere to be seen. Nordad steps forward to deliver his speach of fear. Aldric and the Keeper answer and give their own seaches to bolster the defenders. Secretly Ellowyn and Able get the Order in position for a flanking attack opposite from the Alehiim warriors. The bttle is joined, with the brigands charging the battle line, the rangers will fight back for several long minutes with the Hearers coming up to pull \"wounded\" fighters back and \"heal\" them so they can get back to the fight. Nordad and Alric have a rematch showdown, and just as it looks like Nordad is going to win, there is a loud shout and the Order of the Realm charges in from one side, with the Warriors of the Alehiim charging in from the ther side. The Brigands are all defeated to the last man, except for Nordad, who is surrounded by his bodyguards and they escape. Alric forstalls any pursuit."
       },
       {
         "phase": 3,
@@ -556,7 +556,7 @@
           "14. Wonder's Hut",
           "13. Path's Cross",
           "9. Story Willow",
-          "21. ElmRoot"
+          "21. Realmhold"
         ]
       ]
     }
@@ -678,9 +678,9 @@
     "legend_note": "Green = ≤2 shared stations ✓  |  Yellow = episode was moved  |  Blue = fixed episodes (1 & 10)  |  All 9 transitions valid"
   },
   "data_i_could_not_confidently_place": [
-    "Column AC (Order of the Elm block) has no header in row 2 and simply duplicates the value of column T (Order episode Title) for every episode row. Preserved verbatim per-episode as 'unlabeled_column_AC_duplicate_of_title' but its intended purpose is unclear (possibly a leftover helper/lookup column).",
+    "Column AC (Order of the Realm block) has no header in row 2 and simply duplicates the value of column T (Order episode Title) for every episode row. Preserved verbatim per-episode as 'unlabeled_column_AC_duplicate_of_title' but its intended purpose is unclear (possibly a leftover helper/lookup column).",
     "No date, week-of-season, calendar/air-date, or park/venue-location column exists anywhere in this workbook. 'Station' names (e.g. '7. Abbey Hill Ruins') are in-universe location names used for the physical activity rotation, not real-world venue/park fields.",
-    "No explicit 'rank' or 'checkpoint' column exists. Rank-ups are mentioned only as prose fragments embedded inside the Notes/Story-Notes text for specific episodes (Episode 1 = induction into the org; Episode 5 = mid-tier rank named per org [Rangers: 'Scout', Hearers: 'Temblers', Order: 'Sworn of the Elm']; Episode 9 = higher rank named per org [Rangers: 'Watcher', Hearers: 'the Hidden', Order: 'Guardian of the Elm']). These were left inside the notes text verbatim rather than extracted into a separate structured field, since no dedicated column exists in the source.",
+    "No explicit 'rank' or 'checkpoint' column exists. Rank-ups are mentioned only as prose fragments embedded inside the Notes/Story-Notes text for specific episodes (Episode 1 = induction into the org; Episode 5 = mid-tier rank named per org [Rangers: 'Scout', Hearers: 'Temblers', Order: 'Sworn of the Realm']; Episode 9 = higher rank named per org [Rangers: 'Watcher', Hearers: 'the Hidden', Order: 'Guardian of the Realm']). These were left inside the notes text verbatim rather than extracted into a separate structured field, since no dedicated column exists in the source.",
     "The finale 'RAID: Brigand's Return' event and its Phase 1/2/3 descriptions, plus the station-type legend (rows 21-24), sit in the same sheet below the episode grid with substantial blank-row padding and merged cells; they are not part of the 3 organizations' 10-episode questlines and are reported separately under 'finale_event'.",
     "Numeric Episode values in column A were stored as floats (e.g. 1.0) in the source; normalized here to integers."
   ]

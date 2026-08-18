@@ -59,7 +59,7 @@ never called anywhere in the app, so no shareable URL ever exists.
 
 `storage.rules` (repo root, wired in `firebase.json`) closes the whole bucket
 and opens `radio/` reads only to a real signed-in account that holds a
-**Citizen of Questia membership** — proven against Firestore
+**Citizen of the Kingdom membership** — proven against Firestore
 (`guests/{uid}.member == true`, the stamp the booking sync derives from a
 confirmed membership booking). A day, group or birthday passage does NOT
 entitle, and neither does a spent/covered pass.

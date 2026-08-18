@@ -21,7 +21,7 @@ later must stay a single file drop.
 
 --- SPEECH (one per order + episode this station appears in) ---
 
-  folder 01  Rangers of Questia
+  folder 01  Rangers of the Kingdom
     /01/002.mp3   ep 02  rg-02  Darish's Arrow
     /01/005.mp3   ep 05  rg-05  Ranger's Mettle
     /01/008.mp3   ep 08  rg-08  Amets' Blade
@@ -30,7 +30,7 @@ later must stay a single file drop.
     /02/004.mp3   ep 04  ah-04  Working Trough
     /02/006.mp3   ep 06  ah-06  Planted by the Water
     /02/009.mp3   ep 09  ah-09  Secret Places
-  folder 03  Order of the Elm
+  folder 03  Order of the Realm
     /03/001.mp3   ep 01  el-01  The Order Begins
     /03/003.mp3   ep 03  el-03  The Tales of the Order
     /03/007.mp3   ep 07  el-07  Able's Trial

@@ -12,7 +12,7 @@ const assetsDir = path.resolve(__dirname, '../public/assets')
 const targets = [
   { file: 'logo-questland-primary.png', longestSide: 768 },
   { file: 'badge-compass-sword.png', longestSide: 256 },
-  { file: 'badge-crowned-tree-gold.png', longestSide: 256 },
+  { file: 'badge-crowned-realm-gold.png', longestSide: 256 },
   { file: 'relief-pomegranate-tree-stone.png', longestSide: 256 },
 ]
 

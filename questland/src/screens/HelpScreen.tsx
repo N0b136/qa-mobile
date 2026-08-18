@@ -90,7 +90,7 @@ export default function HelpScreen() {
         Call for Aid
       </h1>
       <p className="muted" style={{ marginTop: 6 }}>
-        A Warden is never far when you travel Questia.
+        A Warden is never far when you travel the Kingdom.
       </p>
 
       <div className="stack" style={{ marginTop: 18, gap: 16 }}>

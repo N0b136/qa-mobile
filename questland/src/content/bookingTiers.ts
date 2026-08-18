@@ -2,7 +2,7 @@ import type { BookingTier, AddOn } from './types'
 
 // Canon lore — sourced from content-intake/ticketing.json ("QA Revenue
 // Model.docx"). Four ticket categories: single-day (individual), single-day
-// (group), Citizen of Questia membership (monthly recurring), and birthday
+// (group), Citizen of the Kingdom membership (monthly recurring), and birthday
 // packages (flat-fee event bookings).
 
 export const TIERS: BookingTier[] = [
@@ -82,7 +82,7 @@ export const TIERS: BookingTier[] = [
     ],
   },
 
-  // ---- Citizen of Questia Membership (recurring, monthly) ----
+  // ---- Citizen of the Kingdom Membership (recurring, monthly) ----
   {
     id: 'membership-adventurer',
     category: 'membership',
@@ -177,8 +177,8 @@ export const TIERS: BookingTier[] = [
     perks: [
       'Everything in the Adventurer package',
       "Birthday child's choice: custom Blacksmith Sword or Hero Cape",
-      'Exclusive Questia character meet & greet',
-      'Guest favors: Questia badge + 1-day return admission ticket',
+      'Exclusive Kingdom character meet & greet',
+      'Guest favors: Kingdom badge + 1-day return admission ticket',
     ],
   },
 ]
@@ -210,7 +210,7 @@ export const ADD_ONS: AddOn[] = [
 export const ARRIVAL_SLOTS = ['09:00', '11:00', '13:00'] as const
 
 /**
- * True when the tier is a Citizen of Questia membership (`category:
+ * True when the tier is a Citizen of the Kingdom membership (`category:
  * 'membership'` — membership-adventurer / -hero / -family). The category
  * field is the predicate, never the display name: copy gets rewritten,
  * categories are the revenue model.

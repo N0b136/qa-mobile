@@ -1,6 +1,6 @@
 # Questland Adventures
 
-A pitch-ready mobile **PWA** for **Whispering Woods Adventure Park** — the guest-facing app for the fantasy adventure park set in the Wilds of Questia. Polished enough to hand someone a phone and walk them through the whole experience live, and architected so it can later be hardened into the real production app rather than thrown away.
+A pitch-ready mobile **PWA** for **Whispering Woods Adventure Park** — the guest-facing app for the fantasy adventure park set in the Wilds of the Kingdom. Polished enough to hand someone a phone and walk them through the whole experience live, and architected so it can later be hardened into the real production app rather than thrown away.
 
 Guests can: create an account and onboard into one of three in-lore orders, explore an interactive park map, track quest/level progression across 10-episode questlines, book visits (simulated payment), receive notifications, link up into a party, climb the leaderboard, and call for help while on a quest. A hidden demo console drives the live pitch.
 
@@ -73,7 +73,7 @@ The live-pitch remote lives at `/demo`, reached by **tapping the top-bar logo 7 
 ## Conventions
 
 - **Content is data.** Lore, copy, pricing, quiz questions, and map coordinates live in `questland/src/content/*.ts` — edit there, no component changes needed.
-- **Design system is canon.** Read `design-system/readme.md` before any UI work: dark-first stone ground, gold reserved for primary actions, track colors (Rangers = ruby, Hearers = green, Order of the Elm = sapphire), Cinzel/EB Garamond/Alegreya Sans type. **No emoji anywhere** — Lucide icons only.
+- **Design system is canon.** Read `design-system/readme.md` before any UI work: dark-first stone ground, gold reserved for primary actions, track colors (Rangers = ruby, Hearers = green, Order of the Realm = sapphire), Cinzel/EB Garamond/Alegreya Sans type. **No emoji anywhere** — Lucide icons only.
 - **Local-first.** Components never touch `localStorage` directly; they go through `src/services/`, which is shaped to swap in Firebase later.
 
 ## Status

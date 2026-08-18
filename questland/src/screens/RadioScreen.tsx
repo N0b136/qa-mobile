@@ -435,7 +435,7 @@ export default function RadioScreen() {
               <Card eyebrow="A Citizen's perk" title="Music for Citizens">
                 <div className="stack" style={{ gap: 14 }}>
                   <p style={{ margin: 0 }}>
-                    The radio belongs to the Citizens of Questia. Hold a monthly membership — from
+                    The radio belongs to the Citizens of the Kingdom. Hold a monthly membership — from
                     $30 — and every song of the Wilds rides with you, in the park and on the road
                     to it.
                   </p>

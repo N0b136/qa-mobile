@@ -106,7 +106,7 @@ const DEMO_NOTICES = (now: number): Announcement[] => [
       'All three orders stand as one for the finale. Pick where you fight, and be at the Proving Ground by ten.',
     body: [
       'Nordad\'s army marches on the park at the season\'s end, and every order is called. The day runs in three phases: preparation through the morning, the battle itself at midday, and the victory feast after.',
-      'Rangers dig the line and drill for battle. Hearers set traps and train as combat medics. The Order of the Elm goes quietly for the siege tower and Devorah\'s hidden allies.',
+      'Rangers dig the line and drill for battle. Hearers set traps and train as combat medics. The Order of the Realm goes quietly for the siege tower and Devorah\'s hidden allies.',
       'Choose your side on the day — the Wardens will take your name at the Proving Ground from ten. Come as you are; everything you need is provided.',
     ].join('\n\n'),
     image: stationArt(19),
@@ -122,11 +122,11 @@ const DEMO_NOTICES = (now: number): Announcement[] => [
 ]
 
 const CAST_USERS: User[] = [
-  { id: 'demo-bracken', email: 'demo-bracken@questia.test', passHash: 'x', name: 'Bracken Hale', avatar: 'compass', createdAt: Date.now(), orgId: 'rangers' },
-  { id: 'demo-wren', email: 'demo-wren@questia.test', passHash: 'x', name: 'Wren Calder', avatar: 'feather', createdAt: Date.now(), orgId: 'alehiim' },
-  { id: 'demo-sable', email: 'demo-sable@questia.test', passHash: 'x', name: 'Sable Ashworth', avatar: 'trees', createdAt: Date.now(), orgId: 'elm' },
-  { id: 'demo-thorn', email: 'demo-thorn@questia.test', passHash: 'x', name: 'Thorn Vale', avatar: 'swords', createdAt: Date.now(), orgId: 'rangers' },
-  { id: 'demo-quill', email: 'demo-quill@questia.test', passHash: 'x', name: 'Quill Amberly', avatar: 'feather', createdAt: Date.now(), orgId: 'alehiim' },
+  { id: 'demo-bracken', email: 'demo-bracken@kingdom.test', passHash: 'x', name: 'Bracken Hale', avatar: 'compass', createdAt: Date.now(), orgId: 'rangers' },
+  { id: 'demo-wren', email: 'demo-wren@kingdom.test', passHash: 'x', name: 'Wren Calder', avatar: 'feather', createdAt: Date.now(), orgId: 'alehiim' },
+  { id: 'demo-sable', email: 'demo-sable@kingdom.test', passHash: 'x', name: 'Sable Ashworth', avatar: 'trees', createdAt: Date.now(), orgId: 'elm' },
+  { id: 'demo-thorn', email: 'demo-thorn@kingdom.test', passHash: 'x', name: 'Thorn Vale', avatar: 'swords', createdAt: Date.now(), orgId: 'rangers' },
+  { id: 'demo-quill', email: 'demo-quill@kingdom.test', passHash: 'x', name: 'Quill Amberly', avatar: 'feather', createdAt: Date.now(), orgId: 'alehiim' },
 ]
 
 // Total completed episodes per cast member: bracken 12, wren 7, sable 20, thorn 3.
@@ -528,14 +528,14 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
       placeName: 'Songhollow Cave',
       at: now - 4 * 60 * 1000,
       orgId: 'elm',
-      orgName: 'Order of the Elm',
+      orgName: 'Order of the Realm',
       episodeId: 'el-04',
       episodeNumber: 4,
       episodeTitle: getEpisode('el-04')?.title,
       stationsDone: 3,
       stationsTotal: 7,
       nextStationId: 'st-21',
-      nextStationName: 'ElmRoot',
+      nextStationName: 'Realmhold',
     },
     {
       ...lantern,
@@ -546,14 +546,14 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
       placeName: 'Songhollow Cave',
       at: now - 4 * 60 * 1000,
       orgId: 'elm',
-      orgName: 'Order of the Elm',
+      orgName: 'Order of the Realm',
       episodeId: 'el-04',
       episodeNumber: 4,
       episodeTitle: getEpisode('el-04')?.title,
       stationsDone: 3,
       stationsTotal: 7,
       nextStationId: 'st-21',
-      nextStationName: 'ElmRoot',
+      nextStationName: 'Realmhold',
     },
     {
       userId: 'demo-bracken',
@@ -566,7 +566,7 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
       partyName: 'Ashen Vanguard',
       partyMemberNames: [getUser(currentUserId)?.name ?? 'You', 'Bracken Hale', 'Wren Calder'],
       orgId: 'rangers',
-      orgName: 'Rangers of Questia',
+      orgName: 'Rangers of the Kingdom',
       episodeId: 'rg-07',
       episodeNumber: 7,
       episodeTitle: getEpisode('rg-07')?.title,
@@ -591,7 +591,7 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
       partyName: 'Ashen Vanguard',
       partyMemberNames: [getUser(currentUserId)?.name ?? 'You', 'Bracken Hale', 'Wren Calder'],
       orgId: 'rangers',
-      orgName: 'Rangers of Questia',
+      orgName: 'Rangers of the Kingdom',
       episodeId: 'rg-07',
       episodeNumber: 7,
       episodeTitle: getEpisode('rg-07')?.title,
@@ -660,8 +660,8 @@ export async function seedDemoWorld(currentUserId: string): Promise<void> {
     byName: 'Quill Amberly',
     flagLabel: flagLabelFor(3),
   }
-  const elmQuest = { orgId: 'elm', orgName: 'Order of the Elm', passCode: 'QST-4KDR2M', passName: 'Group Hero Pass' }
-  const rangersQuest = { orgId: 'rangers', orgName: 'Rangers of Questia', passCode: 'QST-9TLW71', passName: 'Hero Pass' }
+  const elmQuest = { orgId: 'elm', orgName: 'Order of the Realm', passCode: 'QST-4KDR2M', passName: 'Group Hero Pass' }
+  const rangersQuest = { orgId: 'rangers', orgName: 'Rangers of the Kingdom', passCode: 'QST-9TLW71', passName: 'Hero Pass' }
 
   seedLegs([
     arrivalLeg(lanternGroup, now - 195 * MIN, { ...elmQuest, episodeId: 'el-03', episodeNumber: 3 }),

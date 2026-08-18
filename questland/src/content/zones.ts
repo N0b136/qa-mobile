@@ -18,7 +18,7 @@ const TYPE_GLYPH: Record<Station['type'], string> = {
 const BASE_BLURB: Record<string, string> = {
   rangers: "The Rangers' home camp.",
   alehiim: "The Hearers' hollow.",
-  elm: 'The root-hall of the Elm.',
+  elm: 'The root-hall of the Realm.',
 }
 
 const TYPE_BLURB: Record<Station['type'], string> = {

@@ -17,7 +17,7 @@ export interface SealProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 const ART: Record<NonNullable<SealProps['art']>, string> = {
-  crown: 'assets/badge-crowned-tree-gold.png',
+  crown: 'assets/badge-crowned-realm-gold.png',
   compass: 'assets/badge-compass-sword.png',
   relief: 'assets/relief-pomegranate-tree-stone.png',
 };

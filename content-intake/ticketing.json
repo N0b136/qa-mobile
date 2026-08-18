@@ -1,6 +1,6 @@
 {
   "source_file": "QA Revenue Model.docx",
-  "structure_note": "The document is NOT a single flat list of ticket tiers. It contains four distinct ticketing categories: (1) Single-Day Admission - Individual, (2) Single-Day Admission - Group, (3) Citizen of Questia Membership (a recurring monthly subscription, not a day pass), and (4) Birthday Packages (flat-fee event bookings). A fifth section, 'Exclusive Member Events', lists non-priced perks attached to the Hero Membership tier rather than a ticket tier itself.",
+  "structure_note": "The document is NOT a single flat list of ticket tiers. It contains four distinct ticketing categories: (1) Single-Day Admission - Individual, (2) Single-Day Admission - Group, (3) Citizen of the Kingdom Membership (a recurring monthly subscription, not a day pass), and (4) Birthday Packages (flat-fee event bookings). A fifth section, 'Exclusive Member Events', lists non-priced perks attached to the Hero Membership tier rather than a ticket tier itself.",
   "categories": [
     {
       "category": "Single-Day Admission - Individual",
@@ -12,7 +12,7 @@
           "price": "$25",
           "price_unit": "per person, single day",
           "included": [
-            "Access to Questia Village",
+            "Access to Village of Queston",
             "1 Quest Experience."
           ]
         },
@@ -22,7 +22,7 @@
           "price": "$35",
           "price_unit": "per person, single day",
           "included": [
-            "Full-day access to Questia Village",
+            "Full-day access to Village of Queston",
             "ALL THREE Quest Experiences"
           ]
         },
@@ -49,7 +49,7 @@
           "price_unit": "per group (up to 6 guests)",
           "included": [
             "Admission for up to 6 guests",
-            "Questia Village and 1 Quest Experience"
+            "Village of Queston and 1 Quest Experience"
           ]
         },
         {
@@ -68,7 +68,7 @@
           "price_unit": "per group (up to 6 guests)",
           "included": [
             "Admission for up to 6 guests",
-            "Full Day Access to Questia Village",
+            "Full Day Access to Village of Queston",
             "ALL THREE Quest Experiences"
           ]
         },
@@ -87,7 +87,7 @@
       ]
     },
     {
-      "category": "Citizen of Questia Membership",
+      "category": "Citizen of the Kingdom Membership",
       "pricing_model": "recurring monthly subscription ($/Month) — a fundamentally different revenue structure from the single-day passes",
       "tiers": [
         {
@@ -97,7 +97,7 @@
           "price_unit": "per month",
           "included": [
             "One visit per week",
-            "Questia Village access",
+            "Village of Queston access",
             "1 Quest Experience per visit"
           ]
         },
@@ -181,8 +181,8 @@
           "included": [
             "All options from the Adventurer package PLUS",
             "Birthday child's choice of custom Blacksmith Sword or Hero Cape",
-            "Exclusive Questia Character Meet & Greet Experience",
-            "Guest Party Favors: Questia badge, 1-day return admission ticket"
+            "Exclusive Kingdom Character Meet & Greet Experience",
+            "Guest Party Favors: Kingdom badge, 1-day return admission ticket"
           ]
         }
       ],

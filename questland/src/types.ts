@@ -451,7 +451,7 @@ export type HubCommand = 'VOL' | 'QVOL' | 'PLAY' | 'SYNC' | 'PING'
 export interface HubTableRow {
   /** RFID factory uid, uppercase hex, no separators. */
   uid: string
-  /** Audio folder: 0 unknown · 1 Rangers · 2 Alehiim · 3 Elm · 4 RAID. */
+  /** Audio folder: 0 unknown · 1 Rangers · 2 Alehiim · 3 Realm · 4 RAID. */
   org: number
   /** Audio track = episode number. 0 when unknown. */
   ep: number

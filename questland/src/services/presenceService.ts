@@ -259,7 +259,7 @@ export function activeQuest(userId: string, now: number = Date.now()): ActiveQue
  * The questline to stamp a check-in with when nothing else names one.
  *
  * Not the order the guest was sworn into: all three questlines stay open to
- * everybody, so a guest walking for the Order of the Elm must not read on the
+ * everybody, so a guest walking for the Order of the Realm must not read on the
  * Back Office's board as standing at episode one of their own order — the walk
  * package exists precisely so the console and the app never diverge.
  */

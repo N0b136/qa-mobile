@@ -21,14 +21,14 @@ later must stay a single file drop.
 
 --- SPEECH (one per order + episode this station appears in) ---
 
-  folder 01  Rangers of Questia
+  folder 01  Rangers of the Kingdom
     /01/004.mp3   ep 04  rg-04  Aldric's Message
     /01/006.mp3   ep 06  rg-06  Rumors of Trouble
     /01/009.mp3   ep 09  rg-09  The Watchers Riddle
   folder 02  Hearers of the Alehiim
     /02/003.mp3   ep 03  ah-03  He Finds What is Lost
     /02/007.mp3   ep 07  ah-07  Repaired not Discarded
-  folder 03  Order of the Elm
+  folder 03  Order of the Realm
     /03/001.mp3   ep 01  el-01  The Order Begins
     /03/002.mp3   ep 02  el-02  A Call to Order
     /03/005.mp3   ep 05  el-05  The King's Eyes

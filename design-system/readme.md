@@ -17,7 +17,7 @@ Figma file, or existing product UI was provided.
 | `uploads/Untitled design (3).png` | **Primary logo (original render)** — gemstone "Q" (ruby left / sapphire right) inside a filigree gold ring with diamond gem cardinal points, over a dark slate wall, with a gold map-engraved ribbon reading QUESTLAND / ADVENTURES. Copied to `assets/logo-questland-on-stone.png`. This is the source of truth for the palette. |
 | `uploads/parchment-card-handoff.md` | **Parchment-card design handoff** — the authoritative spec for the vellum card: palette, type, SVG tear filters, tear variants and `--p-*` knobs. Implemented in `components/core/Card.jsx` (`tone="parchment"`) and specimened in `guidelines/vellum-card.card.html`. |
 | `uploads/QA LOGO.png` | **Transparent-background version of the same lockup**, 2000×2000 with a real alpha channel. Copied to `assets/logo-questland-primary.png` — this is the one every surface uses. (An earlier `Copy of Untitled.svg` was supplied but contained empty `<image>` placeholders with no embedded data and could not be used.) |
-| `uploads/Gemini_Generated_Image_3iub793iub793iub - Edited.png` | Gold-and-black-enamel crowned tree pin — the badge/collectible visual language. `assets/badge-crowned-tree-gold.png` |
+| `uploads/Gemini_Generated_Image_3iub793iub793iub - Edited.png` | Gold-and-black-enamel crowned tree pin — the badge/collectible visual language. `assets/badge-crowned-realm-gold.png` |
 | `uploads/Gemini_Generated_Image_ - Edited (1).png` | Bronze compass-rose-and-sword medallion with a forest/mountain scene. `assets/badge-compass-sword.png` |
 | `uploads/Gemini_Generated_Image_q9plfgq9plfgq9pl - Edited.png` | Carved stone relief of a pomegranate tree over a river. `assets/relief-pomegranate-tree-stone.png` |
 | `uploads/Starting_from_this_picture_a.mp4` | 10s clip, 1280×720: camera pushes through a stone-arched timber gate into a woodland village square (pavilions, blacksmith, "Adventurer's Outfitters", campfire). Copied whole to `assets/video-gate-opening.mp4`; four frames extracted as the system's photography set. |
@@ -320,7 +320,7 @@ replacement; see Caveats.*
 | --- | --- |
 | `logo-questland-primary.png` | **Primary logo lockup — transparent PNG, 2000×2000.** Use this everywhere. Minimum width 180px; clear space = height of the ribbon on all sides. Sits on stone, on a scrimmed photo, or any dark/mid ground — never on parchment, cream or gold, where the gold-on-gold has no contrast. |
 | `logo-questland-on-stone.png` | The original square render with its slate-wall backdrop baked in. Fallback only — for square avatars, favicons and social tiles that need a filled plate. |
-| `badge-crowned-tree-gold.png` | Gold/black enamel pin. Season-pass and top-tier badge art. |
+| `badge-crowned-realm-gold.png` | Gold/black enamel pin — crowned tree over forest. Order of the Realm mark; season-pass and top-tier badge art. |
 | `badge-compass-sword.png` | Bronze medallion. Wayfinding/explorer badge art. |
 | `relief-pomegranate-tree-stone.png` | Carved stone relief. Chapter/section mark, "story" motif. |
 | `img-gate-closed.png`, `img-gate-threshold.png` | The gate. Hero and transition imagery. |

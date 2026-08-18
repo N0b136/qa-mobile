@@ -289,7 +289,7 @@ function buildGuestDoc(user: User): GuestDoc & { demo?: true; passage?: true; me
   // nothing is held, so a cancellation clears it on the next push.
   //
   // `member` is what storage.rules gates the Radio vault on: a confirmed
-  // Citizen of Questia membership booking. `passage` (any confirmed booking,
+  // Citizen of the Kingdom membership booking. `passage` (any confirmed booking,
   // or a spent/covered pass) no longer gates anything — kept because it costs
   // nothing here and a future perk may want the wider net.
   const passage =

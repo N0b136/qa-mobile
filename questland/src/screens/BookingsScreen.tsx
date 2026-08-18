@@ -66,7 +66,7 @@ export default function BookingsScreen() {
           <EmptyState
             icon="ticket"
             title="No passages booked yet"
-            body="Plan your first visit to Questia and a confirmation will land right here."
+            body="Plan your first visit to the Kingdom and a confirmation will land right here."
           />
         </div>
       ) : (

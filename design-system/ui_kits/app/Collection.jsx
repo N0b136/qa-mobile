@@ -19,7 +19,7 @@ window.Collection = function Collection() {
       </div>
       <Ornament label="Season passage" style={{ margin: 'var(--space-xl) 0 var(--space-md)' }} />
       <div style={{ background: 'var(--surface-card)', border: '1px solid var(--border-hairline)', borderRadius: 'var(--radius-sm)', padding: 'var(--space-md)', display: 'flex', gap: 'var(--space-md)', alignItems: 'center' }}>
-        <img src={A + 'badge-crowned-tree-gold.png'} alt="" style={{ height: 64 }} />
+        <img src={A + 'badge-crowned-realm-gold.png'} alt="" style={{ height: 64 }} />
         <div>
           <div style={{ font: '600 var(--text-md)/1.15 var(--font-display)', textTransform: 'uppercase', letterSpacing: 'var(--tracking-display-tight)', color: 'var(--text-heading)' }}>The crowned tree</div>
           <p style={{ marginTop: 4, font: '400 var(--text-sm)/1.4 var(--font-ui)', color: 'var(--text-muted)' }}>Collect all six seals this season and the pin is yours at the gate.</p>

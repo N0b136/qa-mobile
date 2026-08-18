@@ -12,9 +12,9 @@ folder = the order          track = the episode number
 
 | Folder | Contents |
 |---|---|
-| `01` | Rangers of Questia |
+| `01` | Rangers of the Kingdom |
 | `02` | Hearers of the Alehiim |
-| `03` | Order of the Elm |
+| `03` | Order of the Realm |
 | `04` | RAID: Brigand's Return (the season finale) |
 | `08` | System announcements |
 | `09` | Ambience |
@@ -97,7 +97,7 @@ Derived from `EPISODE_STATIONS` in `questland/src/content/stations.ts`. This is 
 `tools/gen-clip-map.mjs` reads, and it writes the same information into
 `sdcard-manifests/st-NN.txt`.
 
-| # | Station | Folder 01 (Rangers) | Folder 02 (Alehiim) | Folder 03 (Elm) | Speech files |
+| # | Station | Folder 01 (Rangers) | Folder 02 (Alehiim) | Folder 03 (Realm) | Speech files |
 |---|---|---|---|---|---|
 | 1 | Hidden in Plain Sight | 004 006 009 | 003 007 | 001 002 005 008 010 | 10 |
 | 2 | Maker's Tent | 001 004 006 009 | 003 007 | 002 005 008 010 | 10 |
@@ -119,7 +119,7 @@ Derived from `EPISODE_STATIONS` in `questland/src/content/stations.ts`. This is 
 | 18 | Etzhyii Village Ruins | 002 005 008 | 001 004 006 009 010 | 003 007 | 10 |
 | 19 | Ranger Camp | 001 002 003 004 005 006 007 008 009 010 | — | — | 10 |
 | 20 | Hearer's Hollow | — | 001 002 003 004 005 006 007 008 009 010 | — | 10 |
-| 21 | ElmRoot | — | — | 001 002 003 004 005 006 007 008 009 010 | 10 |
+| 21 | Realmhold | — | — | 001 002 003 004 005 006 007 008 009 010 | 10 |
 
 **210 station speech recordings**, 9 to 11 per card. No card carries more than eleven speech
 files, which is the whole reason a $6 module and an 8 GB card are enough.

@@ -2,7 +2,7 @@ import React from 'react';
 import { Icon } from './Icon.jsx';
 
 const ART = {
-  crown: 'assets/badge-crowned-tree-gold.png',
+  crown: 'assets/badge-crowned-realm-gold.png',
   compass: 'assets/badge-compass-sword.png',
   relief: 'assets/relief-pomegranate-tree-stone.png',
 };

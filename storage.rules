@@ -2,7 +2,7 @@ rules_version = '2';
 
 // Questland Cloud Storage rules — the Questland Radio track vault.
 // Songs live under radio/ and are readable ONLY by a validated account that
-// holds a Citizen of Questia MEMBERSHIP, proven against Firestore. There are
+// holds a Citizen of the Kingdom MEMBERSHIP, proven against Firestore. There are
 // no public URLs: the client fetches bytes via the SDK (getBlob) on its auth
 // token, and getDownloadURL is never called anywhere in the app.
 service firebase.storage {
@@ -15,7 +15,7 @@ service firebase.storage {
     }
 
     // Holds a membership: their guest-directory row carries the `member` stamp
-    // the booking sync derives from a confirmed Citizen of Questia membership
+    // the booking sync derives from a confirmed Citizen of the Kingdom membership
     // booking. Day/group/birthday passages do not entitle, and neither does a
     // spent or covered pass — a walk-in covered on somebody's passage is not a
     // member. This is the ONLY arm, so there is no short-circuit ordering to
