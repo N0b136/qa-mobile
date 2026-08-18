@@ -329,6 +329,12 @@ function storageError(err: unknown): string {
   if (code === 'storage/unauthorized' || code === 'storage/unauthenticated') {
     return 'This song is kept for Citizens. A membership opens the vault.'
   }
+  // An Error raised by our own layers — signed out, timed out, not in the
+  // vault — already says the true thing, and it carries no SDK `code` to
+  // recognise it by. Passing it through is what keeps a REFUSAL from reaching
+  // the guest dressed as an outage: "sign in" must never read "check your
+  // connection".
+  if (!code && err instanceof Error && err.message) return err.message
   return 'The song stumbled during playback. Check your connection and try again.'
 }
 
@@ -376,6 +382,12 @@ async function materialize(track: RadioTrack, path: string): Promise<string> {
 // deliberate: a delete tidies storage, it does not cut the music off mid-verse.
 offlineAudio.onRemoved((paths) => {
   for (const path of paths) {
+    // A path still being materialized is one whose URL is about to be created
+    // from bytes already in hand — including the lease-expiry case, where
+    // fetchBlob deletes the stale record and re-fetches the same song in the
+    // same breath. Revoking there would kill a URL minted AFTER the delete and
+    // send the player back for bytes it is already holding.
+    if (inflight.has(path)) continue
     const url = blobCache.get(path)
     if (!url) continue
     blobCache.delete(path)
