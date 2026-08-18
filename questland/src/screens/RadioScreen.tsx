@@ -146,9 +146,16 @@ function NowPlaying() {
  * reports no byte-level progress, so a percentage bar would be invented.
  */
 function KeepRow({ playlist }: { playlist: RadioPlaylist }) {
-  useOfflineAudio()
-  const progress = playlistProgress(playlist.id)
-  const wanted = isPlaylistKept(playlist.id)
+  // The hook's VALUE, passed to every selector below. Reading module state
+  // during render would read outside the snapshot React is rendering.
+  const offline = useOfflineAudio()
+  const progress = playlistProgress(playlist.id, offline)
+  const wanted = isPlaylistKept(playlist.id, offline)
+
+  // Until IndexedDB has actually been read, this row does not know what is on
+  // the device — and a fully kept playlist would spend that frame offering
+  // "Finish keeping". Say nothing rather than something wrong.
+  if (!offline.ready && progress.total > 0) return null
 
   // Songs that ship inside the app bundle. Offering to download one would be
   // theatre — say plainly that it is already with you.
@@ -193,7 +200,10 @@ function KeepRow({ playlist }: { playlist: RadioPlaylist }) {
               </span>
             </span>
           </span>
-          {progress.complete ? (
+          {progress.kept > 0 ? (
+            // Offered on ANY kept song, not only a finished playlist: a part-
+            // kept shelf that stopped downloading could otherwise be cleared
+            // only by wiping every download in the app.
             <IconButton
               icon="trash-2"
               label="Remove these downloads"
@@ -217,7 +227,11 @@ function KeepRow({ playlist }: { playlist: RadioPlaylist }) {
           </Button>
         ) : null}
 
-        {progress.failed > 0 ? (
+        {offline.storageFull ? (
+          <p className="muted" style={{ margin: 0, fontSize: 12, color: 'var(--status-danger)' }}>
+            This device is out of space. Remove some downloads and the rest will come down.
+          </p>
+        ) : progress.failed > 0 ? (
           <div className="row row--between" style={{ gap: 10 }}>
             <span className="muted" style={{ fontSize: 12, color: 'var(--status-danger)' }}>
               {progress.failed} {progress.failed === 1 ? 'song' : 'songs'} did not come down.
@@ -242,6 +256,9 @@ function KeepRow({ playlist }: { playlist: RadioPlaylist }) {
 /** What the radio is holding on this device, and the way to hand it back. */
 function StorageRow() {
   const offline = useOfflineAudio()
+  // Same reason as KeepRow: before the vault has been read, "Nothing kept yet"
+  // is a guess, and it is wrong for exactly the member who has kept the most.
+  if (!offline.ready) return null
   const count = Object.keys(offline.kept).length
 
   return (
@@ -281,7 +298,7 @@ function StorageRow() {
 /** One playlist opened into its songs. */
 function TrackList({ playlist, onBack }: { playlist: RadioPlaylist; onBack: () => void }) {
   const radio = useRadio()
-  useOfflineAudio() // kept/coming-down badges follow the vault
+  const offline = useOfflineAudio() // kept/coming-down badges follow the vault
   const tracks = tracksFor(playlist.id)
 
   return (
@@ -354,14 +371,14 @@ function TrackList({ playlist, onBack }: { playlist: RadioPlaylist; onBack: () =
                 >
                   {trk.title}
                 </span>
-                {isKept(trk.id) ? (
+                {isKept(trk.id, offline) ? (
                   <Icon
                     name="check"
                     size={16}
                     aria-label="Kept on this device"
                     style={{ color: 'var(--text-gold)', flexShrink: 0 }}
                   />
-                ) : isBusy(trk.id) ? (
+                ) : isBusy(trk.id, offline) ? (
                   <Icon
                     name="cloud-download"
                     size={16}

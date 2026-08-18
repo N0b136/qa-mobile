@@ -155,12 +155,10 @@ function readBlob(trackId: string): Promise<Blob | null> {
 export type WriteOutcome = { ok: true } | { ok: false; reason: 'full' | 'refused' }
 
 function isQuotaError(err: unknown): boolean {
-  return (
-    !!err &&
-    typeof err === 'object' &&
-    'name' in err &&
-    (err as { name?: unknown }).name === 'QuotaExceededError'
-  )
+  if (!err || typeof err !== 'object' || !('name' in err)) return false
+  const name = String((err as { name?: unknown }).name)
+  // The standard name, plus the one Firefox has always raised.
+  return name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED'
 }
 
 function writeKept(rec: KeptTrack, blob: Blob): Promise<WriteOutcome> {
