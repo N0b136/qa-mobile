@@ -44,6 +44,7 @@ import { getUserParty } from './partyService'
 // calls across the cycle at module scope.
 import { applyParkStatus } from './parkStatusService'
 import { getOrg } from '../content/orgs'
+import { isMembershipTier } from '../content/bookingTiers'
 
 /** Party writes happen behind a spinner, so they get the same deadline as auth. */
 const PARTY_TIMEOUT_MS = 10_000
@@ -268,8 +269,8 @@ function sosIsNewer(incoming: SosRequest, existing: SosRequest): boolean {
   return statusRank(incoming.status) > statusRank(existing.status)
 }
 
-function buildGuestDoc(user: User): GuestDoc & { demo?: true; passage?: true } {
-  const doc: GuestDoc & { demo?: true; passage?: true } = {
+function buildGuestDoc(user: User): GuestDoc & { demo?: true; passage?: true; member?: true } {
+  const doc: GuestDoc & { demo?: true; passage?: true; member?: true } = {
     id: user.id,
     name: user.name,
     level: levelFor(totalXp(user.id)),
@@ -282,15 +283,23 @@ function buildGuestDoc(user: User): GuestDoc & { demo?: true; passage?: true } {
   if (party?.name) doc.partyName = party.name
   if (user.walkUp) doc.walkUp = true
   if (user.id.startsWith('demo-')) doc.demo = true
-  // The Questland Radio entitlement stamp, read by storage.rules holdsPassage().
-  // Derived HERE and nowhere else, because pushGuestProfile writes the doc
-  // WHOLE (the anti-merge scar): a stamp written anywhere else would be erased
-  // by the very next profile push. Absent — not false — when nothing is held,
-  // so a cancelled booking clears it on the next push.
+  // Entitlement stamps, derived HERE and nowhere else, because pushGuestProfile
+  // writes the doc WHOLE (the anti-merge scar): a stamp written anywhere else
+  // would be erased by the very next profile push. Absent — not false — when
+  // nothing is held, so a cancellation clears it on the next push.
+  //
+  // `member` is what storage.rules gates the Radio vault on: a confirmed
+  // Citizen of Questia membership booking. `passage` (any confirmed booking,
+  // or a spent/covered pass) no longer gates anything — kept because it costs
+  // nothing here and a future perk may want the wider net.
   const passage =
     load<Booking[]>(bookingsKey(user.id), []).some((b) => b.status === 'confirmed') ||
     load<PassUse[]>(passUsesKey(user.id), []).length > 0
   if (passage) doc.passage = true
+  const member = load<Booking[]>(bookingsKey(user.id), []).some(
+    (b) => b.status === 'confirmed' && isMembershipTier(b.tierId)
+  )
+  if (member) doc.member = true
   return doc
 }
 
@@ -982,27 +991,33 @@ export function startGuestSync(userId: string): () => void {
     // them — the booth spends a Quest Experience at the gate, on this guest's
     // behalf, while their phone is in a pocket.
     //
-    // ── HEALING THE RADIO'S PASSAGE STAMP ───────────────────────────────────
+    // ── HEALING THE ENTITLEMENT STAMPS ──────────────────────────────────────
     // The sign-in profile push runs BEFORE these two mirrors hydrate on a
     // fresh device, and pushGuestProfile writes guests/{uid} WHOLE — so a
-    // `passage: true` standing in the cloud is erased by that first push, and
-    // nothing rewrites it until the guest books or cancels. Once BOTH mirrors
-    // have reported, re-derive the stamp; if it differs from what the mirrors
-    // said when this attach began (which is what that sign-in push can have
-    // carried), re-push the profile ONCE. At most one re-push per sync start:
-    // the guard is against churn, not a loop — a profile push moves neither
-    // of these listeners, so there is nothing here to echo.
-    const derivePassage = () =>
-      load<Booking[]>(bookingsKey(userId), []).some((b) => b.status === 'confirmed') ||
-      load<PassUse[]>(passUsesKey(userId), []).length > 0
-    const stampAtAttach = derivePassage()
+    // `member: true` / `passage: true` standing in the cloud is erased by that
+    // first push, and nothing rewrites it until the guest books or cancels.
+    // Once BOTH mirrors have reported, re-derive both stamps; if EITHER
+    // differs from what the mirrors said when this attach began (which is what
+    // that sign-in push can have carried), re-push the profile ONCE. At most
+    // one re-push per sync start: the guard is against churn, not a loop — a
+    // profile push moves neither of these listeners, so nothing here echoes.
+    const deriveStamps = () => {
+      const bookings = load<Booking[]>(bookingsKey(userId), [])
+      const passage =
+        bookings.some((b) => b.status === 'confirmed') ||
+        load<PassUse[]>(passUsesKey(userId), []).length > 0
+      const member = bookings.some((b) => b.status === 'confirmed' && isMembershipTier(b.tierId))
+      return { passage, member }
+    }
+    const stampsAtAttach = deriveStamps()
     let bookingsPrimed = false
     let usesPrimed = false
-    let stampHealed = false
-    const healPassageStamp = () => {
-      if (stampHealed || !bookingsPrimed || !usesPrimed) return
-      if (derivePassage() === stampAtAttach) return
-      stampHealed = true
+    let stampsHealed = false
+    const healEntitlementStamps = () => {
+      if (stampsHealed || !bookingsPrimed || !usesPrimed) return
+      const now = deriveStamps()
+      if (now.passage === stampsAtAttach.passage && now.member === stampsAtAttach.member) return
+      stampsHealed = true
       // The mirrored local record, never authService (cycle) — same pattern as
       // announceNewMembers above.
       const self = load<User[]>(USERS_KEY, []).find((u) => u.id === userId)
@@ -1014,7 +1029,7 @@ export function startGuestSync(userId: string): () => void {
         (snap) => {
           mergeBookingsSnapshot(userId, snap)
           bookingsPrimed = true
-          healPassageStamp()
+          healEntitlementStamps()
         },
         () => setCloudState('offline')
       )
@@ -1025,7 +1040,7 @@ export function startGuestSync(userId: string): () => void {
         (snap) => {
           applyPassUses(userId, usesOf(snap.data()))
           usesPrimed = true
-          healPassageStamp()
+          healEntitlementStamps()
         },
         () => setCloudState('offline')
       )

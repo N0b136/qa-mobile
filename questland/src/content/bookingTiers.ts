@@ -208,3 +208,13 @@ export const ADD_ONS: AddOn[] = [
 ]
 
 export const ARRIVAL_SLOTS = ['09:00', '11:00', '13:00'] as const
+
+/**
+ * True when the tier is a Citizen of Questia membership (`category:
+ * 'membership'` — membership-adventurer / -hero / -family). The category
+ * field is the predicate, never the display name: copy gets rewritten,
+ * categories are the revenue model.
+ */
+export function isMembershipTier(tierId: string): boolean {
+  return TIERS.find((t) => t.id === tierId)?.category === 'membership'
+}

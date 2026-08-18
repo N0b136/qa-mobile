@@ -59,8 +59,10 @@ never called anywhere in the app, so no shareable URL ever exists.
 
 `storage.rules` (repo root, wired in `firebase.json`) closes the whole bucket
 and opens `radio/` reads only to a real signed-in account that holds a
-passage — proven against Firestore (`passUses/{uid}` exists, or
-`guests/{uid}.passage == true`, the stamp the booking sync writes).
+**Citizen of Questia membership** — proven against Firestore
+(`guests/{uid}.member == true`, the stamp the booking sync derives from a
+confirmed membership booking). A day, group or birthday passage does NOT
+entitle, and neither does a spent/covered pass.
 
 ```
 firebase deploy --only storage
@@ -71,16 +73,17 @@ cross-service permission grant; the CLI (or console) prompts for it — accept.
 
 Smoke test after deploying:
 
-- Signed-in account **with** a confirmed booking → tracks play.
-- Signed out, or an account with no booking → the app shows the locked copy
-  (and a direct REST fetch of an object gets 403).
+- Signed-in account **with** a confirmed membership booking → tracks play.
+- An account holding only a day/group/birthday booking → locked copy, and a
+  direct REST fetch of an object gets 403.
+- Signed out, or an account with no booking at all → same: locked copy, 403.
 
 ## 6. Cost expectations
 
 - **Storage**: 150 MB ≈ cents/month.
 - **Egress**: ~4 MB per track-play (the app caches 3 object URLs in memory
   and prefetches one track ahead, so replays within a session are free).
-- **Firestore**: at most 2 document reads per rules evaluation (`exists` +
+- **Firestore**: 1 document read per rules evaluation (the `guests/{uid}`
   `get`), only on a cache-miss fetch of a track.
 
 At pitch scale — a handful of demo devices — all of this sits inside the free
@@ -95,13 +98,13 @@ that, and nothing reasonably can. What IS prevented:
 
 - public or shareable URLs (no tokens, no `getDownloadURL`),
 - anonymous access of any kind,
-- accounts with no passage or membership reading a single byte.
+- accounts without a membership reading a single byte.
 
-Honest caveat: under the current `firestore.rules`, `guests/{uid}` and
-`passUses/{uid}` are self-writable, so a determined user could stamp their own
-passage via REST. That is exactly as strong as the app's client-minted booking
-model itself — the booking that grants entitlement is also client-written.
-Tightening both is a production task, not a radio task.
+Honest caveat: under the current `firestore.rules`, `guests/{uid}` is
+self-writable, so a determined user could stamp their own `member: true` via
+REST. That is exactly as strong as the app's client-minted booking model
+itself — the membership booking that grants entitlement is also
+client-written. Tightening both is a production task, not a radio task.
 
 ## 8. Regenerating the placeholders
 
