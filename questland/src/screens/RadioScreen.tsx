@@ -141,7 +141,19 @@ function TrackList({ playlist, onBack }: { playlist: RadioPlaylist; onBack: () =
         {tracks.map((trk, i) => {
           const current = radio.trackId === trk.id
           return (
-            <Card key={trk.id} interactive onClick={() => playPlaylist(playlist.id, trk.id)} role="button" tabIndex={0}>
+            <Card
+              key={trk.id}
+              interactive
+              onClick={() => playPlaylist(playlist.id, trk.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault() // Space must not scroll the list it plays from
+                  playPlaylist(playlist.id, trk.id)
+                }
+              }}
+              role="button"
+              tabIndex={0}
+            >
               <div className="row" style={{ gap: 12 }}>
                 <span
                   style={{

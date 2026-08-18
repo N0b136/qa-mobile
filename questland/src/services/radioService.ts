@@ -155,6 +155,9 @@ function ensureElement(): HTMLAudioElement {
 
   let lastTick = 0
   el.addEventListener('timeupdate', () => {
+    // Mid track-change the element still speaks for the OLD track — its clock
+    // must not be written against the new selection's duration.
+    if (loadedTrackId === null || loadedTrackId !== state.trackId) return
     // timeupdate fires ~4x/s; one state write and one lock-screen position push
     // a second is plenty — the lock screen interpolates on its own.
     const now = Date.now()
@@ -164,7 +167,8 @@ function ensureElement(): HTMLAudioElement {
     syncPosition()
   })
   el.addEventListener('play', () => {
-    setState({ status: 'playing' })
+    // A resume is a success — any standing error line has been outlived.
+    setState({ status: 'playing', error: null })
     const session = ms()
     if (session) session.playbackState = 'playing'
   })
@@ -172,10 +176,16 @@ function ensureElement(): HTMLAudioElement {
     // `ended` fires without a `pause` and is handled below — this covers every
     // real pause, so the lock screen never shows a playing ghost.
     if (el.ended) return
-    setState({ status: 'paused', position: el.currentTime })
-    persist()
     const session = ms()
     if (session) session.playbackState = 'paused'
+    // The pause EVENT is queued, not synchronous, so one can land after a
+    // track change (or the past-the-end reset) has already rewritten the
+    // selection. A pause speaking for a superseded track mirrors the lock
+    // screen above and touches nothing else — writing its clock here is how
+    // the old track's position once corrupted the new selection.
+    if (state.status === 'idle' || loadedTrackId === null || loadedTrackId !== state.trackId) return
+    setState({ status: 'paused', position: el.currentTime })
+    persist()
   })
   el.addEventListener('ended', () => {
     const session = ms()
@@ -238,6 +248,12 @@ function teardownMediaSession(): void {
   const session = ms()
   if (!session) return
   MS_ACTIONS.forEach((a) => session.setActionHandler(a, null))
+  try {
+    // No arguments clears the position readout; some engines throw on it.
+    session.setPositionState()
+  } catch {
+    // best-effort — the metadata/playbackState clears below still land
+  }
   session.metadata = null
   session.playbackState = 'none'
 }
@@ -251,6 +267,28 @@ function teardownMediaSession(): void {
 /** Object-URL cache: storage path → URL. Map order is the LRU order. */
 const blobCache = new Map<string, string>()
 const BLOB_CACHE_CAP = 3
+/** getBlob in flight per path — a skip landing mid-prefetch reuses the same
+ *  fetch instead of minting (and leaking) a second object URL. */
+const inflight = new Map<string, Promise<string>>()
+/** An evicted URL the element was still playing — revoked on the next src swap. */
+let deferredRevoke: string | null = null
+
+/** Revoke, unless the element is still sounding from this very URL. */
+function safeRevoke(url: string): void {
+  if (audio && audio.src === url) {
+    deferredRevoke = url
+    return
+  }
+  URL.revokeObjectURL(url)
+}
+
+/** Settle a deferred revoke once the element has moved off the URL. */
+function flushDeferredRevoke(): void {
+  if (!deferredRevoke) return
+  if (audio && audio.src === deferredRevoke) return
+  URL.revokeObjectURL(deferredRevoke)
+  deferredRevoke = null
+}
 
 function cacheGet(path: string): string | undefined {
   const url = blobCache.get(path)
@@ -263,18 +301,23 @@ function cacheGet(path: string): string | undefined {
 }
 
 function cachePut(path: string, url: string): void {
+  // Belt-and-braces: overwriting an entry must not strand its old URL.
+  const existing = blobCache.get(path)
+  if (existing !== undefined && existing !== url) safeRevoke(existing)
+  blobCache.delete(path)
   blobCache.set(path, url)
   while (blobCache.size > BLOB_CACHE_CAP) {
     const [oldest] = blobCache.keys()
     const evicted = blobCache.get(oldest)
     blobCache.delete(oldest)
-    if (evicted) URL.revokeObjectURL(evicted)
+    if (evicted) safeRevoke(evicted)
   }
 }
 
 function clearBlobCache(): void {
-  blobCache.forEach((url) => URL.revokeObjectURL(url))
+  blobCache.forEach((url) => safeRevoke(url))
   blobCache.clear()
+  flushDeferredRevoke()
 }
 
 /** A refusal is a verdict, not a network failure — never conflate the two. */
@@ -290,9 +333,19 @@ function storageError(err: unknown): string {
 async function resolveSource(track: RadioTrack): Promise<string> {
   if (track.source.kind === 'asset') return import.meta.env.BASE_URL + track.source.path
 
-  const cached = cacheGet(track.source.path)
+  const { path } = track.source
+  const cached = cacheGet(path)
   if (cached) return cached
 
+  // One fetch per path at a time — the second caller rides the first's promise.
+  const pending = inflight.get(path)
+  if (pending) return pending
+  const fetching = fetchStorageUrl(path).finally(() => inflight.delete(path))
+  inflight.set(path, fetching)
+  return fetching
+}
+
+async function fetchStorageUrl(path: string): Promise<string> {
   const fb = await ensureFirebase()
   if (!fb || !hasRealAuth()) {
     throw new Error('You are signed out. Sign in and the radio comes to life.')
@@ -300,9 +353,9 @@ async function resolveSource(track: RadioTrack): Promise<string> {
   try {
     // Lazy, matching firebase.ts — the storage chunk is only ever fetched here.
     const { getStorage, ref, getBlob } = await import('firebase/storage')
-    const blob = await getBlob(ref(getStorage(fb.auth.app), track.source.path))
+    const blob = await getBlob(ref(getStorage(fb.auth.app), path))
     const url = URL.createObjectURL(blob)
-    cachePut(track.source.path, url)
+    cachePut(path, url)
     return url
   } catch (err) {
     throw new Error(storageError(err))
@@ -326,12 +379,22 @@ async function loadAndPlay(track: RadioTrack, startAt: number): Promise<void> {
   const seq = ++loadSeq
   setState({ status: 'loading', error: null })
   const el = ensureElement()
+  // Silence the OLD track before anything async: if the new source stalls or
+  // refuses, nothing may keep rolling behind a UI that says otherwise. (The
+  // queued pause event this fires is guarded in the handler, and flushed
+  // entirely when the src swap below invokes the load algorithm.)
+  if (!el.paused) el.pause()
   let src: string
   try {
     src = await resolveSource(track)
   } catch (err) {
     if (seq !== loadSeq) return
+    // The element still holds the superseded track's src — disown it, so a
+    // retry goes back through this loader instead of resuming the wrong song.
+    loadedTrackId = null
     setState({ status: 'paused', error: err instanceof Error ? err.message : String(err) })
+    const session = ms()
+    if (session) session.playbackState = 'paused'
     return
   }
   if (seq !== loadSeq) return
@@ -339,6 +402,7 @@ async function loadAndPlay(track: RadioTrack, startAt: number): Promise<void> {
   pendingSeek = startAt
   loadedTrackId = track.id
   el.src = src
+  flushDeferredRevoke() // the element just moved off any evicted-but-playing URL
   wireMediaSession(track)
   try {
     await el.play()
@@ -346,6 +410,8 @@ async function loadAndPlay(track: RadioTrack, startAt: number): Promise<void> {
   } catch {
     if (seq !== loadSeq) return
     setState({ status: 'paused', error: 'The song stumbled at the start. Tap play when you are ready.' })
+    const session = ms()
+    if (session) session.playbackState = 'paused'
   }
 }
 
@@ -412,7 +478,17 @@ export async function next(): Promise<void> {
     step(state.index + 1)
     return
   }
-  audio?.pause()
+  if (audio) {
+    audio.pause()
+    // Empty + load, the stop() trick: the load algorithm FLUSHES the pause
+    // event pause() just queued, which would otherwise land after the reset
+    // below and write the old track's clock over position 0. (A skip mid-track
+    // arrives here with ended false, so the handler's guard alone is not
+    // enough to keep persist() from stamping the corrupted value.)
+    audio.src = ''
+    audio.load()
+    flushDeferredRevoke()
+  }
   const first = getTrack(state.queue[0])
   loadedTrackId = null // force a reload when play() comes back around
   setState({
@@ -423,6 +499,9 @@ export async function next(): Promise<void> {
     duration: first?.duration ?? 0,
   })
   persist()
+  // The flushed pause event can no longer mirror the lock screen — do it here.
+  const session = ms()
+  if (session) session.playbackState = 'paused'
 }
 
 /** Restarts the current track when it is already rolling; steps back otherwise. */

@@ -5,6 +5,7 @@ import { useRadio } from '../hooks/useRadio'
 import type { RadioState } from '../services/radioService'
 import { toggle, next } from '../services/radioService'
 import { getPlaylist, getTrack } from '../content/soundtrack'
+import type { RadioTrack } from '../content/soundtrack'
 import { IconButton } from '../ui'
 
 const BAR_HEIGHT = 56
@@ -15,13 +16,14 @@ const BAR_HEIGHT = 56
  * become the containing block for any fixed descendant and puts a transform
  * inside the fixed-bars band (the MapScreen scar).
  */
-function MiniPlayerBar({ radio }: { radio: RadioState }) {
+function MiniPlayerBar({ radio, track }: { radio: RadioState; track: RadioTrack }) {
   const navigate = useNavigate()
-  const track = radio.trackId ? getTrack(radio.trackId) : undefined
   const playlist = radio.playlistId ? getPlaylist(radio.playlistId) : undefined
 
   // Reserve room above the BottomNav for as long as the bar is up, so screen
-  // content can scroll clear of it (InstallBanner precedent).
+  // content can scroll clear of it (InstallBanner precedent). The parent only
+  // mounts this once the track has resolved, so the reservation can never
+  // outlive a bar that declined to render.
   useLayoutEffect(() => {
     const root = document.documentElement
     root.style.setProperty('--miniplayer-height', `${BAR_HEIGHT}px`)
@@ -30,7 +32,6 @@ function MiniPlayerBar({ radio }: { radio: RadioState }) {
     }
   }, [])
 
-  if (!track) return null
   const art = track.art ?? playlist?.art ?? 'assets/logo-questland-primary.png'
   const progress = radio.duration > 0 ? Math.min(1, radio.position / radio.duration) : 0
 
@@ -46,7 +47,10 @@ function MiniPlayerBar({ radio }: { radio: RadioState }) {
       aria-label="Open Questland Radio"
       onClick={() => navigate('/radio')}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') navigate('/radio')
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault() // Space would otherwise scroll the page underneath
+          navigate('/radio')
+        }
       }}
       style={{
         position: 'fixed',
@@ -124,9 +128,15 @@ function MiniPlayerBar({ radio }: { radio: RadioState }) {
   )
 }
 
-/** Mounted in Shell's fixed-bars band; renders nothing while the radio is idle. */
+/**
+ * Mounted in Shell's fixed-bars band; renders nothing while the radio is idle.
+ * The track is resolved HERE, before the bar (and its height reservation)
+ * mounts — a stale trackId must not reserve 56px of dead padding.
+ */
 export default function MiniPlayer() {
   const radio = useRadio()
   if (radio.status === 'idle') return null
-  return <MiniPlayerBar radio={radio} />
+  const track = radio.trackId ? getTrack(radio.trackId) : undefined
+  if (!track) return null
+  return <MiniPlayerBar radio={radio} track={track} />
 }

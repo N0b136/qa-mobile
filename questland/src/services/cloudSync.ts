@@ -981,17 +981,52 @@ export function startGuestSync(userId: string): () => void {
     // Your own passages, wherever they were booked, and what has been spent off
     // them — the booth spends a Quest Experience at the gate, on this guest's
     // behalf, while their phone is in a pocket.
+    //
+    // ── HEALING THE RADIO'S PASSAGE STAMP ───────────────────────────────────
+    // The sign-in profile push runs BEFORE these two mirrors hydrate on a
+    // fresh device, and pushGuestProfile writes guests/{uid} WHOLE — so a
+    // `passage: true` standing in the cloud is erased by that first push, and
+    // nothing rewrites it until the guest books or cancels. Once BOTH mirrors
+    // have reported, re-derive the stamp; if it differs from what the mirrors
+    // said when this attach began (which is what that sign-in push can have
+    // carried), re-push the profile ONCE. At most one re-push per sync start:
+    // the guard is against churn, not a loop — a profile push moves neither
+    // of these listeners, so there is nothing here to echo.
+    const derivePassage = () =>
+      load<Booking[]>(bookingsKey(userId), []).some((b) => b.status === 'confirmed') ||
+      load<PassUse[]>(passUsesKey(userId), []).length > 0
+    const stampAtAttach = derivePassage()
+    let bookingsPrimed = false
+    let usesPrimed = false
+    let stampHealed = false
+    const healPassageStamp = () => {
+      if (stampHealed || !bookingsPrimed || !usesPrimed) return
+      if (derivePassage() === stampAtAttach) return
+      stampHealed = true
+      // The mirrored local record, never authService (cycle) — same pattern as
+      // announceNewMembers above.
+      const self = load<User[]>(USERS_KEY, []).find((u) => u.id === userId)
+      if (self) pushGuestProfile(self)
+    }
     unsubs.push(
       onSnapshot(
         query(collection(fb.db, 'bookings'), where('userId', '==', userId)),
-        (snap) => mergeBookingsSnapshot(userId, snap),
+        (snap) => {
+          mergeBookingsSnapshot(userId, snap)
+          bookingsPrimed = true
+          healPassageStamp()
+        },
         () => setCloudState('offline')
       )
     )
     unsubs.push(
       onSnapshot(
         doc(fb.db, 'passUses', userId),
-        (snap) => applyPassUses(userId, usesOf(snap.data())),
+        (snap) => {
+          applyPassUses(userId, usesOf(snap.data()))
+          usesPrimed = true
+          healPassageStamp()
+        },
         () => setCloudState('offline')
       )
     )
