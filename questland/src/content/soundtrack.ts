@@ -37,25 +37,25 @@ export const TRACKS: RadioTrack[] = [
     id: 'trk-woods',
     title: 'Under the Whispering Boughs',
     duration: 44,
-    source: { kind: 'storage', path: 'radio/0X-woods.m4a' },
+    source: { kind: 'asset', path: 'assets/audio/demo-woods.wav' },
   },
   {
     id: 'trk-valor',
     title: 'March of the Rangers',
     duration: 42,
-    source: { kind: 'storage', path: 'radio/0X-valor.m4a' },
+    source: { kind: 'asset', path: 'assets/audio/demo-valor.wav' },
   },
   {
     id: 'trk-wilds',
     title: 'Air of the Alehiim',
     duration: 44,
-    source: { kind: 'storage', path: 'radio/0X-wilds.m4a' },
+    source: { kind: 'asset', path: 'assets/audio/demo-wilds.wav' },
   },
   {
     id: 'trk-lore',
     title: 'The Elm Remembers',
     duration: 46,
-    source: { kind: 'storage', path: 'radio/0X-lore.m4a' },
+    source: { kind: 'asset', path: 'assets/audio/demo-lore.wav' },
   },
 ]
 
