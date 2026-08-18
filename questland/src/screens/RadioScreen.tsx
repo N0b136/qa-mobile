@@ -232,15 +232,15 @@ export default function RadioScreen() {
         ) : (
           <div className="stack" style={{ gap: 16, ...viewFade }}>
             {!entitled ? (
-              <Card eyebrow="A visitor's perk" title="The Radio Rides Along">
+              <Card eyebrow="A Citizen's perk" title="Music for Citizens">
                 <div className="stack" style={{ gap: 14 }}>
                   <p style={{ margin: 0 }}>
-                    The radio rides with a passage. Book one for your visit — or hold a Citizen of
-                    Questia membership — and the soundtrack of the Wilds is yours, in the park and
-                    on the road to it.
+                    The radio belongs to the Citizens of Questia. Hold a monthly membership — from
+                    $30 — and every song of the Wilds rides with you, in the park and on the road
+                    to it.
                   </p>
                   <Button icon="ticket" onClick={() => navigate('/book')}>
-                    Book a passage
+                    Become a Citizen
                   </Button>
                 </div>
               </Card>

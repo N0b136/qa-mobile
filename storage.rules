@@ -2,9 +2,9 @@ rules_version = '2';
 
 // Questland Cloud Storage rules — the Questland Radio track vault.
 // Songs live under radio/ and are readable ONLY by a validated account that
-// holds a passage or membership, proven against Firestore. There are no public
-// URLs: the client fetches bytes via the SDK (getBlob) on its auth token, and
-// getDownloadURL is never called anywhere in the app.
+// holds a Citizen of Questia MEMBERSHIP, proven against Firestore. There are
+// no public URLs: the client fetches bytes via the SDK (getBlob) on its auth
+// token, and getDownloadURL is never called anywhere in the app.
 service firebase.storage {
   match /b/{bucket}/o {
 
@@ -14,19 +14,20 @@ service firebase.storage {
         && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
 
-    // Holds a passage: either a pass has been spent/covered for this account
-    // (passUses/{uid} exists — written at the gate), or their guest-directory
-    // row carries the passage stamp the booking sync writes on purchase.
-    // ORDER MATTERS: exists() first — firestore.get() on a missing guests doc
-    // errors the expression into a deny, which the short-circuit avoids for
-    // every guest the first arm already admits.
-    function holdsPassage() {
-      return firestore.exists(/databases/(default)/documents/passUses/$(request.auth.uid))
-        || firestore.get(/databases/(default)/documents/guests/$(request.auth.uid)).data.passage == true;
+    // Holds a membership: their guest-directory row carries the `member` stamp
+    // the booking sync derives from a confirmed Citizen of Questia membership
+    // booking. Day/group/birthday passages do not entitle, and neither does a
+    // spent or covered pass — a walk-in covered on somebody's passage is not a
+    // member. This is the ONLY arm, so there is no short-circuit ordering to
+    // preserve: firestore.get() on a missing guests doc errors the expression,
+    // and an errored expression is a deny — which is the right answer for an
+    // account with no directory row.
+    function isMember() {
+      return firestore.get(/databases/(default)/documents/guests/$(request.auth.uid)).data.member == true;
     }
 
     match /radio/{track} {
-      allow read: if isRealUser() && holdsPassage();
+      allow read: if isRealUser() && isMember();
       // Uploads happen from the Firebase console / gsutil by the park alone.
       allow write: if false;
     }

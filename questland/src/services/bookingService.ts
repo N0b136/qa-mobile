@@ -88,7 +88,7 @@ export function createBooking(userId: string, input: CreateBookingInput): Bookin
 
   save(key(userId), [...listBookings(userId), booking])
   cloudSync.pushBooking(booking)
-  // Re-push the profile so the radio's passage stamp (derived inside
+  // Re-push the profile so the entitlement stamps (derived inside
   // buildGuestDoc from the mirrors just written) lands immediately.
   const owner = getUser(userId)
   if (owner) cloudSync.pushGuestProfile(owner)

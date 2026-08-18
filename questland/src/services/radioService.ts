@@ -17,9 +17,9 @@
 // authService/notificationService would close a cycle.
 
 import type { Booking } from '../types'
-import type { PassUse } from './passService'
 import { load, save } from './store'
 import { ensureFirebase, hasRealAuth } from './firebase'
+import { isMembershipTier } from '../content/bookingTiers'
 import { getPlaylist, getTrack, tracksFor } from '../content/soundtrack'
 import type { RadioTrack } from '../content/soundtrack'
 
@@ -551,15 +551,15 @@ export function stop(): void {
 // ── Entitlement ──────────────────────────────────────────────────────────────
 
 /**
- * The radio rides with a passage: any confirmed booking, or any line in the
- * pass ledger (the booth spends on a guest's behalf, so a use can exist with
- * no booking on this phone). Reads the cloudSync mirrors directly — the keys
- * match its bookingsKey/passUsesKey — rather than importing the services.
+ * The radio is a MEMBER'S perk: only a confirmed Citizen of Questia
+ * membership booking entitles. A day, group or birthday passage does not, and
+ * neither does the pass ledger — a walk-in covered on somebody's passage is
+ * definitely not a member. Reads the cloudSync mirror directly — the key
+ * matches its bookingsKey — rather than importing the services.
  */
 export function isEntitled(userId: string): boolean {
-  return (
-    load<Booking[]>(`ql:bookings:${userId}`, []).some((b) => b.status === 'confirmed') ||
-    load<PassUse[]>(`ql:passUses:${userId}`, []).length > 0
+  return load<Booking[]>(`ql:bookings:${userId}`, []).some(
+    (b) => b.status === 'confirmed' && isMembershipTier(b.tierId)
   )
 }
 
