@@ -12,6 +12,7 @@
     "optimize:brand": "node scripts/optimize-brand.mjs",
     "stations": "node scripts/optimize-stations.mjs",
     "radio:demo": "node scripts/gen-demo-tracks.mjs",
+    "radio:encode": "node scripts/encode-songs.mjs",
     "fw:clips": "node ../firmware/tools/gen-clip-map.mjs",
     "fw:proto": "node ../firmware/tools/sync-proto.mjs",
     "fw:key": "node ../firmware/tools/provision-key.mjs",

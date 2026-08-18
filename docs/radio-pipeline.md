@@ -78,7 +78,64 @@ Smoke test after deploying:
   direct REST fetch of an object gets 403.
 - Signed out, or an account with no booking at all → same: locked copy, 403.
 
-## 6. Cost expectations
+## 6. "Keep on this device" — offline downloads
+
+A member can keep a whole playlist for the road. What that means concretely:
+
+**Where the bytes live.** IndexedDB on the guest's own device — database
+`ql-radio`, one store holding a Blob per track id and a second holding one
+metadata record each (`storagePath`, `bytes`, `contentType`, `savedAt`,
+`schemaVersion`). Blob and record are written in a SINGLE transaction across
+both stores, so a failed download can never leave half a song behind.
+
+**Never the service worker.** Audio does not enter Cache Storage, a precache
+manifest, or either worker. The park's two-worker arrangement (workbox at the
+root, the push worker under `fcm/`) and the 4 MB precache ceiling are
+untouched; `vite.config.ts`'s `globIgnores` still keeps `assets/audio/` out.
+
+**Playback resolution order** (`radioService`): this session's object-URL memo
+→ IndexedDB → the cloud, with one shared in-flight fetch per object path. So a
+kept song plays with the radio off and is never pulled twice, and a download
+already running for a song the guest just tapped is ridden rather than
+duplicated (and vice versa).
+
+**Downloads are a LEASE, not a promise.** `navigator.storage.persist()` is
+requested once, best-effort, the first time a member keeps a playlist — it
+makes eviction less likely and guarantees nothing. A browser may reclaim the
+space at any time, so the UI reads real per-track presence from IndexedDB
+rather than trusting a remembered answer: an evicted song simply shows as not
+kept and is fetched again on the next play, or re-queued the next time the
+Radio screen opens. Nothing in the copy claims permanence.
+
+**Progress is counted in songs, not bytes.** The Storage SDK's `getBlob` gives
+no byte-level progress, so the UI reports "N of M songs" plus the number
+currently coming down. A percentage bar would be invented, so there is not one.
+
+**Cancellation is at the queue, not on the wire.** `getBlob` takes no abort
+signal, and the only cancellable alternative would need a public download URL,
+which this app never mints. "Stop keeping" therefore empties the queue at once
+and DISCARDS whatever lands afterwards — nothing is written and the member
+sees the state they asked for immediately, while at most one song's bytes may
+still finish arriving in the background.
+
+**Bundled tracks are not downloadable.** The placeholder loops ship inside the
+app, so the UI shows them as "always with you" — no progress, no delete. Only
+`{ kind: 'storage' }` tracks can be kept, which is what real songs will be.
+
+**Egress math.** Streamed, a track costs ~4 MB of egress *per play*. Kept, it
+costs ~4 MB *once* and every later play is free — so a member who listens to a
+40-song season five times over a month goes from ~800 MB to ~160 MB. The
+saving is a side effect; the point is music in the car with no signal.
+
+**A lapsed membership keeps its cached songs until the app syncs.** The
+Storage rules gate the FETCH, not the bytes already on the device: a member
+whose membership ends can still play what they kept until those downloads are
+removed. Accepted deliberately — it is the same trust level as the
+client-minted booking model in §8, and the alternative (re-checking
+entitlement on every local play) would break exactly the offline case the
+feature exists for.
+
+## 7. Cost expectations
 
 - **Storage**: 150 MB ≈ cents/month.
 - **Egress**: ~4 MB per track-play (the app caches 3 object URLs in memory
@@ -90,7 +147,7 @@ At pitch scale — a handful of demo devices — all of this sits inside the fre
 tier. At park scale it is dominated by egress: 500 guests × 10 tracks/day is
 ~20 GB/day, worth revisiting (CDN, longer client caching) before opening day.
 
-## 7. What this protects — and what it cannot
+## 8. What this protects — and what it cannot
 
 This is **access control, not DRM**. An entitled, signed-in guest can open
 devtools and extract the bytes their own browser fetched — nothing prevents
@@ -106,7 +163,7 @@ REST. That is exactly as strong as the app's client-minted booking model
 itself — the membership booking that grants entitlement is also
 client-written. Tightening both is a production task, not a radio task.
 
-## 8. Regenerating the placeholders
+## 9. Regenerating the placeholders
 
 ```
 npm run radio:demo      # from questland/ — scripts/gen-demo-tracks.mjs
