@@ -236,7 +236,7 @@ export default function MapCanvas({
         >
           <img
             src={MAP_META.src}
-            alt="Chart of the Wilds of Questia"
+            alt="Chart of the Wilds of the Kingdom"
             draggable={false}
             style={{
               position: 'absolute',

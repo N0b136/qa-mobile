@@ -148,7 +148,7 @@ UIDHEX,TS,ORG,EP,RES
 |---|---|---|
 | `UIDHEX` | `/^[0-9A-F]{8,20}$/` | uppercase, no separators, no `0x` |
 | `TS` | 0..4294967295 | **epoch SECONDS**, from the beacon. `0` when the station has no clock yet |
-| `ORG` | 0..4 | 0 unknown · 1 Rangers · 2 Alehiim · 3 Elm · 4 RAID |
+| `ORG` | 0..4 | 0 unknown · 1 Rangers · 2 Alehiim · 3 Realm · 4 RAID |
 | `EP` | 0..10 | episode = DFPlayer track. 0 unknown |
 | `RES` | `L` \| `Q` \| `U` | how it resolved |
 

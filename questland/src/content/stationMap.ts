@@ -45,7 +45,7 @@ export const STATION_COORDS: Record<string, { x: number; y: number }> = {
   'st-18': { x: 0.938, y: 0.547 }, // Etzhyii Village Ruins
   'st-19': { x: 0.715, y: 0.358 }, // Ranger Camp (Rangers base)
   'st-20': { x: 0.815, y: 0.712 }, // Hearer's Hollow (Hearers base)
-  'st-21': { x: 0.915, y: 0.873 }, // ElmRoot (Elm base)
+  'st-21': { x: 0.915, y: 0.873 }, // Realmhold (Realm base)
 }
 
 /**

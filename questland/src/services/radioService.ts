@@ -584,7 +584,7 @@ export function stop(): void {
 // ── Entitlement ──────────────────────────────────────────────────────────────
 
 /**
- * The radio is a MEMBER'S perk: only a confirmed Citizen of Questia
+ * The radio is a MEMBER'S perk: only a confirmed Citizen of the Kingdom
  * membership booking entitles. A day, group or birthday passage does not, and
  * neither does the pass ledger — a walk-in covered on somebody's passage is
  * definitely not a member. Reads the cloudSync mirror directly — the key

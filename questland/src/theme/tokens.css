@@ -30,9 +30,9 @@
      --radius-md    -> 6px  (DS: modals/panels)  [was 14px; buttons/inputs/pills]
      --radius-lg    -> 10px (DS: phone-app sheets only) [was 20px; .card]
 
-   USER-CONFIRMED 2026-07-25 — org track-colour mapping: Rangers of Questia
+   USER-CONFIRMED 2026-07-25 — org track-colour mapping: Rangers of the Kingdom
    -> Valor (ruby), Hearers of the Alehiim -> Wilds (forest/green), Order of
-   the Elm -> Lore (sapphire). orgs.ts is the source of truth (track/color/
+   the Realm -> Lore (sapphire). orgs.ts is the source of truth (track/color/
    colorSoft fields); the legacy --ember/--forest/--arcane names below are
    kept defined for safety but no longer represent org identity.
    ============================================================================ */
@@ -54,8 +54,8 @@
 
   /* ---- org / questline track colours, user-confirmed (see header note) ----
      orgs.ts consumes these three directly as color/colorSoft. */
-  --track-valor-soft: rgba(176, 27, 52, 0.20);  /* ruby-500 @ 20% — Rangers of Questia */
-  --track-lore-soft: rgba(30, 79, 168, 0.20);   /* sapphire-500 @ 20% — Order of the Elm */
+  --track-valor-soft: rgba(176, 27, 52, 0.20);  /* ruby-500 @ 20% — Rangers of the Kingdom */
+  --track-lore-soft: rgba(30, 79, 168, 0.20);   /* sapphire-500 @ 20% — Order of the Realm */
   --track-wilds-soft: rgba(74, 90, 69, 0.24);   /* forest-500 @ 24% — Hearers of the Alehiim */
 
   /* ---- legacy names — kept defined for safety, no longer org identity ---- */

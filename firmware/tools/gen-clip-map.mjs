@@ -29,7 +29,7 @@
 //
 // ── THE ADDRESSING, AND WHY THE GAPS ARE THE POINT ──────────────────────────
 //
-//   folder = order   (1 Rangers, 2 Alehiim, 3 Elm, 4 RAID)
+//   folder = order   (1 Rangers, 2 Alehiim, 3 Realm, 4 RAID)
 //   track  = episode number (1..10)
 //
 // So the two fields that ride the LoRa wire ARE the two arguments to

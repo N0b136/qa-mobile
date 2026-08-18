@@ -64,7 +64,7 @@ export const EVENTS: ParkEvent[] = [
     daysFromNow: 21,
     time: '10:00',
     blurb:
-      "The season finale. Choose your order and stand as one: Rangers dig the line and drill for battle, Hearers set traps and train as combat medics, and the Order of the Elm sneaks off to sabotage the siege tower and rally Devorah's hidden allies. Then the brigands charge — Aldric and the Keeper hold the line until the Order and the Alehiim warriors flank in and rout Nordad's army. The day ends in a victory feast: crafts, live music, character skits, and a teaser for what comes next.",
+      "The season finale. Choose your order and stand as one: Rangers dig the line and drill for battle, Hearers set traps and train as combat medics, and the Order of the Realm sneaks off to sabotage the siege tower and rally Devorah's hidden allies. Then the brigands charge — Aldric and the Keeper hold the line until the Order and the Alehiim warriors flank in and rout Nordad's army. The day ends in a victory feast: crafts, live music, character skits, and a teaser for what comes next.",
   },
 ]
 

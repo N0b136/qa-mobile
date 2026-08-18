@@ -113,7 +113,7 @@ export default function PartyScreen() {
       {!party ? (
         <>
           <p className="muted" style={{ marginTop: 12 }}>
-            A Party lets fellow adventurers see one another&apos;s questline progress as you travel Questia
+            A Party lets fellow adventurers see one another&apos;s questline progress as you travel the Kingdom
             together. Start one, or answer an invite code from a friend.
           </p>
 

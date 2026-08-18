@@ -9,7 +9,7 @@
 //
 // ── The addressing ─────────────────────────────────────────────────────────
 //
-//   folder = order   1 Rangers of Questia, 2 Hearers of the Alehiim, 3 Order of the Elm
+//   folder = order   1 Rangers of the Kingdom, 2 Hearers of the Alehiim, 3 Order of the Realm
 //   track  = episode number, 1..10
 //
 // The two fields that ride the LoRa wire ARE the two arguments to
@@ -99,7 +99,7 @@ static const uint16_t QL_CLIP_KEYS[QL_CLIP_TOTAL] = {
   0x0101, 0x0102, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0108, 0x0109, 0x010A,
   // 20 st-20 Hearer's Hollow (base) - 10 clips  2:{1,2,3,4,5,6,7,8,9,10}
   0x0201, 0x0202, 0x0203, 0x0204, 0x0205, 0x0206, 0x0207, 0x0208, 0x0209, 0x020A,
-  // 21 st-21 ElmRoot (base) - 10 clips  3:{1,2,3,4,5,6,7,8,9,10}
+  // 21 st-21 Realmhold (base) - 10 clips  3:{1,2,3,4,5,6,7,8,9,10}
   0x0301, 0x0302, 0x0303, 0x0304, 0x0305, 0x0306, 0x0307, 0x0308, 0x0309, 0x030A,
 };
 

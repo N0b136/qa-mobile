@@ -1,8 +1,8 @@
 GENERATED - DO NOT EDIT, run npm run fw:clips
 (node firmware/tools/gen-clip-map.mjs; source content-intake/season-1.json)
 
-SD CARD MANIFEST - st-21  ElmRoot
-Station type: base   base station of: Order of the Elm
+SD CARD MANIFEST - st-21  Realmhold
+Station type: base   base station of: Order of the Realm
 LoRa address / console station number: 21
 Canon fingerprint: 132EB1DA89E208F5
 Speech files on this card: 10
@@ -21,7 +21,7 @@ later must stay a single file drop.
 
 --- SPEECH (one per order + episode this station appears in) ---
 
-  folder 03  Order of the Elm
+  folder 03  Order of the Realm
     /03/001.mp3   ep 01  el-01  The Order Begins
     /03/002.mp3   ep 02  el-02  A Call to Order
     /03/003.mp3   ep 03  el-03  The Tales of the Order

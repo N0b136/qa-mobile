@@ -32,12 +32,12 @@ export const STATIONS: Station[] = [
   { id: 'st-18', name: 'Etzhyii Village Ruins', type: 'song', orgId: null },
   { id: 'st-19', name: 'Ranger Camp', type: 'base', orgId: 'rangers' },
   { id: 'st-20', name: "Hearer's Hollow", type: 'base', orgId: 'alehiim' },
-  { id: 'st-21', name: 'ElmRoot', type: 'base', orgId: 'elm' },
+  { id: 'st-21', name: 'Realmhold', type: 'base', orgId: 'elm' },
 ]
 
 // Per-episode station rotations, in canon order, by station id.
 export const EPISODE_STATIONS: EpisodeStations[] = [
-  // Rangers of Questia
+  // Rangers of the Kingdom
   { episodeId: 'rg-01', stationIds: ['st-07', 'st-11', 'st-14', 'st-03', 'st-19', 'st-02', 'st-06'] },
   { episodeId: 'rg-02', stationIds: ['st-11', 'st-13', 'st-09', 'st-19', 'st-18', 'st-04', 'st-17'] },
   { episodeId: 'rg-03', stationIds: ['st-19', 'st-05', 'st-16', 'st-12', 'st-06', 'st-15', 'st-03'] },
@@ -61,7 +61,7 @@ export const EPISODE_STATIONS: EpisodeStations[] = [
   { episodeId: 'ah-09', stationIds: ['st-16', 'st-14', 'st-18', 'st-06', 'st-11', 'st-20', 'st-17'] },
   { episodeId: 'ah-10', stationIds: ['st-20', 'st-05', 'st-07', 'st-12', 'st-15', 'st-10', 'st-18'] },
 
-  // Order of the Elm
+  // Order of the Realm
   { episodeId: 'el-01', stationIds: ['st-04', 'st-08', 'st-17', 'st-21', 'st-16', 'st-13', 'st-01'] },
   { episodeId: 'el-02', stationIds: ['st-21', 'st-01', 'st-07', 'st-12', 'st-02', 'st-03', 'st-06'] },
   { episodeId: 'el-03', stationIds: ['st-07', 'st-11', 'st-18', 'st-17', 'st-14', 'st-10', 'st-21'] },

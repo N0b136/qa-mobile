@@ -34,7 +34,7 @@ export function statusLine(o: Occupant, now: number): { icon: string; text: stri
   return { icon: 'map-pin', text: `At ${o.placeName}` }
 }
 
-/** "Rangers of Questia · Episode III · 4 of 7" — the walk, in one line. */
+/** "Rangers of the Kingdom · Episode III · 4 of 7" — the walk, in one line. */
 export function questLine(o: Occupant): string | null {
   if (!o.orgName) return null
   const parts = [o.orgName]

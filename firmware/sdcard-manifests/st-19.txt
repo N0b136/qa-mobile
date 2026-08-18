@@ -2,7 +2,7 @@ GENERATED - DO NOT EDIT, run npm run fw:clips
 (node firmware/tools/gen-clip-map.mjs; source content-intake/season-1.json)
 
 SD CARD MANIFEST - st-19  Ranger Camp
-Station type: base   base station of: Rangers of Questia
+Station type: base   base station of: Rangers of the Kingdom
 LoRa address / console station number: 19
 Canon fingerprint: 132EB1DA89E208F5
 Speech files on this card: 10
@@ -21,7 +21,7 @@ later must stay a single file drop.
 
 --- SPEECH (one per order + episode this station appears in) ---
 
-  folder 01  Rangers of Questia
+  folder 01  Rangers of the Kingdom
     /01/001.mp3   ep 01  rg-01  Aldric's Key
     /01/002.mp3   ep 02  rg-02  Darish's Arrow
     /01/003.mp3   ep 03  rg-03  Tune of the Woodlands

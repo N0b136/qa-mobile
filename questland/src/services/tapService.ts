@@ -96,7 +96,7 @@ const MIN_TRAVEL_SEPARATION = 0.15
  * Map widths per minute above which nobody is walking.
  *
  * Calibrated against the park itself rather than a guessed scale: the widest
- * legitimate hop on the chart — Songhollow Cave to ElmRoot, about 0.55 widths —
+ * legitimate hop on the chart — Songhollow Cave to Realmhold, about 0.55 widths —
  * takes a party roughly twenty minutes, which is 0.028 widths a minute. This
  * ceiling is eighteen times that. At any plausible size for the site it is a
  * vehicle, not a guest, so a tap that requires it is not the party the pole is

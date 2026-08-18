@@ -21,7 +21,7 @@ later must stay a single file drop.
 
 --- SPEECH (one per order + episode this station appears in) ---
 
-  folder 01  Rangers of Questia
+  folder 01  Rangers of the Kingdom
     /01/001.mp3   ep 01  rg-01  Aldric's Key
     /01/003.mp3   ep 03  rg-03  Tune of the Woodlands
     /01/006.mp3   ep 06  rg-06  Rumors of Trouble
@@ -30,7 +30,7 @@ later must stay a single file drop.
     /02/004.mp3   ep 04  ah-04  Working Trough
     /02/007.mp3   ep 07  ah-07  Repaired not Discarded
     /02/009.mp3   ep 09  ah-09  Secret Places
-  folder 03  Order of the Elm
+  folder 03  Order of the Realm
     /03/002.mp3   ep 02  el-02  A Call to Order
     /03/005.mp3   ep 05  el-05  The King's Eyes
     /03/008.mp3   ep 08  el-08  Nordad's Shadow

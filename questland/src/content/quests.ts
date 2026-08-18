@@ -3,7 +3,7 @@ import type { Episode } from './types'
 // Canon lore — Season 1, ten episodes per organization, sourced from
 // content-intake/season-1.json. Titles and story beats are canon; taglines
 // and loreOnComplete text are written to be faithful to the source notes.
-// ALL-CAPS canon titles (Order of the Elm eps 3-10) are normalized to title
+// ALL-CAPS canon titles (Order of the Realm eps 3-10) are normalized to title
 // case here — formatting only, not a content change.
 //
 // zoneId: canon has no park-zone mapping for episodes (stations are
@@ -12,7 +12,7 @@ import type { Episode } from './types'
 // park map is calibrated against real station placement.
 
 export const EPISODES: Episode[] = [
-  // ---- Rangers of Questia ----
+  // ---- Rangers of the Kingdom ----
   {
     id: 'rg-01',
     orgId: 'rangers',
@@ -259,7 +259,7 @@ export const EPISODES: Episode[] = [
     method: 'either',
     staffCode: 'HEAR-909',
     loreOnComplete:
-      'The leaf cloak settles over your shoulders, and the Hearers name you among the Hidden — the secret places of Questia are yours to keep now.',
+      'The leaf cloak settles over your shoulders, and the Hearers name you among the Hidden — the secret places of the Kingdom are yours to keep now.',
     xp: 40,
   },
   {
@@ -276,7 +276,7 @@ export const EPISODES: Episode[] = [
     xp: 60,
   },
 
-  // ---- Order of the Elm ----
+  // ---- Order of the Realm ----
   {
     id: 'el-01',
     orgId: 'elm',
@@ -285,9 +285,9 @@ export const EPISODES: Episode[] = [
     tagline: "Retrace Ellowyn and Able's first night of adventure — and found the Order.",
     zoneId: 'gatehouse',
     method: 'qr',
-    staffCode: 'ELM-101',
+    staffCode: 'RLM-101',
     loreOnComplete:
-      'The royal messenger meets you at the trail\'s end and makes it official: you are among the first commissioned members of the Order of the Elm.',
+      'The royal messenger meets you at the trail\'s end and makes it official: you are among the first commissioned members of the Order of the Realm.',
     xp: 40,
   },
   {
@@ -298,7 +298,7 @@ export const EPISODES: Episode[] = [
     tagline: 'Prove the Order is worth taking seriously to the Captain of the Guard.',
     zoneId: 'proving',
     method: 'qr',
-    staffCode: 'ELM-202',
+    staffCode: 'RLM-202',
     loreOnComplete:
       'The mission is done, quietly and well — the Captain of the Guard is amused, intrigued, and just a little impressed.',
     xp: 40,
@@ -311,7 +311,7 @@ export const EPISODES: Episode[] = [
     tagline: "Act out the Order's most celebrated deeds — and hear how ordinary they really were.",
     zoneId: 'hollow',
     method: 'staff',
-    staffCode: 'ELM-303',
+    staffCode: 'RLM-303',
     loreOnComplete:
       "Able's dry commentary undercuts every heroic flourish, but the Order's spirit comes through anyway, embellishments and all.",
     xp: 40,
@@ -324,7 +324,7 @@ export const EPISODES: Episode[] = [
     tagline: 'Investigate strange sounds in the forest — and choose what to do with what you find.',
     zoneId: 'elderwood',
     method: 'qr',
-    staffCode: 'ELM-404',
+    staffCode: 'RLM-404',
     loreOnComplete:
       'Devorah watches quietly from the trees as you make your choice. Whatever you decided, the people of the leaves are one step closer to being known.',
     xp: 40,
@@ -337,9 +337,9 @@ export const EPISODES: Episode[] = [
     tagline: "Navigate the settlement's politics under the king's watchful representative.",
     zoneId: 'gatehouse',
     method: 'staff',
-    staffCode: 'ELM-505',
+    staffCode: 'RLM-505',
     loreOnComplete:
-      "You keep the Order's secrets and your composure both — Ellowyn names you Sworn of the Elm, an oath that has now been tested and held.",
+      "You keep the Order's secrets and your composure both — Ellowyn names you Sworn of the Realm, an oath that has now been tested and held.",
     xp: 40,
   },
   {
@@ -350,7 +350,7 @@ export const EPISODES: Episode[] = [
     tagline: 'Translate the ancient carvings hidden beneath a fallen elm.',
     zoneId: 'spire',
     method: 'qr',
-    staffCode: 'ELM-606',
+    staffCode: 'RLM-606',
     loreOnComplete:
       "Able's translation stops everyone cold: a name carved in ancient stone, a warning of return. Nordad.",
     xp: 40,
@@ -363,7 +363,7 @@ export const EPISODES: Episode[] = [
     tagline: "Walk with Able through the hardest choice of his life.",
     zoneId: 'elderwood',
     method: 'staff',
-    staffCode: 'ELM-707',
+    staffCode: 'RLM-707',
     loreOnComplete:
       'Able turns down the offer that could have changed everything — and tells no one what it cost him.',
     xp: 40,
@@ -376,7 +376,7 @@ export const EPISODES: Episode[] = [
     tagline: 'Investigate a brigand camp and find a message meant for the Order.',
     zoneId: 'proving',
     method: 'qr',
-    staffCode: 'ELM-808',
+    staffCode: 'RLM-808',
     loreOnComplete:
       "A crude carving of a broken elm waits at the camp — Nordad knows about the Order now. Ellowyn refuses to back down.",
     xp: 40,
@@ -389,9 +389,9 @@ export const EPISODES: Episode[] = [
     tagline: 'Meet Devorah beneath the Story Oak and learn what she has always known.',
     zoneId: 'elderwood',
     method: 'either',
-    staffCode: 'ELM-909',
+    staffCode: 'RLM-909',
     loreOnComplete:
-      'Devorah\'s words leave Ellowyn and Able shaken and steady all at once. The Order names you Guardian of the Elm — you are ready for what comes next.',
+      'Devorah\'s words leave Ellowyn and Able shaken and steady all at once. The Order names you Guardian of the Realm — you are ready for what comes next.',
     xp: 40,
   },
   {
@@ -402,9 +402,9 @@ export const EPISODES: Episode[] = [
     tagline: "Stand with Ellowyn as the Order chooses its part in the coming battle.",
     zoneId: 'proving',
     method: 'staff',
-    staffCode: 'ELM-999',
+    staffCode: 'RLM-999',
     loreOnComplete:
-      'Able chooses the Order, chooses Ellowyn, chooses to walk forward anyway. Whatever comes next, the Order of the Elm faces it together.',
+      'Able chooses the Order, chooses Ellowyn, chooses to walk forward anyway. Whatever comes next, the Order of the Realm faces it together.',
     xp: 60,
   },
 ]

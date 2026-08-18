@@ -21,7 +21,7 @@ later must stay a single file drop.
 
 --- SPEECH (one per order + episode this station appears in) ---
 
-  folder 01  Rangers of Questia
+  folder 01  Rangers of the Kingdom
     /01/002.mp3   ep 02  rg-02  Darish's Arrow
     /01/005.mp3   ep 05  rg-05  Ranger's Mettle
     /01/007.mp3   ep 07  rg-07  Shamara's Oath
@@ -30,7 +30,7 @@ later must stay a single file drop.
     /02/003.mp3   ep 03  ah-03  He Finds What is Lost
     /02/006.mp3   ep 06  ah-06  Planted by the Water
     /02/008.mp3   ep 08  ah-08  Waiting (hope)
-  folder 03  Order of the Elm
+  folder 03  Order of the Realm
     /03/001.mp3   ep 01  el-01  The Order Begins
     /03/004.mp3   ep 04  el-04  Voices in the Forest
     /03/010.mp3   ep 10  el-10  The Breaking Point
