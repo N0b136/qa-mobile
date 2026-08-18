@@ -87,4 +87,7 @@
      --chrome-safe-top to 0 and shifts down by --install-banner-height. */
   --install-banner-height: 0px;
   --chrome-safe-top: var(--safe-top);
+  /* MiniPlayer (Questland Radio) — the component sets this to its height on
+     <html> while a session exists, so .screen padding clears the bar. */
+  --miniplayer-height: 0px;
 }

@@ -1,0 +1,132 @@
+import { useLayoutEffect } from 'react'
+import type { MouseEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useRadio } from '../hooks/useRadio'
+import type { RadioState } from '../services/radioService'
+import { toggle, next } from '../services/radioService'
+import { getPlaylist, getTrack } from '../content/soundtrack'
+import { IconButton } from '../ui'
+
+const BAR_HEIGHT = 56
+
+/**
+ * The strip above the BottomNav while a radio session exists. Fixed and
+ * centered via inset + auto margins — NEVER translateX: a transform here would
+ * become the containing block for any fixed descendant and puts a transform
+ * inside the fixed-bars band (the MapScreen scar).
+ */
+function MiniPlayerBar({ radio }: { radio: RadioState }) {
+  const navigate = useNavigate()
+  const track = radio.trackId ? getTrack(radio.trackId) : undefined
+  const playlist = radio.playlistId ? getPlaylist(radio.playlistId) : undefined
+
+  // Reserve room above the BottomNav for as long as the bar is up, so screen
+  // content can scroll clear of it (InstallBanner precedent).
+  useLayoutEffect(() => {
+    const root = document.documentElement
+    root.style.setProperty('--miniplayer-height', `${BAR_HEIGHT}px`)
+    return () => {
+      root.style.removeProperty('--miniplayer-height')
+    }
+  }, [])
+
+  if (!track) return null
+  const art = track.art ?? playlist?.art ?? 'assets/logo-questland-primary.png'
+  const progress = radio.duration > 0 ? Math.min(1, radio.position / radio.duration) : 0
+
+  function control(e: MouseEvent, action: () => void) {
+    e.stopPropagation() // the bar itself navigates; the buttons must not
+    action()
+  }
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label="Open Questland Radio"
+      onClick={() => navigate('/radio')}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') navigate('/radio')
+      }}
+      style={{
+        position: 'fixed',
+        bottom: 'calc(var(--nav-height) + var(--safe-bottom))',
+        left: 0,
+        right: 0,
+        marginInline: 'auto',
+        width: '100%',
+        maxWidth: 480,
+        height: BAR_HEIGHT,
+        zIndex: 50,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '0 8px 0 12px',
+        background: 'var(--stone-950)',
+        borderTop: '1px solid var(--border-hairline)',
+        cursor: 'pointer',
+        // Fade + bottom nudge only — margin-bottom, never transform.
+        animation: 'qa-miniplayer-in var(--dur-fast) var(--ease-standard) both',
+      }}
+    >
+      {/* 2px gold progress hairline along the top edge. */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          height: 2,
+          width: `${progress * 100}%`,
+          background: 'var(--gold-500)',
+        }}
+      />
+      <img
+        src={import.meta.env.BASE_URL + art}
+        alt=""
+        width={40}
+        height={40}
+        style={{
+          borderRadius: 'var(--radius-sm)',
+          border: '1px solid var(--border-hairline)',
+          objectFit: 'cover',
+          flexShrink: 0,
+        }}
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontFamily: 'var(--font-ui)',
+            fontWeight: 700,
+            fontSize: 14,
+            color: 'var(--text-body)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {track.title}
+        </div>
+        <div
+          className="muted"
+          style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+        >
+          {playlist?.name ?? 'Questland Radio'}
+        </div>
+      </div>
+      <IconButton
+        icon={radio.status === 'playing' ? 'pause' : 'play'}
+        label={radio.status === 'playing' ? 'Pause' : 'Play'}
+        onClick={(e) => control(e, toggle)}
+      />
+      <IconButton icon="skip-forward" label="Next track" onClick={(e) => control(e, () => void next())} />
+    </div>
+  )
+}
+
+/** Mounted in Shell's fixed-bars band; renders nothing while the radio is idle. */
+export default function MiniPlayer() {
+  const radio = useRadio()
+  if (radio.status === 'idle') return null
+  return <MiniPlayerBar radio={radio} />
+}

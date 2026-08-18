@@ -268,8 +268,8 @@ function sosIsNewer(incoming: SosRequest, existing: SosRequest): boolean {
   return statusRank(incoming.status) > statusRank(existing.status)
 }
 
-function buildGuestDoc(user: User): GuestDoc & { demo?: true } {
-  const doc: GuestDoc & { demo?: true } = {
+function buildGuestDoc(user: User): GuestDoc & { demo?: true; passage?: true } {
+  const doc: GuestDoc & { demo?: true; passage?: true } = {
     id: user.id,
     name: user.name,
     level: levelFor(totalXp(user.id)),
@@ -282,6 +282,15 @@ function buildGuestDoc(user: User): GuestDoc & { demo?: true } {
   if (party?.name) doc.partyName = party.name
   if (user.walkUp) doc.walkUp = true
   if (user.id.startsWith('demo-')) doc.demo = true
+  // The Questland Radio entitlement stamp, read by storage.rules holdsPassage().
+  // Derived HERE and nowhere else, because pushGuestProfile writes the doc
+  // WHOLE (the anti-merge scar): a stamp written anywhere else would be erased
+  // by the very next profile push. Absent — not false — when nothing is held,
+  // so a cancelled booking clears it on the next push.
+  const passage =
+    load<Booking[]>(bookingsKey(user.id), []).some((b) => b.status === 'confirmed') ||
+    load<PassUse[]>(passUsesKey(user.id), []).length > 0
+  if (passage) doc.passage = true
   return doc
 }
 

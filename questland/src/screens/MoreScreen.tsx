@@ -11,6 +11,7 @@ const MENU = [
   { to: '/leaderboard', label: 'Standings', icon: 'trophy' },
   { to: '/bookings', label: 'My bookings', icon: 'ticket' },
   { to: '/party', label: 'My party', icon: 'users' },
+  { to: '/radio', label: 'Questland Radio', icon: 'radio' },
   { to: '/help', label: 'Help & SOS', icon: 'shield' },
   { to: '/notifications', label: 'Notifications', icon: 'bell' },
 ]
@@ -89,22 +90,6 @@ export default function MoreScreen() {
             </div>
           </Card>
         ) : null}
-        {/* SPIKE-TEMPORARY: disposable lock-screen audio spike (src/screens/RadioSpikeScreen.tsx).
-            Remove this row when Questland Radio proper lands. */}
-        <Link to="/radio-test" style={{ display: 'block' }}>
-          <Card interactive>
-            <div className="row row--between">
-              <span className="row" style={{ gap: 10 }}>
-                <Icon name="radio-tower" size={20} style={{ color: 'var(--text-muted)' }} />
-                <span>
-                  <span style={{ fontFamily: 'var(--font-ui)', fontWeight: 700, display: 'block' }}>Radio Spike</span>
-                  <span className="muted" style={{ fontSize: 12 }}>A sound trial for the coming Questland Radio.</span>
-                </span>
-              </span>
-              <Icon name="chevron-right" size={18} style={{ color: 'var(--text-muted)' }} />
-            </div>
-          </Card>
-        </Link>
       </div>
 
       <Button
