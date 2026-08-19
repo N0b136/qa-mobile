@@ -13,7 +13,15 @@
  */
 
 import { onDocumentCreated } from 'firebase-functions/v2/firestore'
-import { logger } from 'firebase-functions'
+// NOT `from 'firebase-functions'`. That root barrel eagerly loads every
+// provider, including the Realtime Database one, which pulls in
+// firebase-admin/database -> @firebase/database-compat -> @firebase/app. That
+// last one is an OPTIONAL peer dependency, so npm is correct not to install it,
+// and the require throws MODULE_NOT_FOUND during `firebase deploy`'s codebase
+// analysis — before a single function is examined. `firebase-functions/v2`
+// fails the same way. This project uses no Realtime Database at all; the
+// dedicated logger entrypoint avoids the whole chain.
+import * as logger from 'firebase-functions/logger'
 import { initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { getMessaging } from 'firebase-admin/messaging'
