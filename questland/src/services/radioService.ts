@@ -329,13 +329,27 @@ function storageError(err: unknown): string {
   if (code === 'storage/unauthorized' || code === 'storage/unauthenticated') {
     return 'This song is kept for Citizens. A membership opens the vault.'
   }
+  // The bucket has no object at the path this track names — an upload that
+  // never landed, or an object renamed after the fact. Nothing is wrong with
+  // the guest's membership or their connection, so neither of those lines
+  // would be true, and both would send them hunting in the wrong place.
+  if (code === 'storage/object-not-found') {
+    return 'This song has not reached the vault yet. Nothing is wrong on your end.'
+  }
   // An Error raised by our own layers — signed out, timed out, not in the
   // vault — already says the true thing, and it carries no SDK `code` to
   // recognise it by. Passing it through is what keeps a REFUSAL from reaching
   // the guest dressed as an outage: "sign in" must never read "check your
   // connection".
   if (!code && err instanceof Error && err.message) return err.message
-  return 'The song stumbled during playback. Check your connection and try again.'
+  // Everything left: retry-limit-exceeded, a real outage, and storage/unknown
+  // — which is also what a bucket missing its CORS rule looks like from in
+  // here, because the browser refuses the XHR before any Firebase error can be
+  // formed. The code rides along precisely because those cases are NOT all the
+  // same fix, and "check your connection" alone would misdirect every one of
+  // them that is not actually the connection.
+  const tail = code ? ` (${code})` : ''
+  return `The song stumbled during playback. Check your connection and try again.${tail}`
 }
 
 /**

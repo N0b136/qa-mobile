@@ -40,6 +40,49 @@ gsutil cp radio/*.m4a gs://qa-mobile-36a9c.firebasestorage.app/radio/
 Ignore the "download token" the console shows per file — the app never uses
 tokened URLs. The rules are the gate (see step 5), nothing else.
 
+### 3a. CORS on the bucket — REQUIRED, and silent when missing
+
+**`getBlob()` is an XHR, so the bucket must allow this origin by CORS. A
+Firebase Storage bucket ships with NO CORS configuration, so a brand-new
+bucket refuses every browser read and the songs simply never play.** Nothing
+in the Firebase console hints at this, the rules are not involved, and the
+failure does not look like a permissions problem: the browser blocks the
+request before any Firebase error can be formed, so the SDK reports
+`storage/unknown` or `storage/retry-limit-exceeded` — which reads as "check
+your connection" and sends you hunting through auth and rules instead.
+
+This is the price of the `getBlob` design. `getDownloadURL` needs no CORS,
+but minting a public shareable URL for every song is exactly what this
+feature refuses to do, so the CORS step stands.
+
+Apply `storage-cors.json` (repo root) ONCE per bucket:
+
+```
+gcloud storage buckets update gs://qa-mobile-36a9c.firebasestorage.app \
+  --cors-file=storage-cors.json
+```
+
+or with the older tool:
+
+```
+gsutil cors set storage-cors.json gs://qa-mobile-36a9c.firebasestorage.app
+```
+
+Neither the Firebase CLI nor the Firebase console can set CORS — it is a
+Cloud Storage property. With nothing installed locally, **Google Cloud Shell**
+(console.cloud.google.com, the `>_` icon) has `gcloud` and `gsutil` ready and
+runs in the browser.
+
+Read it back to confirm:
+
+```
+gcloud storage buckets describe gs://qa-mobile-36a9c.firebasestorage.app \
+  --format="default(cors_config)"
+```
+
+**Every origin the app is served from needs a line in that file** — the Pages
+origin ships in it, and a custom domain later means editing it and re-applying.
+
 ## 4. Wire up
 
 Edit **only** `questland/src/content/soundtrack.ts`: flip each track's source
