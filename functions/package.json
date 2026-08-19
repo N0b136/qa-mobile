@@ -1,7 +1,7 @@
 {
   "name": "questland-functions",
   "private": true,
-  "description": "Push sender for Calls for Aid threads.",
+  "description": "Push sender for Calls for Aid threads, and the Questland Radio ingest pipeline.",
   "engines": {
     "node": "20"
   },
@@ -10,13 +10,17 @@
     "build": "tsc",
     "watch": "tsc --watch",
     "serve": "npm run build && firebase emulators:start --only functions",
-    "deploy": "npm run build && firebase deploy --only functions"
+    "deploy": "npm run build && firebase deploy --only functions",
+    "radio:test": "npm run build && node test/encode.test.mjs"
   },
   "dependencies": {
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0",
     "firebase-admin": "^13.0.2",
     "firebase-functions": "^6.3.0"
   },
   "devDependencies": {
+    "@types/ffprobe-static": "^2.0.3",
     "typescript": "^5.8.3"
   }
 }

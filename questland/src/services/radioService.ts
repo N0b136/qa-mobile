@@ -76,12 +76,19 @@ function restore(): RadioState {
   if (!saved?.playlistId || !saved.trackId) return IDLE_STATE
   const pl = getPlaylist(saved.playlistId)
   const track = getTrack(saved.trackId)
-  if (!pl || !track || !pl.trackIds.includes(track.id)) return IDLE_STATE
+  if (!pl || !track) return IDLE_STATE
+  // Built from the catalogue in hand at startup, which is the bundled one until
+  // the cloud's arrives. A song added since is simply not in this restored
+  // queue; picking the playlist again rebuilds it. The alternative — deferring
+  // the whole restore on a network read — would leave the bar blank on launch.
+  const queue = tracksFor(pl.id).map((t) => t.id)
+  const index = queue.indexOf(track.id)
+  if (index < 0) return IDLE_STATE
   return {
     status: 'paused',
     playlistId: pl.id,
-    queue: pl.trackIds,
-    index: pl.trackIds.indexOf(track.id),
+    queue,
+    index,
     trackId: track.id,
     position: saved.position || 0,
     duration: track.duration,

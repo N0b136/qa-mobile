@@ -35,3 +35,6 @@ content-intake/QA Revenue Model.docx
 .idea/
 .DS_Store
 Thumbs.db
+
+# Firebase Functions build output
+functions/lib/

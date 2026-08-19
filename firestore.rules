@@ -54,6 +54,20 @@ service cloud.firestore {
       return isRealUser() && exists(/databases/$(database)/documents/staff/$(request.auth.uid));
     }
 
+    // Holds a Citizen of the Kingdom MEMBERSHIP. The SAME predicate storage.rules
+    // uses to gate the song bytes, against the same stamp, so the catalogue and
+    // the audio can never disagree about who is a member — a guest who could
+    // read the track list but not the files would see a shelf of songs that all
+    // fail on tap.
+    //
+    // A day, group or birthday passage does not entitle, and neither does being
+    // covered on somebody else's. get() on a guest with no directory row errors
+    // the expression, and an errored expression is a deny — the right answer.
+    function isMember() {
+      return isRealUser()
+        && get(/databases/$(database)/documents/guests/$(request.auth.uid)).data.member == true;
+    }
+
     // The doc must be filed under the id it claims. Every push already writes
     // this field, so a staff write cannot plant a row under the wrong guest.
     function selfFiled(uid) {
@@ -450,6 +464,31 @@ service cloud.firestore {
     match /parkStatus/{id} {
       allow read:  if isStaff();
       allow write: if isStaff();
+    }
+
+    // ── QUESTLAND RADIO ─────────────────────────────────────────────────────
+    //
+    // The song catalogue: one document per track, written ONLY by the ingest
+    // function under admin credentials when a file lands in the bucket's
+    // inbox/. `allow write: if false` is the whole story for clients — the
+    // Admin SDK bypasses these rules entirely, so closing the door here costs
+    // the pipeline nothing and stops a member from renaming the park's songs.
+    //
+    // Gated on membership to match storage.rules exactly. Note what this does
+    // NOT protect: titles are not secrets, and the bytes are gated separately.
+    // It is here so the two answers stay identical, not because a track list
+    // is sensitive.
+    match /radioTracks/{trackId} {
+      allow read: if isMember();
+      allow write: if false;
+    }
+
+    // What the ingest function did on each drop — encoded, skipped, refused,
+    // and why. Closed to every client on both sides: it is an operator's log,
+    // read in the Firebase console (which is not subject to these rules), and
+    // it names source filenames that are nobody's business but the park's.
+    match /radioIngestLog/{entryId} {
+      allow read, write: if false;
     }
 
     // Everything else is closed.

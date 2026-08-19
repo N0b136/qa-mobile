@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useRadio } from '../hooks/useRadio'
 import type { RadioState } from '../services/radioService'
 import { toggle, next } from '../services/radioService'
+import { useCatalogue } from '../hooks/useCatalogue'
 import { getPlaylist, getTrack } from '../content/soundtrack'
 import type { RadioTrack } from '../content/soundtrack'
 import { IconButton } from '../ui'
@@ -135,6 +136,9 @@ function MiniPlayerBar({ radio, track }: { radio: RadioState; track: RadioTrack 
  */
 export default function MiniPlayer() {
   const radio = useRadio()
+  // Before the early return — a hook cannot be called conditionally, and the
+  // playing track's title must follow a catalogue correction without a reload.
+  useCatalogue()
   if (radio.status === 'idle') return null
   const track = radio.trackId ? getTrack(radio.trackId) : undefined
   if (!track) return null

@@ -13,6 +13,8 @@ import type {
   DocumentData,
   DocumentReference,
 } from 'firebase/firestore'
+import { setCatalogue } from '../content/soundtrack'
+import type { RadioTrack } from '../content/soundtrack'
 import type {
   Announcement,
   AppNotification,
@@ -852,6 +854,23 @@ type FirestoreApi = typeof import('firebase/firestore')
  * It also means a local-only fallback account subscribes to nothing, which is
  * correct: its id is not a uid, so every owner-scoped query would be refused.
  */
+/**
+ * A radioTracks document as the player wants it. Everything is coerced rather
+ * than trusted — soundtrack's own shape guard drops whatever still does not
+ * hold up, so a half-written document costs one row and not the catalogue.
+ */
+function toRadioTrack(id: string, data: Record<string, unknown>): RadioTrack {
+  const sortIndex = typeof data.sortIndex === 'number' ? data.sortIndex : undefined
+  return {
+    id,
+    title: String(data.title ?? ''),
+    duration: Number(data.duration ?? 0),
+    source: { kind: 'storage', path: String(data.path ?? '') },
+    playlistIds: Array.isArray(data.playlistIds) ? data.playlistIds.map(String) : [],
+    ...(sortIndex === undefined ? {} : { sortIndex }),
+  }
+}
+
 function subscribeWhenAuthed(
   attach: (fb: FirebaseHandle, fs: FirestoreApi) => Array<() => void>
 ): () => void {
@@ -986,6 +1005,29 @@ export function startGuestSync(userId: string): () => void {
       () => setCloudState('offline')
     )
     unsubs.push(notifUnsub)
+
+    // ── THE SONG CATALOGUE ──────────────────────────────────────────────────
+    //
+    // Not owner-scoped: every member reads the same shelf, so this carries no
+    // where() and adds no per-guest query cost beyond the documents. It rides
+    // in the guest attach rather than its own auth listener because the rule
+    // gates on membership, and Firestore NEVER RETRIES A LISTENER IT REFUSED —
+    // attaching before a real user is known would kill the catalogue for the
+    // whole session.
+    //
+    // The error arm is deliberately quiet. A refusal here is a verdict on
+    // membership, not an outage, and setCatalogue already ignores an empty
+    // read, so both cases leave the shelf that is playing exactly as it is.
+    const radioUnsub = onSnapshot(
+      collection(fb.db, 'radioTracks'),
+      (snap) => {
+        setCatalogue(snap.docs.map((d) => toRadioTrack(d.id, d.data())))
+      },
+      () => {
+        /* refused or unreachable — the standing catalogue is the honest answer */
+      }
+    )
+    unsubs.push(radioUnsub)
 
     // Your own passages, wherever they were booked, and what has been spent off
     // them — the booth spends a Quest Experience at the gate, on this guest's

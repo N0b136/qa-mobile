@@ -32,6 +32,19 @@ service firebase.storage {
       allow write: if false;
     }
 
+    // The ingest inbox. Songs are dropped here from the Firebase console (which
+    // uses admin credentials and is not subject to these rules) and the ingest
+    // function — also admin — encodes them into radio/ and clears them out. No
+    // CLIENT has any business here in either direction: a readable inbox would
+    // serve un-encoded masters to anyone who guessed a filename, and a writable
+    // one would let a guest hand the park's own pipeline a file to publish.
+    //
+    // The catch-all below already refuses this. It is written out because a
+    // path that LOOKS unhandled invites someone to "add the missing rule".
+    match /inbox/{allPaths=**} {
+      allow read, write: if false;
+    }
+
     // Everything else in the bucket is closed to clients.
     match /{allPaths=**} {
       allow read, write: if false;
