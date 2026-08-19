@@ -27,7 +27,7 @@ import * as path from 'node:path'
 
 import { onObjectFinalized } from 'firebase-functions/v2/storage'
 import { onRequest } from 'firebase-functions/v2/https'
-import { logger } from 'firebase-functions'
+import * as logger from 'firebase-functions/logger'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 

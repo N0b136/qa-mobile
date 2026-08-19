@@ -11,7 +11,7 @@
     "watch": "tsc --watch",
     "serve": "npm run build && firebase emulators:start --only functions",
     "deploy": "npm run build && firebase deploy --only functions",
-    "radio:test": "npm run build && node test/encode.test.mjs"
+    "radio:test": "npm run build && node test/encode.test.mjs && node test/loads.test.mjs"
   },
   "dependencies": {
     "ffmpeg-static": "^5.2.0",
