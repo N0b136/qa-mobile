@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAppTick } from '../hooks/useAppTick'
 import { useRadio } from '../hooks/useRadio'
+import { useCatalogue } from '../hooks/useCatalogue'
 import { useOfflineAudio } from '../hooks/useOfflineAudio'
 import { currentUser } from '../services/authService'
 import { isEntitled, playPlaylist, seekTo, toggle, next, prev } from '../services/radioService'
@@ -24,6 +25,11 @@ import type { RadioPlaylist, RadioTrack } from '../content/soundtrack'
 import { getOrg } from '../content/orgs'
 import ProgressBar from '../components/ProgressBar'
 import { ArchCard, Button, Card, Icon, IconButton } from '../ui'
+
+/** Songs on a shelf right now — the catalogue is live, so this is not a constant. */
+function countFor(playlistId: string): number {
+  return tracksFor(playlistId).length
+}
 
 const capsHeadingStyle: CSSProperties = {
   textTransform: 'uppercase',
@@ -403,6 +409,9 @@ export default function RadioScreen() {
   const navigate = useNavigate()
   const [openId, setOpenId] = useState<string | null>(null)
   const user = currentUser()
+  // Subscribed, not merely read: the catalogue lands from Firestore after this
+  // screen has already painted, and a new song must appear without a revisit.
+  useCatalogue()
 
   // Downloads are a LEASE: the browser may have reclaimed songs since this
   // screen was last open, so read what is really on the device rather than
@@ -450,7 +459,7 @@ export default function RadioScreen() {
                 <ArchCard
                   key={pl.id}
                   title={pl.name}
-                  subtitle={`${pl.trackIds.length} ${pl.trackIds.length === 1 ? 'song' : 'songs'}`}
+                  subtitle={`${countFor(pl.id)} ${countFor(pl.id) === 1 ? 'song' : 'songs'}`}
                   image={artOf(undefined, pl)}
                   track={trackOf(pl)}
                   state={entitled ? 'available' : 'locked'}

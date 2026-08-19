@@ -83,17 +83,122 @@ gcloud storage buckets describe gs://qa-mobile-36a9c.firebasestorage.app \
 **Every origin the app is served from needs a line in that file** — the Pages
 origin ships in it, and a custom domain later means editing it and re-applying.
 
-## 4. Wire up
+## 3b. THE AUTOMATED WORKFLOW — drop a song, it appears
 
-Edit **only** `questland/src/content/soundtrack.ts`: flip each track's source
-from the bundled asset to its Storage object path —
+Everything below steps 3a and 5 is the ONE-TIME setup. Once it is done, adding
+a song is this and nothing else:
 
-```ts
-source: { kind: 'storage', path: 'radio/01-under-the-boughs.m4a' },
+**Drop the file into `inbox/<shelf>/` in the Firebase console. That is the
+whole workflow.** No encode, no upload, no code change, no deploy.
+
+| Drop it in | It lands on |
+| --- | --- |
+| `inbox/valor/` (or `rangers/`) | Songs of Valor + the full shelf |
+| `inbox/wilds/` (or `alehiim/`, `hearers/`) | Airs of the Wilds + the full shelf |
+| `inbox/lore/` (or `realm/`) | Hymns of Lore + the full shelf |
+| `inbox/kingdom/` | the full shelf only, deliberately |
+| `inbox/` root, or any other folder | the full shelf, flagged `unsorted` |
+
+**Folder is the playlist. Filename is the title.** `Aldric's Way.mp3` becomes
+"Aldric's Way" — the filename is used verbatim, apostrophes and all, and only
+slugified for the object path. Nothing re-derives a title from a slug, which is
+what turned "Aldric's Way" into "Aldric S Way" when the first 43 were done in
+bulk. Name the file exactly as the song should read.
+
+`onRadioDrop` (`functions/src/radioIngest.ts`) then: encodes two-pass to the
+same loudness as every existing song, writes `radio/<slug>.m4a`, registers
+`radioTracks/<trackId>`, and moves the source to `inbox/_done/`. The app is
+listening, so the song appears for members within seconds — no app restart.
+
+### What it refuses, and where to look
+
+Every drop writes a `radioIngestLog` entry (Firebase console → Firestore). The
+`outcome` field is the whole story: `added`, `replaced`, `duplicate`, `skipped`,
+`failed`.
+
+- **`duplicate`** — byte-identical to a song already in the catalogue. Filed to
+  `inbox/_done/duplicate/`, not encoded. This is the check the original 43
+  needed and did not have.
+- **`skipped`** — not audio, over 500 MB, over 30 minutes, or a filename with
+  no usable characters.
+- **`failed`** — the encode broke. **The source is deliberately LEFT IN THE
+  INBOX.** It is the only copy the pipeline holds, and a song swept into
+  `_done/` after a failed encode is a song nobody knows is missing.
+
+### Two things it does not do
+
+- **Deleting.** Removing a song means deleting its `radioTracks` document and
+  its `radio/` object by hand. There is no delete trigger on purpose: a rule
+  that removed songs automatically is one bad drop away from removing the wrong
+  one.
+- **Cleaning up after a rename.** Re-dropping a song under a different filename
+  writes a NEW object and a NEW document; the old pair is orphaned, not
+  replaced. Re-drop under the SAME filename to overwrite in place.
+
+### Editing after the fact
+
+Titles, `playlistIds` and `sortIndex` can be edited straight in the Firestore
+console and the app follows within seconds. A re-drop uses `merge`, so a
+hand-corrected title survives a remaster of the same file.
+
+### One-time setup: deploying the pipeline
+
+Nothing below is ever needed again. From **Google Cloud Shell**
+(console.cloud.google.com, the `>_` icon) — it has node, git and gcloud ready,
+so there is nothing to install on a laptop:
+
+```
+git clone https://github.com/N0b136/qa-mobile.git
+cd qa-mobile/functions && npm install
+npx firebase-tools login --no-localhost
+npx firebase-tools deploy --only functions,firestore:rules,storage:rules --project qa-mobile-36a9c
 ```
 
-— and fix `duration` to the real length. Add/extend tracks and playlists in
-the same file. **No other code changes**: `radioService` resolves a
+That one deploy ships the ingest function AND both rulesets, which is why the
+rules never need pasting into a console — a partial paste cannot happen if
+nobody is pasting.
+
+**If the deploy complains the trigger region does not match the bucket**, set
+`region` in the `onObjectFinalized` options in `functions/src/radioIngest.ts`
+to the bucket's location (Firebase console → Storage, shown beside the bucket
+name), then deploy again.
+
+Then seed the 43 songs that predate the pipeline. The deploy prints the URL for
+`seedRadioCatalogue`; open it once in a browser. It writes the catalogue with
+the curated titles and shelves, and **refuses if the collection already holds
+anything**, so it cannot double-write.
+
+Finally, delete the seeder — an endpoint that writes Firestore has no business
+outliving its one job:
+
+1. Remove `seedRadioCatalogue` from the export line at the foot of
+   `functions/src/index.ts`
+2. `npx firebase-tools deploy --only functions --project qa-mobile-36a9c`
+
+Last, create the inbox folders in the Firebase console under Storage:
+`inbox/valor/`, `inbox/wilds/`, `inbox/lore/`, `inbox/kingdom/`.
+
+### Proving it locally
+
+`cd functions && npm run radio:test` runs the encode core against real ffmpeg
+with no project, no bucket and no deploy: the naming rules, the loop guard, the
+shelf mapping, and a genuine two-pass encode checked for codec, sample rate,
+channels and duration. The guard is in there because its failure mode is a
+runaway bill rather than a bad song.
+
+## 4. Wire up — only for a song added by hand
+
+**The automated path (3b) needs none of this.** It writes the catalogue itself.
+
+The catalogue lives in Firestore `radioTracks`, one document per song. What
+ships in `questland/src/content/soundtrack.ts` is the FALLBACK, consulted only
+when the live catalogue is empty — the un-seeded state, a refused read, or a
+first run with no network. The moment Firestore returns one track, it wins.
+
+PLAYLISTS stay in code: their names, blurbs, order colours and art are design
+decisions, and there are four. Membership rides on each track's `playlistIds`.
+
+**No other code changes are needed for a new song**: `radioService` resolves a
 `storage` source by fetching bytes over the SDK (`getBlob`) on the signed-in
 user's own token and playing them from an object URL. `getDownloadURL` is
 never called anywhere in the app, so no shareable URL ever exists.

@@ -208,3 +208,11 @@ async function pruneDead(
   )
   logger.info('pruned dead tokens', { count: dead.length })
 }
+
+// ── Questland Radio ingest ───────────────────────────────────────────────────
+// Re-exported here so `firebase deploy --only functions` picks it up. The
+// import sits at the FOOT of this file for readability only — TypeScript hoists
+// it to the top of the compiled module, which is precisely why radioIngest.ts
+// resolves Firestore and Storage lazily instead of at import time: this file's
+// initializeApp() has not run yet when that module is first evaluated.
+export { onRadioDrop, seedRadioCatalogue } from './radioIngest'

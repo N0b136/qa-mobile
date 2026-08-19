@@ -83,6 +83,14 @@ Orgs: **Rangers of the Kingdom** (ranks Scout ep5, Watcher ep9), **Hearers of th
 - **Enter-to-send is gated on `(pointer: fine)`.** The touch keyboard's return key fires a real Enter in a textarea on BOTH Android and iOS — cancelling it leaves a guest unable to break a line at all.
 - **Rules suite: `cd rules-tests && npm install && npm test`** (emulator, needs Java; 44 cases). Reaches the staff cases the REST matrix structurally cannot, because `staff/{uid}` is unwritable by every client.
 
+**Questland Radio ingest**
+- **The catalogue is LIVE in Firestore `radioTracks`; `soundtrack.ts` is only the FALLBACK** and is consulted solely when the live one is empty (un-seeded, refused, or first run offline). `setCatalogue` IGNORES an empty array on purpose — a refused listener and an unseeded collection both arrive looking like "no songs", and blanking a playing radio on either is worse than keeping the shelf in hand.
+- **The ingest loop guard is a bill, not a bug.** `onRadioDrop` triggers on the bucket it also writes to; `routeDrop()` refuses anything outside `inbox/` and anything already in `inbox/_done/` before a byte is read. It lives in `radioEncode.ts` (Firebase-free) so `npm run radio:test` can prove it without a deploy. Never inline it back into the handler.
+- **Folder is the playlist, filename is the title — the title is NEVER re-derived from the slug.** That round trip is what produced "Aldric S Way" in the first bulk encode.
+- **A failed encode LEAVES the source in the inbox.** It is the only copy; a song swept into `_done/` after a failure is a song nobody knows is missing.
+- **Encoder settings are duplicated in two places on purpose** (`scripts/encode-songs.mjs` and `functions/src/radioEncode.ts`) and must stay identical, or a new song sits at a different loudness to the 43 and jumps out on shuffle.
+- **`getBlob()` is an XHR, so the bucket needs CORS** (`storage-cors.json`, applied with gcloud — neither the Firebase CLI nor the console can set it). With none, EVERY song fails to play and the SDK says `storage/unknown`, which reads as "check your connection". Cost an evening on 2026-08-19.
+
 **Build / tooling**
 - **PNG station masters are gitignored** — run `npm run stations` to regenerate the tracked webp. `park-map.png` (11 MB) is likewise optimized to webp before bundling; `vite.config.ts` `globIgnores` keeps the masters out of the 4 MB precache ceiling.
 - **VitePWA injects the guest manifest into EVERY html entry**, after every `transformIndexHtml` handler AND after `generateBundle` — the duplicate on `console.html` can only be stripped in `closeBundle`.
