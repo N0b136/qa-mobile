@@ -339,7 +339,7 @@ const LORE_TRACKS = ['trk-adventure-of-the-elm-instrumental', 'trk-anthem-of-the
 export const PLAYLISTS: RadioPlaylist[] = [
   {
     id: 'pl-woods',
-    name: 'The Whispering Woods',
+    name: 'Songs of the Kingdom',
     blurb: 'Gather every song of the park under one canopy.',
     trackIds: TRACKS.map((t) => t.id),
   },
