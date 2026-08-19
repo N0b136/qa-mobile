@@ -151,12 +151,20 @@ so there is nothing to install on a laptop:
 git clone https://github.com/N0b136/qa-mobile.git
 cd qa-mobile/functions && npm install
 npx firebase-tools login --no-localhost
-npx firebase-tools deploy --only functions,firestore:rules,storage:rules --project qa-mobile-36a9c
+npx firebase-tools deploy --only functions,firestore:rules,storage --project qa-mobile-36a9c
 ```
 
 That one deploy ships the ingest function AND both rulesets, which is why the
 rules never need pasting into a console — a partial paste cannot happen if
 nobody is pasting.
+
+**It is `storage`, not `storage:rules`.** Firestore has `rules` and `indexes`
+sub-targets so `firestore:rules` is real, but the part after `storage:` means a
+deploy TARGET — a named bucket alias from `firebase target:apply` — and this
+project has none. `--only storage:rules` sends the CLI hunting for a target
+called "rules" and it fails with "Could not find rules for the following storage
+targets: rules". The symmetry is a trap; the two products do not parse `--only`
+the same way.
 
 **If the deploy complains the trigger region does not match the bucket**, set
 `region` in the `onObjectFinalized` options in `functions/src/radioIngest.ts`
