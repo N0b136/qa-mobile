@@ -14,7 +14,7 @@
     "radio:test": "npm run build && node test/encode.test.mjs && node test/loads.test.mjs"
   },
   "dependencies": {
-    "ffmpeg-static": "^5.2.0",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "ffprobe-static": "^3.1.0",
     "firebase-admin": "^13.0.2",
     "firebase-functions": "^6.3.0"
