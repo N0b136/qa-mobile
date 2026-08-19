@@ -1,11 +1,11 @@
 import * as React from 'react';
 /**
  * Primary action control. Gold is reserved for `primary` — one per view.
- * @startingPoint section="Core" subtitle="Gold, outline, ghost and danger buttons in three sizes" viewport="700x180"
+ * @startingPoint section="Core" subtitle="Citrine, sapphire, ghost and ruby gem buttons in three sizes" viewport="700x180"
  */
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children?: React.ReactNode;
-  /** primary = gold metal; secondary = gold outline; ghost = text only; danger = ruby. */
+  /** primary = citrine gem; secondary = sapphire gem; ghost = text only; danger = ruby gem. */
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg';
   /** Lucide glyph name shown before the label. */

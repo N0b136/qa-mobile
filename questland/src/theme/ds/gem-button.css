@@ -1,0 +1,31 @@
+/* Gemstone button chassis — liquid-glass faceted jewel, tuned in guidelines/explorations/gemstone-buttons.html (emerald cut, blur 18px, facet 1.15, glow 1.7). */
+.btn-gem{position:relative;isolation:isolate;border-radius:0;border:1px solid rgba(255,255,255,.28);
+  color:#160F09;text-shadow:0 1px 3px rgba(255,255,255,.65);
+  clip-path:polygon(10px 0,calc(100% - 10px) 0,100% 10px,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0 calc(100% - 10px),0 10px);
+  transition:transform 90ms cubic-bezier(.4,0,.2,1),filter 160ms cubic-bezier(.4,0,.2,1),box-shadow 160ms cubic-bezier(.4,0,.2,1)}
+.btn-gem-sm{clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 8px,100% calc(100% - 8px),calc(100% - 8px) 100%,8px 100%,0 calc(100% - 8px),0 8px)}
+.btn-gem-lg{clip-path:polygon(12px 0,calc(100% - 12px) 0,100% 12px,100% calc(100% - 12px),calc(100% - 12px) 100%,12px 100%,0 calc(100% - 12px),0 12px)}
+.btn-gem::before{content:"";position:absolute;inset:0;clip-path:inherit;z-index:-1;
+  backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3);
+  background:
+    conic-gradient(from 210deg at 22% 30%, rgba(255,255,255,.39) 0 14deg, transparent 14deg 92deg, rgba(255,255,255,.11) 92deg 128deg, transparent 128deg),
+    conic-gradient(from 30deg at 74% 22%, rgba(255,255,255,.30) 0 20deg, transparent 20deg 100deg, rgba(0,0,0,.25) 100deg 150deg, transparent 150deg),
+    conic-gradient(from 120deg at 58% 78%, rgba(0,0,0,.32) 0 26deg, transparent 26deg 110deg, rgba(255,255,255,.16) 110deg 136deg, transparent 136deg),
+    linear-gradient(118deg, var(--g-hi) 0%, var(--g-hi) 18%, var(--g-mid) 18.2%, var(--g-mid) 41%, var(--g-lo) 41.2%, var(--g-lo) 62%, var(--g-mid2) 62.2%, var(--g-mid2) 83%, var(--g-hi2) 83.2%)}
+.btn-gem::after{content:"";position:absolute;inset:0;clip-path:inherit;z-index:-1;pointer-events:none;
+  background:linear-gradient(to bottom, rgba(255,255,255,.44), rgba(255,255,255,.07) 34%, transparent 55%, rgba(0,0,0,.25) 100%);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.14), inset 0 -8px 14px rgba(0,0,0,.3)}
+.btn-gem:hover{filter:brightness(1.15) saturate(1.15);box-shadow:0 0 0 1px rgba(255,255,255,.18),0 0 44px var(--g-glow),0 6px 18px rgba(0,0,0,.5)}
+.btn-gem:active{transform:translateY(1px);filter:brightness(.92)}
+.btn-gem-citrine{--g-hi:rgba(246,214,138,.78);--g-hi2:rgba(227,200,142,.62);--g-mid:rgba(192,154,91,.68);--g-mid2:rgba(168,120,72,.72);--g-lo:rgba(107,74,34,.78);--g-glow:rgba(246,214,138,.5)}
+.btn-gem-ruby{--g-hi:rgba(240,70,106,.72);--g-hi2:rgba(224,46,90,.6);--g-mid:rgba(176,27,52,.66);--g-mid2:rgba(142,20,40,.7);--g-lo:rgba(107,15,31,.74);--g-glow:rgba(240,70,106,.45)}
+.btn-gem-sapphire{--g-hi:rgba(78,143,224,.72);--g-hi2:rgba(60,120,205,.6);--g-mid:rgba(30,79,168,.66);--g-mid2:rgba(23,63,138,.7);--g-lo:rgba(16,42,94,.74);--g-glow:rgba(78,143,224,.45)}
+.btn-gem-emerald{--g-hi:rgba(110,160,110,.7);--g-hi2:rgba(90,140,92,.6);--g-mid:rgba(62,106,70,.66);--g-mid2:rgba(46,84,56,.7);--g-lo:rgba(30,58,38,.76);--g-glow:rgba(110,160,110,.4)}
+.btn-gem-sheen{position:absolute;inset:0;overflow:hidden;clip-path:inherit;pointer-events:none}
+.btn-gem-sheen::before{content:"";position:absolute;top:0;bottom:0;width:38%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.34) 50%,transparent);
+  animation:btn-gem-shimmer 4200ms cubic-bezier(.37,0,.63,1) infinite}
+@keyframes btn-gem-shimmer{0%,72%{transform:translateX(-130%) skewX(-18deg)}100%{transform:translateX(230%) skewX(-18deg)}}
+@media (prefers-reduced-motion:reduce){.btn-gem-sheen{display:none !important}}
+.btn-gem-cab{border-radius:50% !important;clip-path:none !important;padding:0}
+.btn-gem-cab::before,.btn-gem-cab::after,.btn-gem-cab .btn-gem-sheen{border-radius:50% !important;clip-path:none !important}

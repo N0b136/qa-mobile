@@ -35,3 +35,29 @@ connector. All mirrored files are verbatim remote content.
   regeneration prompts / pane previews; not needed to consume the components.
 - `thumbnail.html`, `.thumbnail`, `guidelines/explorations/` — project-tile
   chrome and early explorations.
+
+## Local delta — gemstone buttons (2026-08-19)
+
+Applied from the owner's `Questland_Adventures_Design_System.zip`
+(`design_handoff_gemstone_buttons/`), which post-dates the 2026-07-25 mirror:
+
+- **Added** `tokens/gem-button.css` (verbatim) and its `styles.css` import,
+  which loads after `motion.css` and before `base.css`.
+- **Replaced** `components/core/Button.jsx` + `.d.ts` and
+  `components/core/IconButton.jsx` + `.d.ts` (verbatim from the handoff).
+- `tokens/colors.css` was byte-identical in the handoff — the palette did not
+  move; only the button chassis is new.
+
+**`readme.md` is deliberately NOT edited** — it is verbatim remote content and
+should be regenerated upstream. Until it is, three of its rules are superseded
+for buttons only:
+
+| readme.md says | gemstone handoff says |
+| --- | --- |
+| "Ruby and Sapphire … never use them as button fills" | `secondary` is a sapphire gem, `danger` a ruby gem |
+| `--radius-sm 4px` (cards, **buttons**) | buttons are an emerald-cut octagon via `clip-path`, radius 0 |
+| Hover: gold fill `--gold-600` → `--gold-500` | Hover: `brightness(1.15) saturate(1.15)` + a gem-coloured glow |
+
+Everything else the readme states about buttons still holds: ALL CAPS labels,
+1–3 words, one primary per view, disabled renders as carved stone (never a
+dimmed gem), and press is down-and-darker with no scale.

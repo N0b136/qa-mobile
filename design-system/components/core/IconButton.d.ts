@@ -5,7 +5,7 @@ export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonEl
   /** Required accessible label — also used as the tooltip title. */
   label: string;
   size?: 'sm' | 'md' | 'lg';
-  /** ghost = transparent until hover; solid = gold. */
+  /** ghost = transparent until hover; solid = citrine cabochon gem. */
   variant?: 'ghost' | 'solid';
   disabled?: boolean;
 }

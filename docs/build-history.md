@@ -79,3 +79,56 @@ Wholesale naming change (user-directed). **Display names only — internal ids a
 **KNOWN STALE — the park map raster.** `content-intake/park-map.png` and the bundled `questland/public/assets/park-map.webp` have the old names *drawn into the art*: the title banner reads "The Wilds of Questia" and pin 21 reads "21. ELMROOT". Nothing in code can fix this; the map must be re-rendered or the two labels repainted, then `npm run optimize:map`. Flagged to the user 2026-08-18, not yet done.
 
 Verified: `npm run build` clean, `npm run fw:kat` 71/71, `gen-clip-map --check` clean, both intake JSONs parse, and the new Seal screenshotted at 375x812 on Home and `/quests/elm` (0 console errors, new names reading "Rangers of the Kingdom" / "Order of the Realm"). Note for whoever tunes this next: the pin reads as **gold linework** in the Seal because its black enamel sits within a few points of the stone ground behind it. The map gap above is still open.
+
+## 2026-08-19 — Gemstone buttons
+
+User supplied `Questland_Adventures_Design_System.zip`
+(`design_handoff_gemstone_buttons/`), a high-fidelity update replacing the
+flat-metal button fill with a faceted "liquid-glass gemstone" per action tier.
+Applied across the app and mirrored into `design-system/`.
+
+**What shipped**
+- `tokens/gem-button.css` added verbatim to `design-system/tokens/` and mirrored
+  to `questland/src/theme/ds/`, imported after `motion.css` in `styles.css`,
+  `main.tsx` and `console-main.tsx`. The handoff's `tokens/colors.css` was
+  byte-identical to the mirrored one — the palette did not move.
+- `questland/src/ui/Button.tsx`: `primary` → citrine gem + shimmer,
+  `secondary` → sapphire gem, `danger` → ruby gem, `ghost` unchanged,
+  `disabled` unchanged (carved stone, never a dimmed gem). Shape is an
+  emerald-cut octagon via `clip-path`, corner 8/10/12px by size.
+- `questland/src/ui/IconButton.tsx`: `variant="solid"` is a citrine cabochon
+  (`btn-gem-cab`, round); `ghost` unchanged.
+- `HelpScreen`'s hand-rolled `<a href="tel:">` (it mimics a secondary Button so
+  the device actually dials) carries `btn-gem btn-gem-sapphire` so it does not
+  strand a lone gold outline next to real sapphire buttons.
+
+**Design contract**
+- The stylesheet owns fill, border, radius/clip-path and every hover/press
+  state. Gem variants must not set `background`/`border`/`borderRadius`/
+  `boxShadow` inline — inline styles outrank the sheet and flatten the jewel.
+  This is why the gem branch of `Button` returns before the shared style spread
+  and why the sizes carry a `cls` (`btn-gem-sm`/`btn-gem-lg`) instead of a
+  radius. No call site was overriding those four properties (checked).
+- `ghost` keeps its JS hover/press because it has no jewel body; the gem
+  variants need no JS state at all (`:hover`/`:active` are pure CSS).
+- Shimmer runs on `primary` only, to keep the hierarchy, and is `display:none`
+  under `prefers-reduced-motion` (handled in the token file).
+
+**Deliberately NOT converted:** the 19 raw `<button>` elements — map pins,
+station/booth list rows, filter chips, tab strips, the toast dismiss ×, the
+TopBar crest tap target, the org picker cards and the "…see more" inline text.
+None is an action button; making a map pin a citrine jewel would break the
+one-primary-per-view rule.
+
+**`design-system/readme.md` was left verbatim** (it is mirrored remote content
+and should be regenerated upstream). The three button rules it now contradicts
+are tabulated in `design-system/MIRROR-NOTES.md` under "Local delta".
+
+**Verified:** `tsc --noEmit` clean; `npm run build` clean (PWA precache 139
+entries, unchanged). Screenshots at 375×812 of Welcome, Auth, Gate, Help,
+Party, Radio, Bookings, Check-in, and the console at 1440 — gems render on
+every filled variant, zero console errors.
+**NOT verified:** the signed-in console (staff auth is unavailable in this
+sandbox; the gem chassis is CSS-only and identical on both sides, but the
+signed-in surfaces were not photographed). Shimmer animation and hover/press
+states are static-frame screenshots only.

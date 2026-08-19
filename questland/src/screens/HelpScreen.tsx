@@ -15,7 +15,10 @@ const capsHeadingStyle: CSSProperties = {
 
 // Secondary-Button look, hand-rolled on a real <a href="tel:..."> so the
 // device actually dials (Button's `as="a"` variant has no href in its prop
-// type — see task notes). +1-555-0100 is a fictional demo number.
+// type — see task notes). It carries the `btn-gem` classes so it reads as the
+// same sapphire stone as a real secondary Button; the chassis owns fill,
+// border and radius, so none of those may be set here.
+// +1-555-0100 is a fictional demo number.
 const callLineStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -28,10 +31,6 @@ const callLineStyle: CSSProperties = {
   letterSpacing: 'var(--tracking-label)',
   textTransform: 'uppercase',
   textDecoration: 'none',
-  color: 'var(--text-gold)',
-  background: 'transparent',
-  border: '1px solid var(--border-strong)',
-  borderRadius: 'var(--radius-sm)',
 }
 
 export default function HelpScreen() {
@@ -147,7 +146,7 @@ export default function HelpScreen() {
               </>
             )}
 
-            <a href="tel:+15550100" style={callLineStyle}>
+            <a href="tel:+15550100" className="btn-gem btn-gem-sapphire" style={callLineStyle}>
               <Icon name="phone" size={18} />
               Call the Warden&apos;s line
             </a>
