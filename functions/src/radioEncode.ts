@@ -16,13 +16,22 @@ import { spawn } from 'node:child_process'
 import { createReadStream } from 'node:fs'
 import * as path from 'node:path'
 
-import ffmpegPath from 'ffmpeg-static'
+// @ffmpeg-installer, NOT ffmpeg-static. ffmpeg-static fetches its binary in a
+// postinstall script, so the build host must be able to reach GitHub at install
+// time — and when that fetch does not happen the failure is a runtime ENOENT on
+// spawn, long after any install step reported success. @ffmpeg-installer ships
+// the binary inside per-platform packages resolved as optional dependencies, so
+// a plain `npm install` either has it or fails loudly.
+//
+// ffprobe-static is kept: it carries its binaries in the tarball already and
+// declares no install script.
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg'
 import ffprobeStatic from 'ffprobe-static'
 
 export const BITRATE = '128k'
 export const LUFS = -16
 
-export const FFMPEG = ffmpegPath as string
+export const FFMPEG = ffmpegInstaller.path
 export const FFPROBE = ffprobeStatic.path
 
 export interface Measured {

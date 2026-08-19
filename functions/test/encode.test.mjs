@@ -15,6 +15,17 @@ const check = (name, got, want) => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}: ${JSON.stringify(got)}${ok ? '' : `  (want ${JSON.stringify(want)})`}`)
 }
 
+// Before anything else: is there actually an ffmpeg to run? A missing binary
+// otherwise surfaces as a raw ENOENT from deep inside measure(), which reads
+// like a code fault rather than an install one.
+console.log('— binaries —')
+check('ffmpeg binary is present', existsSync(FFMPEG), true)
+check('ffprobe binary is present', existsSync(FFPROBE), true)
+if (!existsSync(FFMPEG) || !existsSync(FFPROBE)) {
+  console.log('\nffmpeg/ffprobe missing — run `npm install` in functions/ and try again.')
+  process.exit(1)
+}
+
 console.log('— naming —')
 check('apostrophe survives the title', titleFrom("Aldric's Way.mp3"), "Aldric's Way")
 check('punctuation survives', titleFrom('Hear Us, We Hear — Instrumental.wav'), 'Hear Us, We Hear — Instrumental')
