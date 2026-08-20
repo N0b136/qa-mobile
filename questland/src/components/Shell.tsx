@@ -9,27 +9,28 @@ import { syncBookingReminders } from '../services/bookingService'
 import { startGuestSync } from '../services/cloudSync'
 import { enablePush, pushState } from '../services/pushService'
 
-// Chrome that fades in as the gate intro ends. TopBar/BottomNav are
-// `position: fixed` internally — their reveal wrapper must only ever set
-// opacity (a transform here would re-parent their fixed positioning and
-// break the layout). The Outlet wrapper is the one place a translateY rise
-// is safe, since its content is in-flow.
-// Fallback 4.55s = INTRO_SECONDS(5) - 0.45, matching the README offset.
-// NOTE: an animated `opacity` (with `fill: both` keeping it applied after
-// the animation ends) makes the wrapper form its own stacking context, so
-// TopBar/BottomNav's own `z-index: 50` resolves *inside* this wrapper rather
-// than against the root. Without an explicit z-index here the wrapper is a
-// static ~0-stacking context, which sits BELOW the Outlet wrapper's z-index
-// 10 — content would then paint over the fixed bars. `position: relative` +
-// `zIndex: 50` puts the wrapper's stacking context back above the Outlet's.
-// `position: relative` is safe (doesn't re-parent the fixed child) — only
-// transform/filter/perspective/contain/will-change do that.
-const fadeInStyle = {
-  position: 'relative',
-  zIndex: 50,
-  opacity: 0,
-  animation: 'qa-fade-in var(--dur-reveal) var(--ease-out-door) var(--intro-ui-delay, 4.55s) both',
-} as const
+// THE FIXED CHROME HANGS OFF THE ROOT, BARE. TopBar, MiniPlayer and BottomNav
+// are each `position: fixed` with `z-index: 50`, and they are rendered here as
+// direct children on purpose: no wrapper, no transform, no animated ancestor.
+//
+// These used to share one `<div>` carrying the gate-intro fade. Per spec that
+// is harmless — only transform/filter/perspective/contain/will-change make an
+// ancestor the containing block for a fixed child — but WebKit only composites
+// a fixed element as VIEWPORT-CONSTRAINED (i.e. genuinely pinned, repainted
+// independently of the scroll) while it can hoist it out of the scrolled
+// content layer. An ancestor carrying an animation — including one that has
+// already finished but is held by `fill: both` — gets its own accelerated
+// layer, the fixed bars get painted into it, and on an iPhone they then ride
+// the scroll and only snap back to the viewport when it comes to rest. On a
+// short screen nobody notices; on the Radio list (43 songs) the nav bar walks
+// up into the middle of the screen. Reported from real hardware 2026-08-20.
+//
+// So the reveal animation lives on each bar itself, keyed off the same
+// `--intro-ui-delay` GateIntro publishes. A bar animating its own opacity is
+// still viewport-constrained — it is the ANCESTOR that must stay plain.
+// Without the wrapper their `z-index: 50` also resolves against the root
+// stacking context, which is where the documented chain (video 0 < scrim 1 <
+// Outlet 10 < bars 50 < shield 70 < toast 90) always meant it to resolve.
 
 export default function Shell() {
   const user = currentUser()
@@ -51,9 +52,7 @@ export default function Shell() {
   return (
     <>
       <GateIntro />
-      <div style={fadeInStyle}>
-        <TopBar />
-      </div>
+      <TopBar />
       <div
         style={{
           position: 'relative',
@@ -73,12 +72,10 @@ export default function Shell() {
       >
         <Outlet />
       </div>
-      <div style={fadeInStyle}>
-        {/* Fixed like the nav and stacked in the same z-50 band, so it lives in
-            this wrapper's stacking context alongside it. */}
-        <MiniPlayer />
-        <BottomNav />
-      </div>
+      {/* Fixed and stacked in the same z-50 band as the nav, and — like it —
+          a bare child of the root. See the note above. */}
+      <MiniPlayer />
+      <BottomNav />
     </>
   )
 }

@@ -30,6 +30,16 @@ function setVars(secs: number) {
   root.setProperty('--intro-scrim-delay', `${Math.max(0, secs - 0.8)}s`)
 }
 
+// The chrome reveal is animated on each fixed bar rather than on a shared
+// wrapper (see Shell.tsx), so `--intro-ui-delay` is read by bars that mount
+// LATER too — the MiniPlayer appears the moment a guest presses play. Left
+// standing at 4.55s it would make those sit invisible for four and a half
+// seconds, waiting out an intro that finished minutes ago. Clearing it is
+// safe from this point on: the bars up since mount have already run their
+// 720ms reveal, and `fill: both` holds them at the end state, so restarting
+// a zero-delay animation past its own duration changes nothing on screen.
+const REVEAL_SETTLED_MS = (INTRO_SECONDS + 0.5) * 1000
+
 export default function GateIntro() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const [phase, setPhase] = useState<'intro' | 'done'>('intro')
@@ -43,6 +53,17 @@ export default function GateIntro() {
   // `, Ns` fallback — the real delay is in place before the browser paints.
   useLayoutEffect(() => {
     setVars(skip ? 0 : INTRO_SECONDS)
+  }, [skip])
+
+  // Runs off the clock, not off the video: the bars' reveal is a CSS animation
+  // started at mount with a fixed delay, so it lands at the same moment however
+  // the playback went.
+  useEffect(() => {
+    if (skip) return
+    const timer = window.setTimeout(() => {
+      document.documentElement.style.setProperty('--intro-ui-delay', '0s')
+    }, REVEAL_SETTLED_MS)
+    return () => window.clearTimeout(timer)
   }, [skip])
 
   useEffect(() => {

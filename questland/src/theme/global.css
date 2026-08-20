@@ -410,6 +410,12 @@ a.card:hover,
     visibility: hidden;
   }
 }
+/* The gate-intro reveal for the fixed chrome (TopBar, BottomNav). It is set on
+   each bar ITSELF, never on a shared wrapper: an ancestor holding an animation
+   — even a finished one, kept by `fill: both` — takes an accelerated layer in
+   WebKit and the fixed bar gets painted into it, at which point it scrolls with
+   the page on an iPhone. A fixed element animating its own opacity stays
+   viewport-constrained. See the note at the top of Shell.tsx. */
 @keyframes qa-fade-in {
   from {
     opacity: 0;
@@ -448,7 +454,9 @@ a.card:hover,
 /* MiniPlayer entrance — fade + bottom nudge. The nudge rides on margin-bottom
    (on a bottom-anchored fixed element a negative bottom margin shifts it DOWN),
    never transform: the bar sits in the fixed-bars band, where a transform
-   would become the containing block for fixed descendants (see qa-ui-rise). */
+   would become the containing block for fixed descendants (see qa-ui-rise) —
+   and, on iOS, would cost the bar its viewport-fixed compositing so it rides
+   the scroll instead of holding the bottom. See Shell.tsx. */
 @keyframes qa-miniplayer-in {
   from {
     opacity: 0;

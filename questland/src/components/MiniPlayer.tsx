@@ -70,8 +70,13 @@ function MiniPlayerBar({ radio, track }: { radio: RadioState; track: RadioTrack 
         background: 'var(--stone-950)',
         borderTop: '1px solid var(--border-hairline)',
         cursor: 'pointer',
-        // Fade + bottom nudge only — margin-bottom, never transform.
-        animation: 'qa-miniplayer-in var(--dur-fast) var(--ease-standard) both',
+        // Fade + bottom nudge only — margin-bottom, never transform. The
+        // delay is the gate intro's: this bar can be up at app start (a
+        // restored session mounts it paused), and GateIntro returns the var to
+        // 0s once the reveal is over, so a bar that appears when a guest
+        // presses play still slides straight in.
+        animation:
+          'qa-miniplayer-in var(--dur-fast) var(--ease-standard) var(--intro-ui-delay, 4.55s) both',
       }}
     >
       {/* 2px gold progress hairline along the top edge. */}
