@@ -45,13 +45,22 @@ export default function BottomNav() {
       style={{
         position: 'fixed',
         bottom: 0,
-        left: '50%',
-        transform: 'translateX(-50%)',
+        // Centred on inset + auto margins, NEVER translateX, and the intro
+        // reveal is animated HERE rather than on a wrapper — see the
+        // fixed-chrome note in Shell.tsx. A transform on this bar, or an
+        // animation on anything above it, costs it viewport-fixed compositing
+        // on iOS and it rides the scroll instead of holding the bottom.
+        left: 0,
+        right: 0,
+        marginInline: 'auto',
         width: '100%',
         maxWidth: 480,
         paddingBottom: 'var(--safe-bottom)',
         background: 'var(--stone-950)',
         zIndex: 50,
+        // Fallback 4.55s = INTRO_SECONDS(5) - 0.45; GateIntro drops it to 0s
+        // once the reveal has run, so nothing mounting later waits it out.
+        animation: 'qa-fade-in var(--dur-reveal) var(--ease-out-door) var(--intro-ui-delay, 4.55s) both',
       }}
     >
       <TabBar items={ITEMS} value={activeId} onChange={navigate} />

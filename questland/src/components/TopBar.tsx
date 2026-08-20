@@ -30,8 +30,14 @@ export default function TopBar() {
       style={{
         position: 'fixed',
         top: 'var(--install-banner-height)',
-        left: '50%',
-        transform: 'translateX(-50%)',
+        // Centred on inset + auto margins, NEVER translateX, and the intro
+        // reveal is animated HERE rather than on a wrapper. See the
+        // fixed-chrome note in Shell.tsx: on iOS both a transform and an
+        // animated ancestor cost this bar its viewport-fixed compositing, and
+        // it then scrolls away with the page.
+        left: 0,
+        right: 0,
+        marginInline: 'auto',
         width: '100%',
         maxWidth: 480,
         height: 'calc(var(--topbar-height) + var(--chrome-safe-top))',
@@ -41,6 +47,9 @@ export default function TopBar() {
         backdropFilter: 'var(--blur-veil)',
         borderBottom: '1px solid var(--border-hairline)',
         zIndex: 50,
+        // Fallback 4.55s = INTRO_SECONDS(5) - 0.45; GateIntro drops it to 0s
+        // once the reveal has run, so nothing mounting later waits it out.
+        animation: 'qa-fade-in var(--dur-reveal) var(--ease-out-door) var(--intro-ui-delay, 4.55s) both',
       }}
     >
       <button
