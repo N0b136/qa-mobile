@@ -223,4 +223,4 @@ async function pruneDead(
 // it to the top of the compiled module, which is precisely why radioIngest.ts
 // resolves Firestore and Storage lazily instead of at import time: this file's
 // initializeApp() has not run yet when that module is first evaluated.
-export { onRadioDrop, seedRadioCatalogue } from './radioIngest'
+export { onRadioDrop } from './radioIngest'
