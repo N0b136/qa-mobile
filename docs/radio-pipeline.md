@@ -171,17 +171,24 @@ the same way.
 to the bucket's location (Firebase console → Storage, shown beside the bucket
 name), then deploy again.
 
-Then seed the 43 songs that predate the pipeline. The deploy prints the URL for
-`seedRadioCatalogue`; open it once in a browser. It writes the catalogue with
-the curated titles and shelves, and **refuses if the collection already holds
-anything**, so it cannot double-write.
+### Seeding the original 43 — done once, on 2026-08-21
 
-Finally, delete the seeder — an endpoint that writes Firestore has no business
-outliving its one job:
+The catalogue was seeded by a one-shot `seedRadioCatalogue` HTTP function that
+wrote the 43 songs predating the pipeline, with the curated titles and shelves.
+**That function has been removed and is no longer deployed**, which is why the
+steps below are history rather than instructions.
 
-1. Remove `seedRadioCatalogue` from the export line at the foot of
-   `functions/src/index.ts`
-2. `npx firebase-tools deploy --only functions --project qa-mobile-36a9c`
+It refused to run against a non-empty collection, so it could not double-write.
+That guard was the only thing making an open endpoint acceptable, and it is a
+thin one: an unauthenticated endpoint that writes Firestore has no business
+outliving its single job, so it did not.
+
+`functions/src/radioSeed.json` is deliberately KEPT even though nothing imports
+it. It is the recovery copy of the original 43 — the hand-fixed apostrophes and
+the shelf assignments — and re-deriving it from filenames would undo that work.
+If `radioTracks` ever has to be rebuilt from scratch, restore the seeder from
+git history (`git log -- functions/src/radioIngest.ts`), deploy it, call it
+once, and remove it again.
 
 Last, create the inbox folders in the Firebase console under Storage:
 `inbox/valor/`, `inbox/wilds/`, `inbox/lore/`, `inbox/kingdom/`.

@@ -26,7 +26,6 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 
 import { onObjectFinalized } from 'firebase-functions/v2/storage'
-import { onRequest } from 'firebase-functions/v2/https'
 import * as logger from 'firebase-functions/logger'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
@@ -39,7 +38,6 @@ import {
   routeDrop,
   sha256,
 } from './radioEncode'
-import seed from './radioSeed.json'
 
 // ── Caps. Every one of these exists so a bad drop fails fast and cheap ───────
 
@@ -180,39 +178,3 @@ export const onRadioDrop = onObjectFinalized(
     }
   }
 )
-
-// ── One-shot seeder ──────────────────────────────────────────────────────────
-//
-// Writes the 43 songs that predate this pipeline, with the titles and shelf
-// assignments as curated — re-deriving them from filenames would undo every
-// apostrophe fixed by hand.
-//
-// It REFUSES once the collection has anything in it, which is what makes an
-// open endpoint acceptable here: it can only ever write one known, fixed set of
-// documents, exactly once. Delete this export after it has run.
-
-export const seedRadioCatalogue = onRequest(async (req, res) => {
-  const existing = await db().collection('radioTracks').limit(1).get()
-  if (!existing.empty) {
-    res.status(409).send('Catalogue is not empty — refusing to seed. Delete this function.\n')
-    return
-  }
-  const entries = Object.entries(seed as Record<string, {
-    title: string
-    duration: number
-    path: string
-    playlistIds: string[]
-  }>)
-  const batch = db().batch()
-  for (const [id, t] of entries) {
-    batch.set(db().collection('radioTracks').doc(id), {
-      ...t,
-      unsorted: t.playlistIds.length === 1,
-      addedAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-    })
-  }
-  await batch.commit()
-  logger.info(`radio seed: wrote ${entries.length} tracks`)
-  res.status(200).send(`Seeded ${entries.length} tracks. Now delete this function.\n`)
-})

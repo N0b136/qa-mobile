@@ -10,7 +10,7 @@
 // tsc is perfectly happy with it, so only actually loading the bundle catches it.
 import { spawnSync } from 'node:child_process'
 
-const EXPECTED = ['onSosMessage', 'onRadioDrop', 'seedRadioCatalogue']
+const EXPECTED = ['onSosMessage', 'onRadioDrop']
 
 const res = spawnSync(
   process.execPath,
