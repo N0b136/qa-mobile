@@ -12,15 +12,18 @@ const capsHeadingStyle: CSSProperties = {
 }
 
 /** Which surface the console is showing. Owned by ConsoleScreen, named here. */
-export type ConsoleView = 'console' | 'manager'
+export type ConsoleView = 'console' | 'manager' | 'qaios'
 
-// Both glyphs come from the DS readme's preferred vocabulary rather than the
+// The glyphs come from the DS readme's preferred vocabulary rather than the
 // dashboard/chart icons a back office usually reaches for: `scroll-text` is the
 // working board (calls, sends, records), and `key-round` says what the second
 // tab actually is — a surface behind a lock, drawn only for a manager.
 const VIEWS: TabItem[] = [
   { id: 'console', label: 'Back Office', icon: 'scroll-text' },
   { id: 'manager', label: 'Manager', icon: 'key-round' },
+  // `library` rather than a brain or a database: QAios is the company's written
+  // record — the board, the ledger, the pulse — not a machine to be administered.
+  { id: 'qaios', label: 'QAios', icon: 'library' },
 ]
 
 interface Props {
@@ -28,7 +31,20 @@ interface Props {
   onSignOut: () => void
   view: ConsoleView
   onView: (view: ConsoleView) => void
-  /** Draws the Manager tab. False for every staff account without a managers doc. */
+  /**
+   * Draws the Manager AND QAios tabs. False for every staff account without a
+   * managers doc.
+   *
+   * QAios shares the manager grant rather than carrying one of its own, and that
+   * is a v1 decision worth stating: the vault roster is a SEPARATE list keyed by
+   * a Google uid, which this console cannot read (see QaiosPanel). With no way
+   * to ask "is this person on the vault roster", the honest choices were to show
+   * the tab to everyone and let most staff hit a wall, or to reuse the closest
+   * grant we do have. A Guide who taps through to a refusal learns nothing and
+   * distrusts the console; the manager grant is currently the same two people as
+   * the vault roster. When WS-029 makes the two identities one, this gate should
+   * be replaced by the real question rather than widened.
+   */
   canManage: boolean
 }
 
