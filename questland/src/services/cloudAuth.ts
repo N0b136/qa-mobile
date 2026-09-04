@@ -161,42 +161,39 @@ function isStandalone(): boolean {
 }
 
 /**
- * Sign in with Google — REDIRECT when installed, popup only in a browser tab.
+ * Sign in with Google — POPUP everywhere, redirect only if the popup is refused.
  *
- * The first version tried the popup everywhere and fell back to a redirect on
- * `auth/popup-blocked`. That fallback never fired, because the popup is not
- * blocked in an installed app: it OPENS. What it cannot do is talk back. The
- * auth handler finishes by posting the credential to `window.opener`, and a
- * window opened from a standalone PWA has no opener, so the handler renders as
- * an ordinary top-level page and says "The requested action is invalid." No
- * error is ever thrown, nothing falls back, and the person is left staring at
- * a white page on firebaseapp.com carrying `authType=signInViaPopup`.
+ * THE HISTORY MATTERS, because this file has now held two wrong explanations of
+ * the same symptom and the second one was mine.
  *
- * So the surface decides the method up front instead of waiting for a failure
- * that does not arrive. Installed → redirect, and the answer comes back on the
- * next page load through `googleRedirectResult`. In a tab → popup, which keeps
- * the person on the page they started from.
+ * The installed console first failed with "The requested action is invalid" on
+ * a handler URL carrying `authType=signInViaPopup`. I read that as the popup
+ * having no `window.opener` to post the credential back through, and switched
+ * installed apps to redirect. That was a guess dressed as a diagnosis. The
+ * authorised-domains entry for this host was wrong at the time — a lowercase
+ * `o` where the hostname carries a zero — and an unauthorised domain produces
+ * that exact page. The popup was almost certainly never the problem.
+ *
+ * The redirect then failed for a real and structural reason: the auth handler
+ * is served from `firebaseapp.com` while this app is served from another
+ * origin, and a browser partitioning third-party storage does not let the
+ * returning session out of that partition. Confirmed in the field, not guessed
+ * — `googleRedirectResult` reported it.
+ *
+ * So: popup, on every surface, now that the domain it needs is spelled
+ * correctly. Redirect stays only as the fallback for a genuinely refused popup,
+ * where it is the sole remaining option even though we now know it does not
+ * survive this deployment — and it reports itself clearly when it does not.
+ *
+ * If the popup fails again in an installed app, THEN the opener theory was
+ * right after all, and the cure is not in this file: it is serving the auth
+ * handler from this app's own origin.
  */
 export async function cloudSignInWithGoogle(): Promise<GoogleSignIn> {
   const fb = await ensureFirebaseWithin(AUTH_TIMEOUT_MS)
   if (!fb) return { ok: false, kind: 'unavailable', code: 'firebase-unreachable' }
   const { GoogleAuthProvider, signInWithPopup, signInWithRedirect } = await import('firebase/auth')
   const provider = new GoogleAuthProvider()
-
-  if (isStandalone()) {
-    try {
-      markRedirectStarted()
-      await signInWithRedirect(fb.auth, provider)
-      return { ok: false, kind: 'redirecting' }
-    } catch (err) {
-      const code = errorCode(err)
-      console.error('[console] Google redirect failed', code, err)
-      const message = rejection(code)
-      return message
-        ? { ok: false, kind: 'rejected', message }
-        : { ok: false, kind: 'unavailable', code: code || 'unknown' }
-    }
-  }
 
   try {
     const cred = await signInWithPopup(fb.auth, provider)
@@ -210,6 +207,7 @@ export async function cloudSignInWithGoogle(): Promise<GoogleSignIn> {
     }
     if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
       try {
+        markRedirectStarted()
         await signInWithRedirect(fb.auth, provider)
         return { ok: false, kind: 'redirecting' }
       } catch (redirectErr) {
@@ -221,9 +219,23 @@ export async function cloudSignInWithGoogle(): Promise<GoogleSignIn> {
           : { ok: false, kind: 'unavailable', code: redirectCode || 'unknown' }
       }
     }
-    console.error('[console] Google sign-in failed', code, err)
+    console.error('[console] Google sign-in failed', code, 'standalone:', isStandalone(), err)
     const message = rejection(code)
-    return message ? { ok: false, kind: 'rejected', message } : { ok: false, kind: 'unavailable', code: code || 'unknown' }
+    if (message) return { ok: false, kind: 'rejected', message }
+    // A popup failure in an INSTALLED app is the one case where the answer is
+    // not in this codebase, so say so rather than offering a retry that cannot
+    // work: it means the popup really cannot post its credential back, and the
+    // cure is serving the auth handler from this app's own origin.
+    if (isStandalone()) {
+      return {
+        ok: false,
+        kind: 'rejected',
+        message:
+          `Google sign-in cannot complete inside the installed app (${code || 'no code'}). ` +
+          'Open the console in a browser tab instead, and tell Ryan the sign-in handler needs to move to the app’s own domain.',
+      }
+    }
+    return { ok: false, kind: 'unavailable', code: code || 'unknown' }
   }
 }
 
