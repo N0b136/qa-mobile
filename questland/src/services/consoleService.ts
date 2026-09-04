@@ -166,9 +166,17 @@ export async function signInStaffWithGoogle(): Promise<StaffSignIn> {
  * happened.
  */
 export async function completeGoogleSignIn(): Promise<StaffSignIn | null> {
-  const result = await googleRedirectResult()
-  if (!result) return null
-  return admit(result.uid)
+  const outcome = await googleRedirectResult()
+  if (outcome.kind === 'none') return null
+  if (outcome.kind === 'lost') {
+    return {
+      ok: false,
+      error:
+        `Google sent you back without a session (${outcome.code}). ` +
+        'This is the sign-in handler being on a different domain than the console, not your account. Use your password below.',
+    }
+  }
+  return admit(outcome.uid)
 }
 
 export async function signOutStaff(): Promise<void> {
