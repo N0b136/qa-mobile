@@ -134,7 +134,12 @@ async function admit(uid: string): Promise<StaffSignIn> {
 export async function signInStaffWithGoogle(): Promise<StaffSignIn> {
   const auth = await cloudSignInWithGoogle()
   if (!auth.ok) {
-    if (auth.kind === 'cancelled' || auth.kind === 'redirecting') return { ok: false, error: '' }
+    // Redirecting: the page is navigating away, so anything set here is thrown
+    // away with the document. Cancelled: the person closed the chooser — not an
+    // error, but it must not look identical to a refusal that scrolled off
+    // screen, so it says something quiet rather than nothing at all.
+    if (auth.kind === 'redirecting') return { ok: false, error: '' }
+    if (auth.kind === 'cancelled') return { ok: false, error: 'Google sign-in was cancelled.' }
     if (auth.kind === 'rejected') return { ok: false, error: auth.message }
     // The code rides along in the message. It is not decoration: without it a
     // failure in the field is a person saying "it does not work" and nobody

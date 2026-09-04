@@ -123,6 +123,35 @@ export default function StaffGate({ onSignedIn }: Props) {
             Sign in with Google
           </Button>
 
+          {/* THE ANSWER GOES WHERE THE QUESTION WAS ASKED.
+              This block used to sit inside the form, below the email and
+              password fields — so on a phone you tapped Google at the top of the
+              card and the reply rendered below the fold. A refusal you cannot
+              see is indistinguishable from nothing happening, which is exactly
+              how it was reported: "it takes me back to sign in without signing
+              in". One region serves both doors, and it sits where the eye
+              already is. */}
+          {error ? (
+            <p
+              role="alert"
+              style={{ color: 'var(--status-danger)', marginTop: 'var(--space-md)', fontSize: 14 }}
+            >
+              {error}
+            </p>
+          ) : null}
+
+          {/* Shown only when Firebase knows this person but the roll does not.
+              It is their own identifier handed back to them, and it is exactly
+              what a Warden needs to add them: without it, moving an account to
+              Google means hunting a uid in the Firebase console that the app
+              which just refused you could have simply told you. */}
+          {strandedUid ? (
+            <p className="console-gate__uid">
+              For the Warden adding this account to the roll:
+              <code>{strandedUid}</code>
+            </p>
+          ) : null}
+
           <div className="console-gate__or" role="separator">
             <span>or</span>
           </div>
@@ -157,23 +186,6 @@ export default function StaffGate({ onSignedIn }: Props) {
               }}
             />
 
-            {error ? (
-              <p style={{ color: 'var(--status-danger)', marginTop: 'var(--space-md)', fontSize: 14 }}>
-                {error}
-              </p>
-            ) : null}
-
-            {/* Shown only when Firebase knows this person but the roll does not.
-                It is their own identifier handed back to them, and it is exactly
-                what a Warden needs to add them: without it, moving an account to
-                Google means hunting a uid in the Firebase console that the app
-                which just refused you could have simply told you. */}
-            {strandedUid ? (
-              <p className="console-gate__uid">
-                For the Warden adding this account to the roll:
-                <code>{strandedUid}</code>
-              </p>
-            ) : null}
 
             <Button type="submit" fullWidth disabled={busy} style={{ marginTop: 'var(--space-lg)' }}>
               {busy ? 'Checking the roll…' : 'Open the Back Office'}
