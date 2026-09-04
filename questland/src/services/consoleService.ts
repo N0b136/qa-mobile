@@ -136,7 +136,13 @@ export async function signInStaffWithGoogle(): Promise<StaffSignIn> {
   if (!auth.ok) {
     if (auth.kind === 'cancelled' || auth.kind === 'redirecting') return { ok: false, error: '' }
     if (auth.kind === 'rejected') return { ok: false, error: auth.message }
-    return { ok: false, error: 'Could not reach Google sign-in. Check the connection, then try again.' }
+    // The code rides along in the message. It is not decoration: without it a
+    // failure in the field is a person saying "it does not work" and nobody
+    // able to say more.
+    return {
+      ok: false,
+      error: `Could not complete Google sign-in (${auth.code}). Use your password below.`,
+    }
   }
   return admit(auth.uid)
 }
