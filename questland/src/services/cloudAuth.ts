@@ -185,6 +185,7 @@ export async function cloudSignInWithGoogle(): Promise<GoogleSignIn> {
 
   if (isStandalone()) {
     try {
+      markRedirectStarted()
       await signInWithRedirect(fb.auth, provider)
       return { ok: false, kind: 'redirecting' }
     } catch (err) {
@@ -227,24 +228,93 @@ export async function cloudSignInWithGoogle(): Promise<GoogleSignIn> {
 }
 
 /**
- * The answer to a redirect started on the previous page load, or null when this
- * load is not the tail of one. Safe to call on every mount — Firebase returns
- * null rather than throwing when there is no redirect in flight.
+ * A breadcrumb saying "this document sent someone to Google and expects them
+ * back", written before the redirect and read once on the next load.
+ *
+ * It exists so the return leg can tell three situations apart that otherwise
+ * all look like an ordinary page load: nobody signed in, somebody came back
+ * signed in, and somebody came back with nothing to show for it. Without it the
+ * third case — the interesting one — is silent.
+ *
+ * sessionStorage, not localStorage: it is scoped to this tab and dies with it,
+ * so a stale breadcrumb cannot outlive the attempt that wrote it.
  */
-export async function googleRedirectResult(): Promise<{ uid: string; email: string } | null> {
+const REDIRECT_FLAG = 'ql:console:googleRedirect'
+
+function markRedirectStarted(): void {
+  try {
+    sessionStorage.setItem(REDIRECT_FLAG, '1')
+  } catch {
+    // Private mode, storage disabled — the flow still works, the return leg is
+    // just back to being unable to explain itself.
+  }
+}
+
+function takeRedirectStarted(): boolean {
+  try {
+    const started = sessionStorage.getItem(REDIRECT_FLAG) === '1'
+    sessionStorage.removeItem(REDIRECT_FLAG)
+    return started
+  } catch {
+    return false
+  }
+}
+
+export type RedirectOutcome =
+  /** This load is not the tail of a redirect. The ordinary case. */
+  | { kind: 'none' }
+  | { kind: 'signed-in'; uid: string; email: string }
+  /** We sent them to Google and they came back with no session. */
+  | { kind: 'lost'; code: string }
+
+/**
+ * The answer to a redirect started on the previous page load.
+ *
+ * getRedirectResult is NOT sufficient on its own, and relying on it alone was a
+ * bug: it returns null in several ordinary situations where the person IS
+ * signed in — the SDK having already consumed the result being the usual one —
+ * and a gate that trusts it blindly shows the sign-in form to somebody who just
+ * signed in. So the credential is preferred when offered, and the live auth
+ * session is the fallback, which is what actually decides whether sign-in
+ * worked.
+ *
+ * The live session is only consulted when THIS gate started a redirect. A guest
+ * signed into the phone app on this same origin must never be picked up here
+ * and run through the staff roll, because failing that check signs them out —
+ * out of the guest app too. The breadcrumb keeps this to people who asked.
+ */
+export async function googleRedirectResult(): Promise<RedirectOutcome> {
+  const started = takeRedirectStarted()
   const fb = await ensureFirebaseWithin(AUTH_TIMEOUT_MS)
-  if (!fb) return null
+  if (!fb) return started ? { kind: 'lost', code: 'firebase-unreachable' } : { kind: 'none' }
+
+  let code = ''
   try {
     const { getRedirectResult } = await import('firebase/auth')
     const cred = await getRedirectResult(fb.auth)
-    return cred ? { uid: cred.user.uid, email: cred.user.email ?? '' } : null
+    if (cred) return { kind: 'signed-in', uid: cred.user.uid, email: cred.user.email ?? '' }
   } catch (err) {
-    // A redirect that comes back broken is the hardest of these to see: the
-    // page simply reloads signed out, with nothing on screen to say a sign-in
-    // was ever attempted. At minimum it must leave a trace.
-    console.error('[console] Google redirect result failed', errorCode(err), err)
-    return null
+    code = errorCode(err) || 'unknown'
+    console.error('[console] Google redirect result failed', code, err)
   }
+
+  // No credential handed back. If Firebase nonetheless holds a real session,
+  // the sign-in worked and only the reporting of it did not.
+  const user = fb.auth.currentUser
+  if (started && user && !user.isAnonymous) {
+    return { kind: 'signed-in', uid: user.uid, email: user.email ?? '' }
+  }
+
+  if (!started) return { kind: 'none' }
+
+  // Sent to Google, came back with nothing. On this deployment the likeliest
+  // cause is structural rather than a mistake: the auth handler lives on
+  // firebaseapp.com while the app is served from another origin, and a browser
+  // partitioning third-party storage will not let the returning session out of
+  // that partition. Serving the auth handler from this app's own origin is the
+  // only real cure. Say it rather than showing an empty sign-in form.
+  console.error('[console] Google redirect returned with no session', code || 'no-code')
+  return { kind: 'lost', code: code || 'no-session-returned' }
 }
 
 /** Drops the Firebase session. Signed out means signed out — nothing replaces it. */
