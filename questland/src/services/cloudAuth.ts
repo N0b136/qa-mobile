@@ -290,19 +290,48 @@ export interface StaffDoc {
 export type StaffLookup =
   | { ok: true; staff: StaffDoc }
   | { ok: false; kind: 'not-staff' }
-  | { ok: false; kind: 'unavailable' }
+  | { ok: false; kind: 'unavailable'; code: string }
 
 /**
  * Reads staff/{uid}. Missing doc means "signed in, but not on the roster" —
  * distinct from a read we could not perform at all, which must not be reported
  * to someone as being off the roster.
+ *
+ * `fresh` asks the SERVER and refuses to answer from the local cache, and the
+ * sign-in path passes it. Two reasons:
+ *
+ * · This console keeps a persistent Firestore cache, which remembers that a
+ *   document does NOT exist just as firmly as that it does. Someone signing in
+ *   with Google before a Warden has added them caches a negative for their own
+ *   staff doc — and then the roll is updated and the app goes on reading its own
+ *   stale "no". That is not hypothetical; it is the shape of the migration this
+ *   change is part of, where every person tries once BEFORE being added.
+ * · More generally: whether you are staff is an authorisation input, and an
+ *   authorisation input should not be answered out of a cache the client holds.
+ *
+ * revalidateStaff deliberately does NOT pass it. That path exists to keep a
+ * signed-in console working on its warm mirrors in a dead spot, and demanding
+ * the server there would sign people out for being underground.
  */
-export async function fetchStaff(uid: string): Promise<StaffLookup> {
+export async function fetchStaff(uid: string, opts?: { fresh?: boolean }): Promise<StaffLookup> {
   const fb = await ensureFirebaseWithin(AUTH_TIMEOUT_MS)
-  if (!fb) return { ok: false, kind: 'unavailable' }
+  if (!fb) return { ok: false, kind: 'unavailable', code: 'firebase-unreachable' }
   try {
-    const { doc, getDoc } = await import('firebase/firestore')
-    const snap = await getDoc(doc(fb.db, 'staff', uid))
+    const { doc, getDoc, getDocFromServer } = await import('firebase/firestore')
+    const ref = doc(fb.db, 'staff', uid)
+    let snap
+    if (opts?.fresh) {
+      try {
+        snap = await getDocFromServer(ref)
+      } catch (serverErr) {
+        // Genuinely offline is not the same as refused. Fall back to whatever
+        // the cache knows and let the caller treat a miss as "could not ask".
+        console.warn('[console] staff roll: server read failed, falling back to cache', serverErr)
+        snap = await getDoc(ref)
+      }
+    } else {
+      snap = await getDoc(ref)
+    }
     if (!snap.exists()) return { ok: false, kind: 'not-staff' }
     const data = snap.data() as Partial<StaffDoc>
     const staff: StaffDoc = {
@@ -312,8 +341,13 @@ export async function fetchStaff(uid: string): Promise<StaffLookup> {
     }
     if (data.personaId) staff.personaId = data.personaId
     return { ok: true, staff }
-  } catch {
-    return { ok: false, kind: 'unavailable' }
+  } catch (err) {
+    // Swallowing this is what turned a permission or connectivity failure into
+    // an unexplained "could not reach the guild roll" three times over. The
+    // code travels with the result now.
+    const code = errorCode(err) || 'unknown'
+    console.error('[console] staff roll read failed', code, err)
+    return { ok: false, kind: 'unavailable', code }
   }
 }
 
