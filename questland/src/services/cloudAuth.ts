@@ -124,19 +124,57 @@ const GOOGLE_REJECTIONS: Record<string, string> = {
 }
 
 /**
- * Sign in with Google, popup first and redirect as the fallback.
+ * True when this document is running as an installed app rather than in a
+ * browser tab. iOS Safari answers with a non-standard `navigator.standalone`;
+ * everyone else answers the display-mode media query. `minimal-ui` and
+ * `fullscreen` count: all three are launched-from-the-home-screen contexts with
+ * no browser window around them.
+ */
+function isStandalone(): boolean {
+  if (typeof window === 'undefined') return false
+  const legacy = (window.navigator as Navigator & { standalone?: boolean }).standalone
+  if (legacy === true) return true
+  const modes = ['standalone', 'minimal-ui', 'fullscreen']
+  return modes.some((mode) => window.matchMedia?.(`(display-mode: ${mode})`)?.matches === true)
+}
+
+/**
+ * Sign in with Google — REDIRECT when installed, popup only in a browser tab.
  *
- * The fallback is not defensive padding — it is the phone case. An installed
- * PWA runs in a standalone window, and standalone windows block auth popups, so
- * on the surface this console is actually used from, the popup is the path that
- * does NOT work. A redirect navigates the whole page away and the answer comes
- * back on the next load, which is why `googleRedirectResult` exists.
+ * The first version tried the popup everywhere and fell back to a redirect on
+ * `auth/popup-blocked`. That fallback never fired, because the popup is not
+ * blocked in an installed app: it OPENS. What it cannot do is talk back. The
+ * auth handler finishes by posting the credential to `window.opener`, and a
+ * window opened from a standalone PWA has no opener, so the handler renders as
+ * an ordinary top-level page and says "The requested action is invalid." No
+ * error is ever thrown, nothing falls back, and the person is left staring at
+ * a white page on firebaseapp.com carrying `authType=signInViaPopup`.
+ *
+ * So the surface decides the method up front instead of waiting for a failure
+ * that does not arrive. Installed → redirect, and the answer comes back on the
+ * next page load through `googleRedirectResult`. In a tab → popup, which keeps
+ * the person on the page they started from.
  */
 export async function cloudSignInWithGoogle(): Promise<GoogleSignIn> {
   const fb = await ensureFirebaseWithin(AUTH_TIMEOUT_MS)
   if (!fb) return { ok: false, kind: 'unavailable', code: 'firebase-unreachable' }
   const { GoogleAuthProvider, signInWithPopup, signInWithRedirect } = await import('firebase/auth')
   const provider = new GoogleAuthProvider()
+
+  if (isStandalone()) {
+    try {
+      await signInWithRedirect(fb.auth, provider)
+      return { ok: false, kind: 'redirecting' }
+    } catch (err) {
+      const code = errorCode(err)
+      console.error('[console] Google redirect failed', code, err)
+      const message = GOOGLE_REJECTIONS[code]
+      return message
+        ? { ok: false, kind: 'rejected', message }
+        : { ok: false, kind: 'unavailable', code: code || 'unknown' }
+    }
+  }
+
   try {
     const cred = await signInWithPopup(fb.auth, provider)
     return { ok: true, uid: cred.user.uid, email: cred.user.email ?? '' }
