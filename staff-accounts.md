@@ -45,6 +45,14 @@ domains**, add **`n0b136.github.io`** (and any custom domain the console is
 served from). Without it, Google sign-in fails with `auth/unauthorized-domain`;
 the gate reports that in plain words and the password form still works.
 
+> ⚠️ **`n0b136` has a ZERO as its second character, not a lowercase `o`.** This
+> has already cost one debugging session: the entry was in the list, looked
+> correct in the Firebase console's font, and never matched. If Google sign-in
+> reports an unauthorised domain while the domain is plainly sitting in the
+> list, that is the first thing to check. The gate prints the hostname it is
+> actually running on for exactly this comparison — read the two character by
+> character rather than trusting the shape.
+
 **Why bother.** The QAios vault keys its own roster by a Google uid. Someone
 signing into the console with a password and into the vault with Google is two
 identities in one Firebase project, and neither app can tell they are the same
