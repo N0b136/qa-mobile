@@ -119,8 +119,30 @@ const GOOGLE_REJECTIONS: Record<string, string> = {
     'This email already has a password account here. Sign in with your password below, and ask a Warden to move you across.',
   'auth/operation-not-allowed':
     'Google sign-in is not switched on for this project yet. Use your password below.',
-  'auth/unauthorized-domain':
-    'This address is not on the project’s authorised domains. Use your password below.',
+  // 'auth/unauthorized-domain' is filled in at throw time — see below. It needs
+  // the hostname, and a static table cannot know it.
+}
+
+/**
+ * The exact string that must appear in Firebase → Authentication → Settings →
+ * Authorised domains.
+ *
+ * Named in the message rather than described, because this is a failure people
+ * diagnose by eye against a list in another tab, and the eye is exactly what
+ * cannot be trusted here: `n0b136.github.io` carries a ZERO, and in most UI
+ * fonts a zero and a letter o are one pixel apart. An entry typed with the
+ * wrong one looks correct, sits in the list, and never matches. So the app
+ * prints the string to compare against instead of asking someone to squint.
+ */
+function unauthorizedDomainMessage(): string {
+  const host = typeof window === 'undefined' ? '(unknown)' : window.location.hostname
+  return `“${host}” is not on the project’s authorised domains — check it character by character, then use your password below.`
+}
+
+/** A friendly sentence for a code we recognise, or '' for one we do not. */
+function rejection(code: string): string {
+  if (code === 'auth/unauthorized-domain') return unauthorizedDomainMessage()
+  return GOOGLE_REJECTIONS[code] ?? ''
 }
 
 /**
@@ -168,7 +190,7 @@ export async function cloudSignInWithGoogle(): Promise<GoogleSignIn> {
     } catch (err) {
       const code = errorCode(err)
       console.error('[console] Google redirect failed', code, err)
-      const message = GOOGLE_REJECTIONS[code]
+      const message = rejection(code)
       return message
         ? { ok: false, kind: 'rejected', message }
         : { ok: false, kind: 'unavailable', code: code || 'unknown' }
@@ -192,14 +214,14 @@ export async function cloudSignInWithGoogle(): Promise<GoogleSignIn> {
       } catch (redirectErr) {
         const redirectCode = errorCode(redirectErr)
         console.error('[console] Google redirect failed', redirectCode, redirectErr)
-        const message = GOOGLE_REJECTIONS[redirectCode]
+        const message = rejection(redirectCode)
         return message
           ? { ok: false, kind: 'rejected', message }
           : { ok: false, kind: 'unavailable', code: redirectCode || 'unknown' }
       }
     }
     console.error('[console] Google sign-in failed', code, err)
-    const message = GOOGLE_REJECTIONS[code]
+    const message = rejection(code)
     return message ? { ok: false, kind: 'rejected', message } : { ok: false, kind: 'unavailable', code: code || 'unknown' }
   }
 }
