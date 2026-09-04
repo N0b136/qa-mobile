@@ -97,13 +97,20 @@ export async function signInStaff(email: string, password: string): Promise<Staf
  * that adding a provider can never accidentally add a way around it.
  */
 async function admit(uid: string): Promise<StaffSignIn> {
-  const lookup = await fetchStaff(uid)
+  // `fresh: true` — the roll is read from the server, never from this device's
+  // Firestore cache. See fetchStaff: a person who tries to sign in BEFORE being
+  // added caches their own absence, and every attempt afterwards would keep
+  // answering from that stale no even once a Warden had added them.
+  const lookup = await fetchStaff(uid, { fresh: true })
   if (!lookup.ok) {
     // Not staff: drop the session immediately rather than leaving a signed-in
     // guest sitting on the console.
     await cloudSignOut()
     if (lookup.kind !== 'not-staff') {
-      return { ok: false, error: 'Could not reach the guild roll. Check the connection, then try again.' }
+      return {
+        ok: false,
+        error: `Could not read the guild roll (${lookup.code}). Check the connection, then try again.`,
+      }
     }
     return {
       ok: false,
