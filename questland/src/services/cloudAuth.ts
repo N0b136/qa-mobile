@@ -92,6 +92,84 @@ export async function cloudSignIn(email: string, password: string): Promise<Clou
   }
 }
 
+/**
+ * The result of asking Google who someone is. Deliberately NOT CloudAuthResult:
+ * the guest email/password path has two outcomes, and this one has four — a
+ * cancelled popup and a redirect in flight are neither success nor failure, and
+ * folding them into 'unavailable' would make the console say something went
+ * wrong when nothing did.
+ */
+export type GoogleSignIn =
+  | { ok: true; uid: string; email: string }
+  | { ok: false; kind: 'cancelled' }
+  | { ok: false; kind: 'redirecting' }
+  | { ok: false; kind: 'rejected'; message: string }
+  | { ok: false; kind: 'unavailable' }
+
+const GOOGLE_REJECTIONS: Record<string, string> = {
+  'auth/account-exists-with-different-credential':
+    'This email already has a password account here. Sign in with your password below, and ask a Warden to move you across.',
+  'auth/operation-not-allowed':
+    'Google sign-in is not switched on for this project yet. Use your password below.',
+  'auth/unauthorized-domain':
+    'This address is not on the project’s authorised domains. Use your password below.',
+}
+
+/**
+ * Sign in with Google, popup first and redirect as the fallback.
+ *
+ * The fallback is not defensive padding — it is the phone case. An installed
+ * PWA runs in a standalone window, and standalone windows block auth popups, so
+ * on the surface this console is actually used from, the popup is the path that
+ * does NOT work. A redirect navigates the whole page away and the answer comes
+ * back on the next load, which is why `googleRedirectResult` exists.
+ */
+export async function cloudSignInWithGoogle(): Promise<GoogleSignIn> {
+  const fb = await ensureFirebaseWithin(AUTH_TIMEOUT_MS)
+  if (!fb) return { ok: false, kind: 'unavailable' }
+  const { GoogleAuthProvider, signInWithPopup, signInWithRedirect } = await import('firebase/auth')
+  const provider = new GoogleAuthProvider()
+  try {
+    const cred = await signInWithPopup(fb.auth, provider)
+    return { ok: true, uid: cred.user.uid, email: cred.user.email ?? '' }
+  } catch (err) {
+    const code = errorCode(err)
+    // Closing the chooser is a decision, not a failure. Saying "sign-in failed"
+    // to someone who changed their mind is how a gate teaches distrust.
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      return { ok: false, kind: 'cancelled' }
+    }
+    if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+      try {
+        await signInWithRedirect(fb.auth, provider)
+        return { ok: false, kind: 'redirecting' }
+      } catch (redirectErr) {
+        const message = GOOGLE_REJECTIONS[errorCode(redirectErr)]
+        return message ? { ok: false, kind: 'rejected', message } : { ok: false, kind: 'unavailable' }
+      }
+    }
+    const message = GOOGLE_REJECTIONS[code]
+    return message ? { ok: false, kind: 'rejected', message } : { ok: false, kind: 'unavailable' }
+  }
+}
+
+/**
+ * The answer to a redirect started on the previous page load, or null when this
+ * load is not the tail of one. Safe to call on every mount — Firebase returns
+ * null rather than throwing when there is no redirect in flight.
+ */
+export async function googleRedirectResult(): Promise<{ uid: string; email: string } | null> {
+  const fb = await ensureFirebaseWithin(AUTH_TIMEOUT_MS)
+  if (!fb) return null
+  try {
+    const { getRedirectResult } = await import('firebase/auth')
+    const cred = await getRedirectResult(fb.auth)
+    return cred ? { uid: cred.user.uid, email: cred.user.email ?? '' } : null
+  } catch {
+    return null
+  }
+}
+
 /** Drops the Firebase session. Signed out means signed out — nothing replaces it. */
 export async function cloudSignOut(): Promise<void> {
   const fb = await ensureFirebaseWithin(AUTH_TIMEOUT_MS)

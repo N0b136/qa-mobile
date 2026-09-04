@@ -30,6 +30,50 @@ UID**. Fields:
 Repeat per staff member. The four canon personas are only presentation; the
 account and its `staff` doc are the real identity.
 
+## Signing in with Google, and moving an account across
+
+The console takes **either** a guild email and password **or** a Google account.
+Both land on the same check — does `staff/{uid}` exist — so the provider proves
+who you are and the roll decides what that gets you. Adding Google changed no
+rule and no permission.
+
+**One-time project setting, before any of this works.** Firebase OAuth refuses
+to run on a domain that is not on its allowlist, and email/password never needed
+one — so the console has been serving from an unlisted domain all along without
+noticing. In the Firebase console: **Authentication → Settings → Authorised
+domains**, add **`n0b136.github.io`** (and any custom domain the console is
+served from). Without it, Google sign-in fails with `auth/unauthorized-domain`;
+the gate reports that in plain words and the password form still works.
+
+**Why bother.** The QAios vault keys its own roster by a Google uid. Someone
+signing into the console with a password and into the vault with Google is two
+identities in one Firebase project, and neither app can tell they are the same
+person. One Google account everywhere ends that.
+
+**Moving somebody across.** A Google account is a *different* Firebase user from
+that person's password account, with a different uid — the two cannot be merged
+after the fact. So the move is: put the Google uid on the roll, then retire the
+password account.
+
+1. Have them open the console and press **Sign in with Google**.
+2. They will be refused — no `staff` doc yet — and the gate shows them their
+   **uid**. Have them send it to you. (It is their own identifier, shown only to
+   them; nothing is granted by seeing it.)
+3. Firestore Database → `staff` → *Add document*, **Document ID set to that
+   uid**, same `name` / `role` / `personaId` fields as above. If they hold a
+   `managers` doc, add one under the new uid too — a manager needs both.
+4. Have them sign in with Google again. They are in.
+5. Once they have signed in successfully, delete the old password user under
+   Authentication → Users, and its old `staff` (and `managers`) document.
+
+**Do step 5 last, and only after step 4 has actually worked.** The password form
+is still there on purpose: until every account has been moved, it is the way
+back in for anyone whose Google uid is not yet on the roll. Nobody can lock
+themselves out by trying Google early — an unknown account is simply refused,
+exactly like any stranger, and the session is dropped.
+
+The password form comes out of the gate on the day the last account is moved.
+
 ## Installing the console on a home screen
 
 The Back Office installs as **its own app**, separate from the guest app, with
