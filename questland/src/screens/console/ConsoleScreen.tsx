@@ -22,6 +22,7 @@ import ConsoleHeader from './ConsoleHeader'
 import type { ConsoleView } from './ConsoleHeader'
 import ManagerScreen from './manager/ManagerScreen'
 import StaffGate from './StaffGate'
+import QaiosPanel from './QaiosPanel'
 import CallsBoard from './CallsBoard'
 import SendWord from './SendWord'
 import GuestsAfield from './GuestsAfield'
@@ -43,6 +44,17 @@ export default function ConsoleScreen() {
   // been here before. It is re-checked against Firestore below and it decides
   // nothing on the server — see managerAuth.
   const [manager, setManager] = useState<ManagerDoc | null>(() => currentManager())
+
+  // A grant can be taken away mid-session: revalidateManager resolving to null
+  // hides the whole tab strip, and `view` would keep pointing at a surface the
+  // person can no longer navigate away from — stranded on a tab with no nav.
+  // Sign-out already resets the view below; this is the same care for the case
+  // where the session survives but the grant does not. Pre-existing for the
+  // Manager tab, and adding a second tab behind the same grant doubles the ways
+  // in, so it is fixed here rather than left to be found twice.
+  useEffect(() => {
+    if (!manager && view !== 'console') setView('console')
+  }, [manager, view])
 
   useEffect(() => {
     document.body.classList.add('console-mode')
@@ -166,6 +178,8 @@ export default function ConsoleScreen() {
           return, which is the cheap failure. */}
       {view === 'manager' ? (
         <ManagerScreen staffUid={staff.uid} />
+      ) : view === 'qaios' ? (
+        <QaiosPanel />
       ) : (
         <div className="console-grid">
           <StationsBoard />

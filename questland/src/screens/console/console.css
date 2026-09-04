@@ -282,3 +282,20 @@ body.console-mode #root {
     min-height: 40px;
   }
 }
+
+/* The QAios tab: one card, read on a phone as often as at a desk, so it is a
+   single readable column rather than the Back Office's three-column grid. */
+.qaios-panel {
+  padding: var(--space-lg);
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.qaios-panel__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
