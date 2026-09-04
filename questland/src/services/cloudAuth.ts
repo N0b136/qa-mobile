@@ -104,7 +104,15 @@ export type GoogleSignIn =
   | { ok: false; kind: 'cancelled' }
   | { ok: false; kind: 'redirecting' }
   | { ok: false; kind: 'rejected'; message: string }
-  | { ok: false; kind: 'unavailable' }
+  /**
+   * `code` is the raw `auth/...` string, and it is carried rather than dropped
+   * on purpose. The first version of this mapped every unrecognised failure to
+   * one friendly sentence, which is exactly the wrong trade for a sign-in that
+   * is failing in the field: the person can see it is broken, and the only
+   * thing that would say WHY has been thrown away before it reaches them.
+   * A friendly sentence AND the code — the code is what gets diagnosed.
+   */
+  | { ok: false; kind: 'unavailable'; code: string }
 
 const GOOGLE_REJECTIONS: Record<string, string> = {
   'auth/account-exists-with-different-credential':
@@ -126,7 +134,7 @@ const GOOGLE_REJECTIONS: Record<string, string> = {
  */
 export async function cloudSignInWithGoogle(): Promise<GoogleSignIn> {
   const fb = await ensureFirebaseWithin(AUTH_TIMEOUT_MS)
-  if (!fb) return { ok: false, kind: 'unavailable' }
+  if (!fb) return { ok: false, kind: 'unavailable', code: 'firebase-unreachable' }
   const { GoogleAuthProvider, signInWithPopup, signInWithRedirect } = await import('firebase/auth')
   const provider = new GoogleAuthProvider()
   try {
@@ -144,12 +152,17 @@ export async function cloudSignInWithGoogle(): Promise<GoogleSignIn> {
         await signInWithRedirect(fb.auth, provider)
         return { ok: false, kind: 'redirecting' }
       } catch (redirectErr) {
-        const message = GOOGLE_REJECTIONS[errorCode(redirectErr)]
-        return message ? { ok: false, kind: 'rejected', message } : { ok: false, kind: 'unavailable' }
+        const redirectCode = errorCode(redirectErr)
+        console.error('[console] Google redirect failed', redirectCode, redirectErr)
+        const message = GOOGLE_REJECTIONS[redirectCode]
+        return message
+          ? { ok: false, kind: 'rejected', message }
+          : { ok: false, kind: 'unavailable', code: redirectCode || 'unknown' }
       }
     }
+    console.error('[console] Google sign-in failed', code, err)
     const message = GOOGLE_REJECTIONS[code]
-    return message ? { ok: false, kind: 'rejected', message } : { ok: false, kind: 'unavailable' }
+    return message ? { ok: false, kind: 'rejected', message } : { ok: false, kind: 'unavailable', code: code || 'unknown' }
   }
 }
 
@@ -165,7 +178,11 @@ export async function googleRedirectResult(): Promise<{ uid: string; email: stri
     const { getRedirectResult } = await import('firebase/auth')
     const cred = await getRedirectResult(fb.auth)
     return cred ? { uid: cred.user.uid, email: cred.user.email ?? '' } : null
-  } catch {
+  } catch (err) {
+    // A redirect that comes back broken is the hardest of these to see: the
+    // page simply reloads signed out, with nothing on screen to say a sign-in
+    // was ever attempted. At minimum it must leave a trace.
+    console.error('[console] Google redirect result failed', errorCode(err), err)
     return null
   }
 }
