@@ -299,3 +299,42 @@ body.console-mode #root {
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
+
+/* The gate's "or" rule, between the Google button and the password form. */
+.console-gate__or {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-lg) 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.console-gate__or::before,
+.console-gate__or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-hairline);
+}
+
+/* The uid of an account Firebase knows but the roll does not — shown to that
+   person so a Warden can put them on it. Wraps and breaks: a uid is 28
+   characters of unbroken hex and must not push the card sideways on a phone. */
+.console-gate__uid {
+  margin-top: var(--space-md);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.console-gate__uid code {
+  display: block;
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: var(--surface-inset);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}

@@ -86,10 +86,11 @@ export function ensureFirebase(): Promise<FirebaseHandle | null> {
       currentAuth = auth
 
       // Wait only for Firebase to say whether a session was restored. There is
-      // no anonymous fallback: every identity in this app is an email/password
-      // account, and an anonymous one — which anybody could mint from the
-      // public web config — would be an identity that owns nothing and is
-      // allowed nothing. Signed out simply means signed out.
+      // no anonymous fallback: every identity in this app is a real account —
+      // email/password for guests, and either that or Google for console staff
+      // — and an anonymous one, which anybody could mint from the public web
+      // config, would be an identity that owns nothing and is allowed nothing.
+      // Signed out simply means signed out.
       await new Promise<void>((resolve, reject) => {
         const unsub = onAuthStateChanged(
           auth,
